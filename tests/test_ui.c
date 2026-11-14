@@ -201,11 +201,49 @@ static void test_icons(void)
     canvas_free(&c);
 }
 
+/* The drawn icons' table: every icon has ink, every index names a colour,
+ * and icon_draw puts exactly the table's colours where the table says. */
+static void test_icon_table(void)
+{
+    /* Index 0 is "nothing"; every real colour is opaque, so a table cut
+     * short (the rest filled with 0 by C) is caught here. */
+    CHECK(ICON_COLOURS[0] == 0);
+    for (int i = 1; i < ICON_COLOUR_COUNT; i++) {
+        CHECK((ICON_COLOURS[i] >> 24) == 0xFF);
+    }
+    for (int icon = 0; icon < ICON_COUNT; icon++) {
+        int inked = 0, bad = 0;
+        for (int p = 0; p < ICON_SIZE * ICON_SIZE; p++) {
+            uint8_t ink = ICON_INK[icon][p];
+            inked += ink != 0;
+            bad += ink >= ICON_COLOUR_COUNT;
+        }
+        CHECK(inked > 0);
+        CHECK(bad == 0);
+    }
+
+    Canvas c;
+    CHECK(canvas_init(&c, 20, 20));
+    canvas_fill(&c, GREY);
+    icon_draw(&c, 2, 3, ICON_HELP);
+    int same = 0;
+    for (int y = 0; y < ICON_SIZE; y++) {
+        for (int x = 0; x < ICON_SIZE; x++) {
+            uint8_t ink = ICON_INK[ICON_HELP][y * ICON_SIZE + x];
+            uint32_t want = ink == 0 ? GREY : ICON_COLOURS[ink];
+            same += c.px[(y + 3) * c.w + (x + 2)] == want;
+        }
+    }
+    CHECK(same == ICON_SIZE * ICON_SIZE);
+    canvas_free(&c);
+}
+
 int main(void)
 {
     test_hits();
     test_buttons();
     test_tip();
     test_icons();
+    test_icon_table();
     TEST_SUMMARY();
 }

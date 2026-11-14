@@ -225,3 +225,23 @@ Rules set per species, each a set or table at the top of `pixellab_to_c.py`:
 
 And for every species: clearly green pixels (grass a motion drew) are dropped
 before the body is found.
+
+## The icons (2026-11-14)
+
+The 31 icons on the window's buttons, top line, menus and card are 16 x 16
+pictures drawn by `draw_icons.py`, not generated: at that size every pixel
+is a decision, so each is a few shapes (discs, lines, rectangles) or rows of
+letters, one letter per colour, with a dark outline added around every
+filled pixel so it reads on the blue and brown buttons and the dark top line.
+
+| Path | What it is |
+|---|---|
+| `draw_icons.py` | Draws `icons/<name>.png`, one per `ICON_` value; with a path, also a sheet of all of them, 4x and 1x, on the three backgrounds |
+| `icons/<name>.png` | The pictures the converter reads; any pixel editor can change one if it stays 16 x 16, fully opaque or fully clear |
+| `icons_to_c.py` | Writes `src/gfx/icons_data.c`: one colour table, and per icon 256 indexes into it, in `icons.h`'s enum order |
+
+    python3 tools/art/draw_icons.py /tmp/icon-sheet.png
+    python3 tools/art/icons_to_c.py tools/art/icons > src/gfx/icons_data.c
+
+The converter prints how many colours the table holds; `ICON_COLOUR_COUNT`
+in `src/gfx/icons.h` must be that number plus one (index 0 is "nothing").

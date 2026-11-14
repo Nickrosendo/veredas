@@ -45,6 +45,22 @@ enum {
     ICON_COUNT
 };
 
+/*
+ * The drawn icons, generated into icons_data.c by tools/art/icons_to_c.py from
+ * the pictures in tools/art/icons/. ICON_INK[icon] is 16 rows of 16 numbers,
+ * each an index into ICON_COLOURS; 0 means nothing is drawn there.
+ *
+ * "extern" says these arrays exist and are defined in another .c file: this
+ * header only promises them to whoever includes it, and the linker joins the
+ * promise to icons_data.c's definition. ICON_COLOUR_COUNT must match the
+ * converter's table (it prints the number): too few and the compiler stops
+ * at the extra entries; too many and C fills the rest with 0, which the
+ * tests catch.
+ */
+#define ICON_COLOUR_COUNT 15
+extern const uint32_t ICON_COLOURS[ICON_COLOUR_COUNT];
+extern const uint8_t ICON_INK[ICON_COUNT][ICON_SIZE * ICON_SIZE];
+
 /* Draws icon with its top left corner at (x, y), clipped to the canvas.
  * An icon outside 0 .. ICON_COUNT - 1 draws nothing. */
 void icon_draw(Canvas *c, int x, int y, int icon);

@@ -52,7 +52,9 @@ graze, sleep and breathe, and meat-eaters crouch, pounce and bite their prey,
 which bleeds. Drawing never changes the world: the same seed gives the same
 world in both programs.
 
-![Seed 1 at the far zoom in summer and in winter of year 5: green plants and 888 creatures, then bare brown trees, snow lying on the soil and 461 creatures.](docs/seasons.png)
+![Seed 4 in spring of year 4, in Documentary: the camera follows Thadrin, an elephant, and the panel is its card, with what it is doing (walking to food), its energy and health, what it eats, its young and kills and its seven traits; the buttons along the bottom and the boxes along the top each carry an icon.](docs/window-documentary.png)
+
+![Seed 4 in Sandbox during a hard winter the player started: the map washed pale with snow falling, a box on the top line saying the hard winter ends in summer, and the brown Sandbox buttons (give trait, weather, skip, branch, new start) beside the watching ones.](docs/window-sandbox.png)
 
 It needs SDL 2; nothing else in agon does, and `make` and `make test` work
 without it.
