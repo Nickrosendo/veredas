@@ -299,3 +299,8 @@ for the build that wrote them; a build with a different format refuses them.
 ## Licence
 
 MIT
+
+## Credits
+
+- The window's letters are Spleen 8x16 by Frederic Cambus (BSD 2-clause,
+  `licenses/BSD-Spleen.txt`), turned into C by `tools/font/bdf_to_c.py`.

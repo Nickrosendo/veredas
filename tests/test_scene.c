@@ -955,10 +955,11 @@ static void test_game_over_text_longest(void)
     sim_free(&s);
 }
 
-/* The screen's picture, pinned as test_known_world_pixels is. */
+/* The screen's picture, pinned as test_known_world_pixels is. Re-pinned
+ * 2026-11-14: the text in the new proportional font (text.h). */
 static void test_scene_game_over(void)
 {
-    static const uint64_t EXPECTED = 0x5beacfce67e3d665u;
+    static const uint64_t EXPECTED = 0x14fc2bdfcbdeff4du;
     Sim s;
     make_dead_world(&s);
     Canvas c;

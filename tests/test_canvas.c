@@ -5,6 +5,7 @@
 
 #include "canvas.h"
 #include "font.h"
+#include "text.h"
 
 #define RED 0xFFFF0000u
 #define BLACK 0xFF000000u
@@ -112,7 +113,8 @@ static void test_empty_canvas_is_safe(void)
     canvas_fill(&c, RED);
     canvas_rect(&c, 0, 0, 10, 10, RED);
     canvas_mask(&c, rows, 1, 0, 0, 1, false, RED);
-    font_text(&c, 0, 0, "hello", RED, BLACK);
+    text_draw(&c, 0, 0, "hello", RED);
+    text_draw_fixed(&c, 0, 0, "hello", RED, BLACK);
     font_block(&c, 0, 0, 4, RED, BLACK);
     CHECK(canvas_resize(&c, 0, 0));
     CHECK(canvas_resize(&c, 3, 0));
@@ -165,27 +167,6 @@ static void test_ppm_unwritable_path(void)
     Canvas c;
     CHECK(canvas_init(&c, 1, 1));
     CHECK(!canvas_write_ppm(&c, "no/such/folder/x.ppm"));
-    canvas_free(&c);
-}
-
-static void test_font_draws_inside_its_cell(void)
-{
-    Canvas c;
-    CHECK(canvas_init(&c, FONT_W * 2, FONT_H));
-    font_text(&c, 0, 0, "A", RED, BLACK);
-    /* 'A' has set pixels, and all of them are in the first cell. */
-    int in_first = 0, in_second = 0;
-    for (int y = 0; y < FONT_H; y++) {
-        for (int x = 0; x < FONT_W; x++) {
-            in_first += pixel(&c, x, y) == RED;
-            in_second += pixel(&c, x + FONT_W, y) == RED;
-        }
-    }
-    CHECK(in_first > 0);
-    CHECK(in_second == 0);
-    /* A byte outside ASCII draws as '?': no reading before the table. */
-    font_text(&c, 0, 0, "\xC3", RED, BLACK);
-    CHECK(count_colour(&c, RED) > 0);
     canvas_free(&c);
 }
 
@@ -388,7 +369,6 @@ int main(void)
     test_resize_keeps_block_when_smaller();
     test_ppm_header();
     test_ppm_unwritable_path();
-    test_font_draws_inside_its_cell();
     test_font_block_heights();
     test_mask_quick_path_matches_rects();
     test_copy_clips();

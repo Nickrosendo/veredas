@@ -11,6 +11,7 @@
 #include "flora.h"   /* plant_gives_shade, plant_is_bare */
 #include "gfx_hash.h"
 #include "lab.h"     /* lab_draw_ground, LAB_GROUND_ROWS */
+#include "text.h"    /* text_draw, text_width, text_cut */
 #include "pose.h"    /* pose_frame, pose_cycle_seconds, pose_eyes */
 #include "palette.h"
 #include "years.h"   /* years_season_of */
@@ -2214,19 +2215,18 @@ static void draw_name(Scene *sc, Canvas *c, const Camera *cam,
     camera_to_screen(cam, p.x, p.y, &sx, &sy);
     char name[16];
     name_from_id(cr->id, name, sizeof(name));
-    /* strlen counts bytes, which for these ASCII names is also characters.
-     * It returns a size_t; the name is under 16, so the int conversion is safe. */
-    int w = (int)strlen(name) * FONT_W;
+    /* A pixel of the background on each side, so the name reads over grass. */
+    int w = text_width(name) + 2;
     /* Centred under the picture, a pixel below its lowest ink. */
     int left, top, right, bottom;
     drawn_box(sc, cam, s, slot, &p, sx, sy, &left, &top, &right, &bottom);
     int x = (left + right) / 2 - w / 2;
     int y = bottom + 1;
-    if (x < 0 || y < 0 || x + w > cam->view_w || y + FONT_H > cam->view_h) {
+    if (x < 0 || y < 0 || x + w > cam->view_w || y + TEXT_H > cam->view_h) {
         return;
     }
-    font_text(c, view_x + x, view_y + y, name, to_pixel(WHITE),
-              to_pixel(BACKGROUND));
+    canvas_rect(c, view_x + x, view_y + y, w, TEXT_H, to_pixel(BACKGROUND));
+    text_draw(c, view_x + x + 1, view_y + y, name, to_pixel(WHITE));
 }
 
 void scene_draw_names(Scene *sc, Canvas *c, const Camera *cam,
@@ -2395,19 +2395,17 @@ void scene_draw_strip(Scene *sc, Canvas *c, const Families *f, uint32_t lineage,
     }
 }
 
-/* One line in the box, cut to the columns left inside the area. */
+/* One line in the box, cut with "..." to the pixels left inside it. */
 static void over_line(Canvas *c, const char *text, int x, int y, int bottom,
-                      int cols, Colour fg)
+                      int max_w, Colour fg)
 {
-    if (y + FONT_H > bottom || cols <= 0) {
+    if (y + TEXT_H > bottom || max_w <= 0) {
         return;
     }
-    /* font_text stops at the terminator, so cutting means copying: the precision
-     * in "%.*s" limits how much of text is printed, and takes its value, an int,
-     * from the argument list. */
+    /* text_draw stops at the terminator, so cutting means copying. */
     char cut[APP_OVER_COLS + 32];
-    snprintf(cut, sizeof(cut), "%.*s", cols, text);
-    font_text(c, x, y, cut, to_pixel(fg), to_pixel(PALETTE_TEXT_BACKGROUND));
+    text_cut(text, max_w, cut, sizeof(cut));
+    text_draw(c, x, y, cut, to_pixel(fg));
 }
 
 void scene_draw_game_over(Canvas *c, const Sim *s, const char *keys, int x, int y,
@@ -2415,14 +2413,14 @@ void scene_draw_game_over(Canvas *c, const Sim *s, const char *keys, int x, int 
 {
     char lines[APP_OVER_LINES][APP_OVER_COLS];
     int n = app_game_over_lines(s, lines);
-    int longest = (int)strlen(keys);
+    int longest = text_width(keys);
     for (int i = 0; i < n; i++) {
-        int len = (int)strlen(lines[i]);
+        int len = text_width(lines[i]);
         longest = len > longest ? len : longest;
     }
-    /* One empty row above, below, and before the keys; one empty column each side. */
-    int box_w = (longest + 2) * FONT_W;
-    int box_h = (n + 4) * FONT_H;
+    /* One empty line above, below, and before the keys; 8 pixels each side. */
+    int box_w = longest + 2 * TEXT_FIXED_W;
+    int box_h = (n + 4) * TEXT_H;
     box_w = box_w < w ? box_w : w;
     box_h = box_h < h ? box_h : h;
     if (box_w <= 0 || box_h <= 0) {
@@ -2432,11 +2430,11 @@ void scene_draw_game_over(Canvas *c, const Sim *s, const char *keys, int x, int 
     int top = y + (h - box_h) / 2;
     int bottom = top + box_h;
     canvas_rect(c, left, top, box_w, box_h, to_pixel(PALETTE_TEXT_BACKGROUND));
-    int cols = box_w / FONT_W - 2;
-    int text_x = left + FONT_W;
+    int text_w = box_w - 2 * TEXT_FIXED_W;
+    int text_x = left + TEXT_FIXED_W;
     for (int i = 0; i < n; i++) {
-        over_line(c, lines[i], text_x, top + (i + 1) * FONT_H, bottom, cols,
+        over_line(c, lines[i], text_x, top + (i + 1) * TEXT_H, bottom, text_w,
                   PALETTE_TEXT);
     }
-    over_line(c, keys, text_x, top + (n + 2) * FONT_H, bottom, cols, PALETTE_TEXT);
+    over_line(c, keys, text_x, top + (n + 2) * TEXT_H, bottom, text_w, PALETTE_TEXT);
 }

@@ -11,6 +11,7 @@
 #include "particles.h" /* Particle, particle_position, particle_paint */
 #include "pose.h"     /* pose_frame, pose_cycle_seconds, pose_eyes */
 #include "species.h"
+#include "text.h" /* text_draw_fixed */
 
 /* The mockup lab's ground (v9:673-676), in art pixels of the strip. */
 #define SKY canvas_rgb(22, 30, 34)
@@ -219,7 +220,7 @@ static void text_in(Canvas *c, const LabLayout *l, int x, int y, const char *tex
     char line[64];
     snprintf(line, sizeof(line), "%.*s", columns < 63 ? columns : 63, text);
     if (line[0] != '\0') {
-        font_text(c, x, y, line, fg, bg);
+        text_draw_fixed(c, x, y, line, fg, bg);
     }
 }
 

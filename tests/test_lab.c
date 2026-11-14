@@ -282,8 +282,9 @@ static void test_lab_pixels(void)
      * the wolf, goat, otter, elephant, armadillo and fox drawn from their PixelLab frames (art.h);
      * looked at by eye in the lab, Nicolas's approval of the new look still
      * to come. Re-pinned 2026-11-12: all seventeen species drawn from
-     * frames; looked at by eye in all seven actions, his approval to come. */
-    static const uint64_t EXPECTED = 0x1e30ea25924d3f36u;
+     * frames; looked at by eye in all seven actions, his approval to come.
+     * Re-pinned 2026-11-14: the lab's title in the new fixed font (text.h). */
+    static const uint64_t EXPECTED = 0x5970d3a90df2970eu;
     if (h != EXPECTED) {
         printf("lab: 0x%llxu\n", (unsigned long long)h);
     }

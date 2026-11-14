@@ -6,6 +6,7 @@
 #include "cells.h"
 #include "font.h"
 #include "palette.h"
+#include "text.h"
 #include "tiles.h"
 #include "world.h"  /* VEG_MAX */
 
@@ -67,8 +68,8 @@ void render_text(int col, int row, const char *text, int max_cols)
     memcpy(line, text, len);
     memset(line + len, ' ', width - len);
     line[width] = '\0';
-    font_text(target, cell_x(col), cell_y(row), line, to_pixel(PALETTE_TEXT),
-              to_pixel(PALETTE_TEXT_BACKGROUND));
+    text_draw_fixed(target, cell_x(col), cell_y(row), line,
+                    to_pixel(PALETTE_TEXT), to_pixel(PALETTE_TEXT_BACKGROUND));
 }
 
 /*
@@ -92,7 +93,7 @@ void render_utf8(int col, int row, const char *text)
             i += 3;
         } else {
             char one[2] = {b[0] < 0x80 ? text[i] : '?', '\0'};
-            font_text(target, x, y, one, fg, bg);
+            text_draw_fixed(target, x, y, one, fg, bg);
             i += 1;
         }
         x += FONT_W;
