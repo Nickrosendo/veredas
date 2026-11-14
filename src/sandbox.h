@@ -96,6 +96,13 @@ bool sandbox_weather_check(Sandbox *b, const Sim *s, char *out, size_t size);
 /* Forgets the event watched: the world on screen is another one now. */
 void sandbox_weather_forget(Sandbox *b);
 
+/* The tables behind the menus, for drawing them: the years skip i (0..2)
+ * covers, and the wildness and jump chance at a setup step. A step outside
+ * its table is held to the nearest end. */
+int sandbox_skip_years(int i);
+float sandbox_wild_scale(int step);
+float sandbox_jump_chance(int step);
+
 /* The keys line for the bottom of the window. */
 const char *sandbox_help(const Sandbox *b);
 void sandbox_free(Sandbox *b);

@@ -23,6 +23,10 @@
  * the KEY_ values of platform.h, 1000 and up). From 3000 up, buttons that
  * have no key of their own: the window answers to them directly. */
 enum { UI_NONE = -1, UI_KEY_WORLD_MENU = 3000 };
+/* A box's background (a menu, a page): a click there presses nothing, but
+ * never reaches the world behind the box. Added before the box's buttons, so
+ * they, added later, win. */
+enum { UI_KEY_BLOCK = 3010 };
 
 #define UI_MAX_HITS 160
 #define UI_TIP_LEN 48

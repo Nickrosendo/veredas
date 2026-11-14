@@ -23,6 +23,7 @@
 #include "lab.h"
 #include "lifepage.h"
 #include "lookahead.h"
+#include "menus.h"
 #include "notices.h"
 #include "options.h"
 #include "palette.h"
@@ -882,6 +883,9 @@ static void handle_key(App *a, int key)
 static void press_button(App *a, int key)
 {
     playlog_click(&a->playlog);
+    if (key == UI_KEY_BLOCK) {
+        return; /* a box's background: nothing, and not the world behind */
+    }
     if (key == UI_KEY_WORLD_MENU) {
         a->world_menu_open = !a->world_menu_open;
         return;
@@ -1141,6 +1145,14 @@ static int text_columns(const char *text)
  * top left of the world. */
 static void draw_sandbox(App *a)
 {
+    const Layout *lay = &a->layout;
+    if (menu_is_drawn(&a->sandbox)) {
+        /* The four tool menus as buttons; the skip under way and its summary
+         * stay lines of text, below. */
+        menu_draw(&a->ui, &a->canvas, lay->view_x + FONT_W, lay->view_y + FONT_H / 2,
+                  &a->sandbox, &a->sim, PLATFORM_IS_PAGE);
+        return;
+    }
     static char lines[SKIP_LINES][SKIP_COLS]; /* static: off the small web stack */
     int n = sandbox_menu_lines(&a->sandbox, &a->sim, platform_now_ms(), lines,
                                SKIP_LINES);

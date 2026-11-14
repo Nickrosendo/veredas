@@ -126,6 +126,27 @@ static int skip_key(Sandbox *b, Sim *s, int key, uint64_t now_ms,
     return SANDBOX_TAKEN;
 }
 
+/* i held inside 0 .. n - 1. */
+static int held(int i, int n)
+{
+    return i < 0 ? 0 : i >= n ? n - 1 : i;
+}
+
+int sandbox_skip_years(int i)
+{
+    return SKIP_YEARS[held(i, 3)];
+}
+
+float sandbox_wild_scale(int step)
+{
+    return WILD_STEPS[held(step, SANDBOX_WILD_STEPS)];
+}
+
+float sandbox_jump_chance(int step)
+{
+    return JUMP_STEPS[held(step, SANDBOX_JUMP_STEPS)];
+}
+
 /* The step nearest to v in a table of n. */
 static int nearest(const float *steps, int n, float v)
 {
