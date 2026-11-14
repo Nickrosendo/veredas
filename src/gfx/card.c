@@ -9,7 +9,6 @@
 #include "icons.h"
 #include "palette.h"
 #include "panel.h"     /* panel_hue_band, panel_band_name */
-#include "platform.h"  /* KEY_ESCAPE: only the constant */
 #include "species.h"
 #include "sprite.h"
 #include "text.h"
@@ -188,7 +187,7 @@ static void draw_buttons(Ui *u, Canvas *c, int x, int y, int w, bool sandbox)
 {
     UiButton b[3] = {
         {ICON_STORY, "story", "its life story (l)", 'l', false, false, false},
-        {ICON_LET_GO, "let go", "let go (Esc)", KEY_ESCAPE, false, false, false},
+        {ICON_LET_GO, "let go", "let go (Esc)", UI_KEY_LET_GO, false, false, false},
         {ICON_TRAIT, "give", "give it a trait (g)", 'g', false, false, true},
     };
     int n = sandbox ? 3 : 2;

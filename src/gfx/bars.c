@@ -111,6 +111,16 @@ static void list_items(Items *list, const BottomState *st, char *speed_word)
                    false, st->world_menu_open, false});
     add(list, GROUP_RIGHT, 90,
         (UiButton){ICON_HELP, NULL, "every key (?)", '?', false, false, false});
+    if (st->menu_open) {
+        /* A Sandbox menu takes every key while open: nothing on the bar would
+         * do what it says, so all of it is dim and says so when clicked. */
+        for (int i = 0; i < list->n; i++) {
+            if (!list->items[i].label) {
+                list->items[i].b.dim = true;
+                list->items[i].b.key = UI_KEY_MENU_FIRST;
+            }
+        }
+    }
 }
 
 /* An item's width with or without its word. */
@@ -245,6 +255,8 @@ void bar_world_menu_draw(Ui *u, Canvas *c, int right_x, int bottom_y, bool page)
     int box_w = widest + 8;
     int box_h = n * (UI_BUTTON_H + 2) + 6;
     int x = right_x - box_w, y = bottom_y - box_h;
+    /* The background first: a click between the rows stops here. */
+    ui_add_hit(u, x, y, box_w, box_h, UI_KEY_BLOCK);
     ui_box(c, x, y, box_w, box_h,
            canvas_rgb(PALETTE_TEXT_BACKGROUND.r, PALETTE_TEXT_BACKGROUND.g,
                       PALETTE_TEXT_BACKGROUND.b),

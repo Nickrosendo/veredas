@@ -27,6 +27,10 @@ enum { UI_NONE = -1, UI_KEY_WORLD_MENU = 3000 };
  * never reaches the world behind the box. Added before the box's buttons, so
  * they, added later, win. */
 enum { UI_KEY_BLOCK = 3010 };
+/* The bottom bar's buttons while a Sandbox menu or a skip is open: the menu
+ * takes every key then, so the bar is drawn dim and each of its buttons
+ * presses this instead of its key, which only says why nothing happens. */
+enum { UI_KEY_MENU_FIRST = 3011 };
 /* The world panel's clickable lines (nobody followed): each follows who it
  * names. They had no key before the buttons came and have none now. */
 enum {
@@ -45,6 +49,9 @@ enum {
     UI_KEY_CLOSE_KEYS = 3023,
     UI_KEY_CLOSE_LAB = 3024
 };
+/* The card's "let go": lets go of the followed animal whatever page is open
+ * (Escape would close the page first). */
+enum { UI_KEY_LET_GO = 3025 };
 
 #define UI_MAX_HITS 160
 #define UI_TIP_LEN 48
@@ -64,6 +71,8 @@ typedef struct {
     int n_hits, n_shown;
     int mouse_x, mouse_y;
     int down_key;             /* the button the left button went down on, or UI_NONE */
+    int down_x, down_y;       /* that button's top left corner: two buttons may
+                               * share a key, and a click needs the same one */
     uint64_t hover_since_ms;  /* when the mouse came onto hover_key */
     int hover_key;
 } Ui;

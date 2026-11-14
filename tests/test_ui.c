@@ -38,6 +38,19 @@ static void test_hits(void)
     /* down on a button, up off every button: nothing */
     CHECK(ui_mouse_down(&u, 10, 10));
     CHECK(ui_mouse_up(&u, 500, 300) == UI_NONE);
+    /* two buttons with one key: down on one, up on the other is not a click */
+    ui_begin(&u);
+    ui_add_hit(&u, 0, 0, 20, 20, 'l');
+    ui_add_hit(&u, 100, 0, 20, 20, 'l');
+    ui_end(&u);
+    CHECK(ui_mouse_down(&u, 5, 5));
+    CHECK(ui_mouse_up(&u, 105, 5) == UI_NONE);
+    CHECK(ui_mouse_down(&u, 105, 5));
+    CHECK(ui_mouse_up(&u, 106, 6) == 'l');
+    ui_begin(&u);
+    ui_add_hit(&u, 0, 0, 50, 24, ' ');
+    ui_add_hit(&u, 40, 0, 50, 24, 'g');
+    ui_end(&u);
     /* an up with no down before it: nothing */
     CHECK(ui_mouse_up(&u, 10, 10) == UI_NONE);
 
@@ -235,6 +248,21 @@ static void test_icon_table(void)
         }
     }
     CHECK(same == ICON_SIZE * ICON_SIZE);
+
+    /* dimmed: the same pixels, each channel halved, the background left */
+    canvas_fill(&c, GREY);
+    icon_draw_dim(&c, 2, 3, ICON_HELP);
+    int halved = 0;
+    for (int y = 0; y < ICON_SIZE; y++) {
+        for (int x = 0; x < ICON_SIZE; x++) {
+            uint8_t ink = ICON_INK[ICON_HELP][y * ICON_SIZE + x];
+            uint32_t full = ICON_COLOURS[ink];
+            uint32_t want = ink == 0 ? GREY
+                                     : 0xFF000000u | ((full >> 1) & 0x007F7F7Fu);
+            halved += c.px[(y + 3) * c.w + (x + 2)] == want;
+        }
+    }
+    CHECK(halved == ICON_SIZE * ICON_SIZE);
     canvas_free(&c);
 }
 

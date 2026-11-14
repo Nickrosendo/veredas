@@ -84,7 +84,9 @@ static void test_buttons_by_mode(void)
     }
     draw(&t, false);
     CHECK(hits_with(&t.ui, 'l') == 1);
-    CHECK(hits_with(&t.ui, KEY_ESCAPE) == 1);
+    /* let go has its own value: Escape would close an open page first */
+    CHECK(hits_with(&t.ui, UI_KEY_LET_GO) == 1);
+    CHECK(hits_with(&t.ui, KEY_ESCAPE) == 0);
     CHECK(hits_with(&t.ui, 'g') == 0);
     draw(&t, true);
     CHECK(hits_with(&t.ui, 'g') == 1);

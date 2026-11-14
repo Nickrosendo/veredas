@@ -18,6 +18,8 @@ typedef struct {
     bool paused, sandbox, split, demo, following, look_on;
     int speed;            /* ticks a second, for the "2/s" label */
     bool world_menu_open; /* the world button drawn pressed */
+    bool menu_open;       /* a Sandbox menu or skip open: the bar dim, every
+                           * button pressing UI_KEY_MENU_FIRST */
 } BottomState;
 
 /* The bar, UI_BAR_H tall, from (0, y) across w pixels. Too narrow for every

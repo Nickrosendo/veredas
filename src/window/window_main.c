@@ -911,6 +911,12 @@ static void press_button(App *a, int key)
     case UI_KEY_CLOSE_COMPARE: a->compare_open = false; break;
     case UI_KEY_CLOSE_KEYS: a->keys_open = false; break;
     case UI_KEY_CLOSE_LAB: a->lab_open = false; break;
+    case UI_KEY_LET_GO: inspect_stop(&a->inspect); break;
+    case UI_KEY_MENU_FIRST:
+        say(a, sandbox_skipping(&a->sandbox) ? "skipping ahead: Esc stops it"
+                                             : "close the menu first (Esc)",
+            NOTICE_FRAMES);
+        break;
     default: handle_key(a, key); break;
     }
 }
@@ -1033,6 +1039,7 @@ static void draw_bottom(App *a)
     st.look_on = a->look_on;
     st.speed = APP_SPEEDS[a->speed];
     st.world_menu_open = a->world_menu_open;
+    st.menu_open = a->sandbox.menu != SANDBOX_MENU_NONE || sandbox_skipping(&a->sandbox);
     bar_bottom_draw(&a->ui, &a->canvas, a->layout.help_y, a->canvas.w, &st);
     if (a->world_menu_open) {
         bar_world_menu_draw(&a->ui, &a->canvas, a->canvas.w - 2,

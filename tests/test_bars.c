@@ -100,6 +100,25 @@ static void test_sandbox(void)
     canvas_free(&c);
 }
 
+/* A Sandbox menu open: it takes every key, so no bar button may press one
+ * (the setup screen's - and + would change its jump chance, not the speed). */
+static void test_menu_open(void)
+{
+    Canvas c;
+    CHECK(canvas_init(&c, 1, 1));
+    BottomState st = {0};
+    st.sandbox = true;
+    st.speed = 2;
+    st.menu_open = true;
+    draw_bar(&c, 1280, &st);
+    CHECK(u.n_shown > 10);
+    for (int i = 0; i < u.n_shown; i++) {
+        CHECK(u.shown[i].key == UI_KEY_MENU_FIRST);
+    }
+    CHECK(!bar_has_key('-') && !bar_has_key('+'));
+    canvas_free(&c);
+}
+
 /* Review Focus 2: narrow windows never overlap or leave the bar. */
 static void test_narrow(void)
 {
@@ -151,7 +170,9 @@ static void test_world_menu(void)
     ui_end(&u);
     CHECK(bar_has_key('r') && bar_has_key('c') && bar_has_key('o') &&
           bar_has_key('s') && bar_has_key('q'));
-    CHECK(u.n_shown == 5);
+    /* five rows, and the box's background under them first */
+    CHECK(u.n_shown == 6);
+    CHECK(u.shown[0].key == UI_KEY_BLOCK);
     for (int i = 0; i < u.n_shown; i++) {
         CHECK(u.shown[i].x + u.shown[i].w <= 390);
         CHECK(u.shown[i].y + u.shown[i].h <= 290);
@@ -240,6 +261,7 @@ int main(void)
     ui_init(&u);
     test_documentary();
     test_sandbox();
+    test_menu_open();
     test_narrow();
     test_demo();
     test_world_menu();

@@ -64,5 +64,7 @@ extern const uint8_t ICON_INK[ICON_COUNT][ICON_SIZE * ICON_SIZE];
 /* Draws icon with its top left corner at (x, y), clipped to the canvas.
  * An icon outside 0 .. ICON_COUNT - 1 draws nothing. */
 void icon_draw(Canvas *c, int x, int y, int icon);
+/* The same, every colour at half brightness: a button that can't be used. */
+void icon_draw_dim(Canvas *c, int x, int y, int icon);
 
 #endif

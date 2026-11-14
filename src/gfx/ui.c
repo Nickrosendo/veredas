@@ -160,11 +160,12 @@ int ui_button_sized(Ui *u, Canvas *c, int x, int y, int w, const UiButton *b)
     int at = x + PAD;
     int icon_y = y + (h - ICON_SIZE) / 2;
     if (b->icon >= 0) {
-        icon_draw(c, at, icon_y, b->icon);
+        /* Dimmed with the rest: its own colours at half, the box behind
+         * it untouched (darkening its square would darken the box twice). */
         if (b->dim) {
-            /* the icon dimmed with the rest: darken its square by half */
-            CanvasClip clip = {at, icon_y, ICON_SIZE, ICON_SIZE};
-            canvas_darken_clip(c, 128, clip);
+            icon_draw_dim(c, at, icon_y, b->icon);
+        } else {
+            icon_draw(c, at, icon_y, b->icon);
         }
         at += ICON_SIZE + ICON_GAP;
     }
@@ -190,12 +191,7 @@ void ui_close_button_key(Ui *u, Canvas *c, int box_x, int box_y, int box_w,
     Colour fill = hover ? lighter(PALETTE_BUTTON_FILL) : PALETTE_BUTTON_FILL;
     ui_box(c, x, y, CLOSE_SIZE, CLOSE_SIZE, to_pixel(fill),
            to_pixel(PALETTE_BUTTON_EDGE));
-    /* the x: two diagonals, 8 pixels long, in the middle of the square */
-    uint32_t ink = to_pixel(PALETTE_BUTTON_TEXT);
-    for (int i = 0; i < 8; i++) {
-        canvas_rect(c, x + 4 + i, y + 4 + i, 1, 1, ink);
-        canvas_rect(c, x + 11 - i, y + 4 + i, 1, 1, ink);
-    }
+    icon_draw(c, x, y, ICON_CLOSE); /* the square is the icon's size */
     ui_add_hit_tip(u, x, y, CLOSE_SIZE, CLOSE_SIZE, key, tip);
 }
 
@@ -235,7 +231,10 @@ bool ui_mouse_down(Ui *u, int x, int y)
 {
     u->mouse_x = x;
     u->mouse_y = y;
-    u->down_key = ui_key_at(u, x, y);
+    const UiHit *h = hit_at(u, x, y);
+    u->down_key = h != NULL ? h->key : UI_NONE;
+    u->down_x = h != NULL ? h->x : 0;
+    u->down_y = h != NULL ? h->y : 0;
     return u->down_key != UI_NONE;
 }
 
@@ -243,10 +242,13 @@ int ui_mouse_up(Ui *u, int x, int y)
 {
     u->mouse_x = x;
     u->mouse_y = y;
-    int key = ui_key_at(u, x, y);
-    int pressed = (u->down_key != UI_NONE && key == u->down_key) ? key : UI_NONE;
+    /* Pressed only when let go over the very button it went down on: the same
+     * key and the same place, so another button with that key does not count. */
+    const UiHit *h = hit_at(u, x, y);
+    bool same = h != NULL && u->down_key != UI_NONE && h->key == u->down_key &&
+                h->x == u->down_x && h->y == u->down_y;
     u->down_key = UI_NONE;
-    return pressed;
+    return same ? h->key : UI_NONE;
 }
 
 void ui_mouse_move(Ui *u, int x, int y, uint64_t now_ms)
