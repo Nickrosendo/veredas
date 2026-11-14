@@ -73,6 +73,9 @@ int ui_button_width(const UiButton *b);
 /* Draws b with its top left corner at (x, y), UI_BUTTON_H tall, records its
  * hit with its tip, and returns its width. */
 int ui_button(Ui *u, Canvas *c, int x, int y, const UiButton *b);
+/* The same, w pixels wide (at least its own width): rows of a menu, all
+ * as wide as the widest. */
+int ui_button_sized(Ui *u, Canvas *c, int x, int y, int w, const UiButton *b);
 /* A filled box with a one-pixel edge. */
 void ui_box(Canvas *c, int x, int y, int w, int h, uint32_t fill, uint32_t edge);
 /* A small x button inside the top right corner of a box: presses Escape. */

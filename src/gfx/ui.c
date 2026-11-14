@@ -129,7 +129,14 @@ static bool mouse_over(const Ui *u, int x, int y, int w, int h)
 
 int ui_button(Ui *u, Canvas *c, int x, int y, const UiButton *b)
 {
-    int w = ui_button_width(b);
+    return ui_button_sized(u, c, x, y, ui_button_width(b), b);
+}
+
+int ui_button_sized(Ui *u, Canvas *c, int x, int y, int w, const UiButton *b)
+{
+    if (w < ui_button_width(b)) {
+        w = ui_button_width(b);
+    }
     int h = UI_BUTTON_H;
     bool hover = mouse_over(u, x, y, w, h);
     /* Held down: the left button went down on this key and is still over it. */

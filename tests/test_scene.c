@@ -384,12 +384,16 @@ static void test_layout_gives_the_panel_way_first(void)
     Layout l;
     scene_layout(&l, 1280, 720);
     CHECK(!l.too_small && l.has_panel);
-    CHECK(l.view_x == 0 && l.view_y == SCENE_TEXT_H);
+    CHECK(l.view_x == 0 && l.view_y == SCENE_BAR_H);
     CHECK(l.view_w + SCENE_PANEL_W == 1280);
     CHECK(l.panel_x == l.view_w);
-    /* Title and help lines take one row each. */
-    CHECK(l.view_h == 720 - 2 * SCENE_TEXT_H);
-    CHECK(l.help_y == 720 - SCENE_TEXT_H);
+    /* The top line and the bar of buttons take 24 pixels each. */
+    CHECK(SCENE_BAR_H == 24);
+    CHECK(l.view_w == 1120);
+    CHECK(l.view_h == 720 - 2 * SCENE_BAR_H);
+    CHECK(l.view_h == 672);
+    CHECK(l.help_y == 720 - SCENE_BAR_H);
+    CHECK(l.panel_y == SCENE_BAR_H);
 
     /* Too narrow for both: the world takes the width. */
     scene_layout(&l, SCENE_MIN_W + SCENE_PANEL_W - 1, 720);
@@ -861,7 +865,7 @@ static void test_layout_family_area(void)
     Layout l;
     scene_layout(&l, 1280, 720);
     CHECK(l.show_enlarged && l.show_strip);
-    CHECK(l.panel_rows == (720 - 2 * SCENE_TEXT_H) / FONT_H - l.family_rows);
+    CHECK(l.panel_rows == (720 - 2 * SCENE_BAR_H) / FONT_H - l.family_rows);
     CHECK(l.family_y == l.panel_y + l.panel_rows * FONT_H);
 
     /* Lower and lower: the strip goes, then the enlarged view. */
@@ -869,7 +873,7 @@ static void test_layout_family_area(void)
     for (int h = 720; h >= SCENE_MIN_H; h -= FONT_H) {
         scene_layout(&l, 1280, h);
         CHECK(l.panel_rows >= 0);
-        CHECK(l.panel_y + (l.panel_rows + l.family_rows) * FONT_H <= h - SCENE_TEXT_H);
+        CHECK(l.panel_y + (l.panel_rows + l.family_rows) * FONT_H <= h - SCENE_BAR_H);
         if (!l.show_strip) {
             lost_strip = true;
         }

@@ -11,6 +11,7 @@
 #include <time.h>     /* time */
 
 #include "app.h"
+#include "bars.h"
 #include "branch.h"
 #include "camera.h"
 #include "canvas.h"
@@ -37,6 +38,7 @@
 #include "scene.h"
 #include "settings.h"
 #include "sim.h"
+#include "ui.h"
 #include "years.h"
 
 #define FRAMES_PER_SECOND 30
@@ -199,6 +201,10 @@ typedef struct {
     /* The one-time hints already given this run, as HINT_ bits: each is said
      * once, the first time it would help. */
     unsigned hints;
+    /* The buttons (ui.h): where the last frame drew them, the mouse over them.
+     * world_menu_open: the world button's small menu is showing. */
+    Ui ui;
+    bool world_menu_open;
 } App;
 
 static void apply_window_size(App *a, int w, int h)
@@ -851,7 +857,9 @@ static void handle_key(App *a, int key)
         break;
     case KEY_ESCAPE:
         /* The pages first, so Esc never lets go of a creature behind them. */
-        if (a->keys_open) {
+        if (a->world_menu_open) {
+            a->world_menu_open = false;
+        } else if (a->keys_open) {
             a->keys_open = false;
         } else if (a->compare_open) {
             a->compare_open = false;
@@ -867,6 +875,19 @@ static void handle_key(App *a, int key)
         break;
     default: break;
     }
+}
+
+/* A click on a button: the key it stands for, as if pressed; the world
+ * button opens or closes its menu, and a row of that menu closes it. */
+static void press_button(App *a, int key)
+{
+    playlog_click(&a->playlog);
+    if (key == UI_KEY_WORLD_MENU) {
+        a->world_menu_open = !a->world_menu_open;
+        return;
+    }
+    a->world_menu_open = false;
+    handle_key(a, key);
 }
 
 static void handle_event(App *a, const Event *e)
@@ -892,22 +913,36 @@ static void handle_event(App *a, const Event *e)
         }
         break;
     case EV_DOWN:
+        a->dragging = false;
+        a->press_x = a->mouse_x = e->x;
+        a->press_y = a->mouse_y = e->y;
+        /* A press on a button is the button's alone: the world and the panel
+         * behind it never see it. */
+        if (ui_mouse_down(&a->ui, e->x, e->y)) {
+            a->pressed = false;
+            break;
+        }
+        /* Anywhere else, the world menu closes, as menus do. */
+        a->world_menu_open = false;
         a->pressed = over_view(a, e->x, e->y);
         if (!a->pressed) {
             click_panel(a, e->x, e->y);
         }
-        a->dragging = false;
-        a->press_x = a->mouse_x = e->x;
-        a->press_y = a->mouse_y = e->y;
         break;
-    case EV_UP:
-        if (a->pressed && !a->dragging) {
+    case EV_UP: {
+        /* Braces: a case may declare a variable only inside a block of its own. */
+        int key = ui_mouse_up(&a->ui, e->x, e->y);
+        if (key != UI_NONE) {
+            press_button(a, key);
+        } else if (a->pressed && !a->dragging) {
             click(a, e->x, e->y);
         }
         a->pressed = false;
         a->dragging = false;
         break;
+    }
     case EV_MOVE:
+        ui_mouse_move(&a->ui, e->x, e->y, platform_now_ms());
         if (a->pressed && !a->dragging &&
             (abs(e->x - a->press_x) > CLICK_SLOP ||
              abs(e->y - a->press_y) > CLICK_SLOP)) {
@@ -960,28 +995,34 @@ static void draw_title(App *a, const Creature *followed)
              sim_is_over(&a->sim) ? " | game over" : a->paused ? " | paused" : "",
              branch, who,
              a->notice[0] != '\0' ? " | " : "", a->notice);
-    cells_canvas_set(&a->canvas, 0, 0);
+    /* The line is 16 pixels in a 24-pixel bar: filled first, the text 4 down. */
+    canvas_rect(&a->canvas, 0, 0, a->canvas.w, SCENE_BAR_H,
+                canvas_rgb(PALETTE_TEXT_BACKGROUND.r, PALETTE_TEXT_BACKGROUND.g,
+                           PALETTE_TEXT_BACKGROUND.b));
+    cells_canvas_set(&a->canvas, 0, (SCENE_BAR_H - FONT_H) / 2);
     render_text(0, 0, text, a->canvas.w / FONT_W + 1);
 }
 
-static void draw_help(App *a)
+/* The bar of buttons along the bottom, and the world menu above its right end
+ * while open. */
+static void draw_bottom(App *a)
 {
-    cells_canvas_set(&a->canvas, 0, a->layout.help_y);
-    /* Adjacent strings are one string, so each of these is one piece of text. */
-    const char *help =
-        PLATFORM_IS_PAGE
-            ? " ? all keys | space pause | +/- speed | [ ] zoom | click follow"
-              " | l life story | j jump | e notices | f camera | r new world"
-            : " ? all keys | space pause | +/- speed | [ ] zoom | click follow"
-              " | l life story | j jump | e notices | f camera | r new world | q quit";
-    /* Sandbox has more keys; the rest are on the ? page. */
-    if (a->sandbox.on) {
-        help = " ? all keys | space pause | +/- speed | click follow | l story";
+    BottomState st = {0}; /* every field not set below is 0 or false */
+    st.paused = a->paused;
+    st.sandbox = a->sandbox.on;
+    st.split = a->branches.split;
+#ifdef AGON_DEMO
+    st.demo = true;
+#endif
+    st.following = a->inspect.following;
+    st.look_on = a->look_on;
+    st.speed = APP_SPEEDS[a->speed];
+    st.world_menu_open = a->world_menu_open;
+    bar_bottom_draw(&a->ui, &a->canvas, a->layout.help_y, a->canvas.w, &st);
+    if (a->world_menu_open) {
+        bar_world_menu_draw(&a->ui, &a->canvas, a->canvas.w - 2,
+                            a->layout.help_y - 2, PLATFORM_IS_PAGE);
     }
-    char text[300];
-    /* sandbox_help starts with a space and the mode's name: "| Sandbox | ...". */
-    snprintf(text, sizeof(text), "%s |%s", help, sandbox_help(&a->sandbox));
-    render_text(0, 0, text, a->canvas.w / FONT_W + 1);
 }
 
 /* The enlarged body, with a caption above it. */
@@ -1377,9 +1418,13 @@ static void draw_keys(App *a)
 
 static void draw_frame(App *a, float fraction)
 {
+    /* Every frame records its buttons afresh; ui_end makes them the ones a
+     * click is tested against, so a click lands on what was last shown. */
+    ui_begin(&a->ui);
     const Creature *followed = update_following(a, fraction);
     if (a->layout.too_small) {
         draw_too_small(a);
+        ui_end(&a->ui);
         return;
     }
     const Layout *l = &a->layout;
@@ -1408,8 +1453,10 @@ static void draw_frame(App *a, float fraction)
     draw_keys(a);
     /* After the world: a body near the edge may have been drawn over these. */
     draw_title(a, followed);
-    draw_help(a);
     draw_panel(a, followed);
+    draw_bottom(a);
+    ui_tip(&a->ui, &a->canvas, platform_now_ms());
+    ui_end(&a->ui);
 }
 
 static void advance_clocks(App *a)
@@ -1706,6 +1753,7 @@ int main(int argc, char **argv)
      * stack, and starts as all zeros. */
     static App app;
     app.opt = &opt;
+    ui_init(&app.ui);
     app.paused = opt.paused;
     app.sandbox.on = opt.sandbox;
     /* --frames runs make pictures for tests, which a camera choosing whom to

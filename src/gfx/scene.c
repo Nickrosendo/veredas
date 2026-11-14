@@ -2055,13 +2055,13 @@ void scene_layout(Layout *l, int window_w, int window_h)
         return;
     }
     l->has_panel = window_w >= SCENE_MIN_W + SCENE_PANEL_W;
-    l->view_y = SCENE_TEXT_H;
+    l->view_y = SCENE_BAR_H;
     l->view_w = l->has_panel ? window_w - SCENE_PANEL_W : window_w;
-    l->view_h = window_h - 2 * SCENE_TEXT_H;
-    l->help_y = window_h - SCENE_TEXT_H;
+    l->view_h = window_h - 2 * SCENE_BAR_H;
+    l->help_y = window_h - SCENE_BAR_H;
     if (l->has_panel) {
         l->panel_x = l->view_w;
-        l->panel_y = SCENE_TEXT_H;
+        l->panel_y = SCENE_BAR_H;
         split_panel(l, l->view_h / FONT_H);
     }
 }

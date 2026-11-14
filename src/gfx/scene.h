@@ -14,6 +14,7 @@
 #include "canvas.h"
 #include "family.h"
 #include "font.h"
+#include "ui.h" /* UI_BAR_H */
 #include "inspect.h"
 #include "panel.h"
 #include "particles.h"
@@ -138,7 +139,8 @@ typedef struct {
 } Scene;
 
 /* How the window is divided, in pixels. */
-#define SCENE_TEXT_H FONT_H
+/* The top line and the bar of buttons along the bottom. */
+#define SCENE_BAR_H UI_BAR_H
 #define SCENE_PANEL_W (PANEL_COLS * FONT_W)
 /* Below this the window shows only a message. */
 #define SCENE_MIN_COLS 20
@@ -164,7 +166,7 @@ typedef struct {
 #define SCENE_STRIP_CELL_W (SCENE_PANEL_W / SCENE_STRIP_COLUMNS)
 #define SCENE_STRIP_CELL_H ((SCENE_STRIP_ROWS - 1) * FONT_H / SCENE_STRIP_LINES)
 
-/* The title line on top, the help line below, the world between them and the
+/* The top line on top, the bar of buttons below, the world between them and the
  * panel on the right. When the window is narrow the panel goes first. */
 typedef struct {
     bool too_small;
