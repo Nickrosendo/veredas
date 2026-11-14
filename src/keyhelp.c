@@ -42,6 +42,15 @@ static int watching(unsigned flags, const char **lines, int max)
     return n;
 }
 
+/* The buttons and keys are one: said once, at the end of the second column. */
+static void buttons(const char **lines, int max, int *n)
+{
+    add(lines, max, n, "");
+    add(lines, max, n, "Buttons");
+    add(lines, max, n, "  every button presses one of these keys; hover");
+    add(lines, max, n, "  over a button to see which");
+}
+
 /* The modes, world codes and Sandbox's tools. */
 static int changing(unsigned flags, const char **lines, int max)
 {
@@ -68,6 +77,7 @@ static int changing(unsigned flags, const char **lines, int max)
         add(lines, max, &n, "  The full game also gives traits, skips years");
         add(lines, max, &n, "  ahead, splits a world to compare, and starts");
         add(lines, max, &n, "  worlds with other rules for how bodies change.");
+        buttons(lines, max, &n);
         return n;
     }
     add(lines, max, &n, "  g          give the one followed a trait");
@@ -78,6 +88,7 @@ static int changing(unsigned flags, const char **lines, int max)
     add(lines, max, &n, "  Tab        show the other half");
     add(lines, max, &n, "  v          the two halves side by side");
     add(lines, max, &n, "  u          a new start: how wildly bodies change");
+    buttons(lines, max, &n);
     return n;
 }
 

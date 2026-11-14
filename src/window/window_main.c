@@ -139,7 +139,9 @@ static const char WINDOW_USAGE[] =
     "      clipboard and replays it up to where it was copied.\n"
     "mouse: wheel zooms, dragging moves, clicking a creature follows it,\n"
     "       clicking bare ground lets go. On the panel, clicking \"top hunter\",\n"
-    "       \"oldest\" or the largest family's body follows that creature.\n";
+    "       \"oldest\" or the largest family's body follows that creature.\n"
+    "       Every button (the bar along the bottom, the boxes along the top,\n"
+    "       the menus and the card) presses a key, which its hover label names.\n";
 
 /* Everything a frame needs, passed through platform_run as a void *. */
 typedef struct {
@@ -263,7 +265,15 @@ static void click(App *a, int x, int y)
     scene_click(&a->inspect, &a->sim, wx, wy);
     if ((a->hints & HINT_FOLLOW) == 0 && inspect_creature(&a->inspect, &a->sim) != NULL) {
         a->hints |= HINT_FOLLOW;
-        say(a, "following: l tells its life story, Esc lets go, ? lists every key",
+#ifdef AGON_DEMO
+        bool can_give = false; /* the demo has weather only */
+#else
+        bool can_give = a->sandbox.on;
+#endif
+        say(a, can_give ? "its card is on the right: story, let go and give trait "
+                          "are buttons there"
+                        : "its card is on the right: story and let go are buttons "
+                          "there",
             3 * NOTICE_FRAMES);
     }
 }
@@ -658,9 +668,11 @@ static void branch_key(App *a)
     }
 }
 
+/* Every key, from the keyboard or a button. The playlog counts keyboard keys
+ * where they arrive (EV_KEY, --keys) and buttons in press_button, so a button's
+ * click is not counted as its key as well. */
 static void handle_key(App *a, int key)
 {
-    playlog_key(&a->playlog, key);
     /* While the ancestors evolve, any key but q ends that where it got to,
      * and does nothing else: it was pressed to stop the waiting. */
     bool in_setup = a->sandbox.menu == SANDBOX_MENU_SETUP;
@@ -879,6 +891,9 @@ static void press_button(App *a, int key)
     if (key == UI_KEY_BLOCK) {
         return; /* a box's background: nothing, and not the world behind */
     }
+    /* After the background test: a click on a box beside its buttons is a
+     * click, but not on a button. */
+    playlog_button(&a->playlog, key);
     if (key == UI_KEY_WORLD_MENU) {
         a->world_menu_open = !a->world_menu_open;
         return;
@@ -913,6 +928,7 @@ static void handle_event(App *a, const Event *e)
         a->running = false;
         break;
     case EV_KEY:
+        playlog_key(&a->playlog, e->key);
         handle_key(a, e->key);
         break;
     case EV_WHEEL:
@@ -1591,7 +1607,9 @@ static void pretend_keys(App *a)
     long len = (long)strlen(keys);
     long k = a->frames_done - (a->opt->frames - 1 - len);
     if (k >= 0 && k < len && keys[k] != '~') {
-        handle_key(a, keys[k] == 27 ? KEY_ESCAPE : keys[k]);
+        int key = keys[k] == 27 ? KEY_ESCAPE : keys[k];
+        playlog_key(&a->playlog, key);
+        handle_key(a, key);
         a->redraw = true;
     }
 }
@@ -1617,14 +1635,9 @@ static void app_frame(void *arg)
          * does not replace this one at once. Apart from the chain below, so
          * this frame's ticks run as in any other. */
         a->hints |= HINT_START;
-#ifdef AGON_DEMO
-        const char *tools = "? lists every key; w is the Sandbox's tool";
-#else
-        const char *tools = "? lists every key; g w k x u are the Sandbox tools";
-#endif
-        say(a, a->sandbox.on ? tools
-                             : "? lists every key; m switches to Sandbox, where "
-                               "you change the world",
+        say(a, a->sandbox.on ? "brown buttons change the world; hover one to see its key"
+                             : "buttons along the bottom; hover one for its key; "
+                               "Sandbox changes the world",
             3 * NOTICE_FRAMES);
         a->idle_frames = LOOK_IDLE_FRAMES - 5 * FRAMES_PER_SECOND;
     }

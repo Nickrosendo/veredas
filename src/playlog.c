@@ -44,6 +44,15 @@ void playlog_click(Playlog *p)
     p->clicks++;
 }
 
+void playlog_button(Playlog *p, int key)
+{
+    if (key > 0 && key < PLAYLOG_KEYS) {
+        p->buttons[key]++;
+    } else {
+        p->other_buttons++;
+    }
+}
+
 /* A key's name in the file: the character itself, or a word for a key that
  * is blank or would make the line hard to read. */
 static void key_name(int key, char *out, size_t size)
@@ -90,6 +99,14 @@ bool playlog_write(const Playlog *p, const char *path, char *err, size_t len)
         }
     }
     fprintf(f, "key other %u\n", (unsigned)p->other_keys);
+    for (int k = 0; k < PLAYLOG_KEYS; k++) {
+        if (p->buttons[k] > 0) {
+            char name[16];
+            key_name(k, name, sizeof(name));
+            fprintf(f, "button %s %u\n", name, (unsigned)p->buttons[k]);
+        }
+    }
+    fprintf(f, "button other %u\n", (unsigned)p->other_buttons);
     /* fclose writes what the library still holds in its buffer; a full disk
      * shows up here, not at fprintf. */
     if (fclose(f) != 0) {

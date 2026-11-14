@@ -26,6 +26,10 @@ typedef struct {
     int64_t first_sandbox_ms; /* after the start; -1 while never */
     uint32_t keys[PLAYLOG_KEYS];
     uint32_t other_keys;
+    /* Clicks on buttons, by the key each stands for, kept apart from the keys
+     * themselves: the next playtest shows which buttons were found. */
+    uint32_t buttons[PLAYLOG_KEYS];
+    uint32_t other_buttons;
     uint32_t clicks;
 } Playlog;
 
@@ -37,6 +41,9 @@ void playlog_frame(Playlog *p, uint64_t now_ms, bool sandbox);
 /* One key pressed (a KEY_ value or a character), one click on the world. */
 void playlog_key(Playlog *p, int key);
 void playlog_click(Playlog *p);
+/* One click on a button standing for key; a button with no key below 128 (a
+ * close button, say) counts as "other". */
+void playlog_button(Playlog *p, int key);
 /* Writes the record to path, replacing the file. False with one line in err
  * when the file cannot be written. */
 bool playlog_write(const Playlog *p, const char *path, char *err, size_t len);

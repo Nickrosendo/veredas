@@ -151,11 +151,13 @@ done
 [ $? -eq 2 ] || fail "--code with --load was not refused"
 
 # 11. --playlog writes the sitting's record on leaving: keys counted, the
-# Sandbox reached; and the terminal program refuses it.
+# Sandbox reached, no button clicked (--keys are keys, not buttons); and the
+# terminal program refuses it.
 "$OUT/agon-window" --seed 3 --size 64x32 --frames 20 --keys "mgg" \
     --playlog "$TMP/play.txt" >/dev/null || fail "the run with --playlog failed"
 grep -q '^key g 2$' "$TMP/play.txt" && grep -q '^key m 1$' "$TMP/play.txt" &&
-    ! grep -q '^first_sandbox_second -1$' "$TMP/play.txt" ||
+    ! grep -q '^first_sandbox_second -1$' "$TMP/play.txt" &&
+    grep -q '^button other 0$' "$TMP/play.txt" && ! grep -q '^button g' "$TMP/play.txt" ||
     fail "the playlog is not as expected: $(tr '\n' '|' < "$TMP/play.txt")"
 if [ $HAVE_AGON -eq 1 ]; then
     "$OUT/agon" --playlog "$TMP/x.txt" >/dev/null 2>&1
