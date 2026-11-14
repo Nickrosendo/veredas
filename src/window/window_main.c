@@ -41,6 +41,7 @@
 #include "settings.h"
 #include "sim.h"
 #include "ui.h"
+#include "weather_fx.h"
 #include "years.h"
 
 #define FRAMES_PER_SECOND 30
@@ -209,6 +210,12 @@ typedef struct {
      * world_menu_open: the world button's small menu is showing. */
     Ui ui;
     bool world_menu_open;
+    /* The weather drawn over the map (weather_fx.h): how strong, 0..1, the
+     * last event's kind, so its fade-out still draws it after it ends, and
+     * the effect's own clock, at half speed while paused. */
+    float weather_fx;
+    int weather_fx_kind;
+    uint64_t weather_fx_ms;
 } App;
 
 static void apply_window_size(App *a, int w, int h)
@@ -1478,6 +1485,10 @@ static void draw_frame(App *a, float fraction)
     const Layout *l = &a->layout;
     scene_draw_world(&a->scene, &a->canvas, &a->camera, &a->sim, fraction,
                      a->last_ms, a->body_ms, l->view_x, l->view_y);
+    /* Over the ground and the bodies, under the names and the cursor, so
+     * those stay as clear in a snowstorm as without one. */
+    weather_fx_draw(&a->canvas, l->view_x, l->view_y, l->view_w, l->view_h,
+                    a->weather_fx_kind, a->weather_fx, a->weather_fx_ms);
     scene_draw_cursor(&a->scene, &a->canvas, &a->camera, &a->sim, followed,
                       fraction, l->view_x, l->view_y);
     scene_draw_names(&a->scene, &a->canvas, &a->camera, &a->sim, followed,
@@ -1511,12 +1522,32 @@ static void draw_frame(App *a, float fraction)
     ui_end(&a->ui);
 }
 
+/* The weather's fade and clock, by the wall-clock time since the last frame. */
+static void advance_weather_fx(App *a, uint64_t elapsed)
+{
+    bool active = weather_active(&a->sim.weather, a->sim.tick);
+    if (active) {
+        a->weather_fx_kind = a->sim.weather.kind;
+    }
+    float was = a->weather_fx;
+    weather_fx_fade(&a->weather_fx, active, elapsed);
+    bool still = a->paused || sim_is_over(&a->sim);
+    a->weather_fx_ms += still ? elapsed / 2 : elapsed;
+    /* A paused window draws only when something changed: a fade under way
+     * is a change, so it is seen to its end. Floats compared with != on
+     * purpose: any step at all, however small, is a reason to draw. */
+    if (a->weather_fx != was) {
+        a->redraw = true;
+    }
+}
+
 static void advance_clocks(App *a)
 {
     uint64_t now = platform_now_ms();
     if (!a->paused && !sim_is_over(&a->sim)) {
         a->body_ms += now - a->last_ms;
     }
+    advance_weather_fx(a, now - a->last_ms);
     a->last_ms = now;
     if (a->notice_frames > 0 && --a->notice_frames == 0) {
         a->notice[0] = '\0';
