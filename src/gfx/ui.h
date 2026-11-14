@@ -27,6 +27,24 @@ enum { UI_NONE = -1, UI_KEY_WORLD_MENU = 3000 };
  * never reaches the world behind the box. Added before the box's buttons, so
  * they, added later, win. */
 enum { UI_KEY_BLOCK = 3010 };
+/* The world panel's clickable lines (nobody followed): each follows who it
+ * names. They had no key before the buttons came and have none now. */
+enum {
+    UI_KEY_FOLLOW_TOP_HUNTER = 3001,
+    UI_KEY_FOLLOW_OLDEST = 3002,
+    UI_KEY_FOLLOW_LARGEST_FAMILY = 3003
+};
+/* The close button of each page drawn over the map. Each closes its own
+ * page and no other: Escape closes whichever comes first in its order, which
+ * is the wrong one when two pages are open and the player clicked the x of
+ * the one behind. */
+enum {
+    UI_KEY_CLOSE_STORY = 3020,
+    UI_KEY_CLOSE_NOTICES = 3021,
+    UI_KEY_CLOSE_COMPARE = 3022,
+    UI_KEY_CLOSE_KEYS = 3023,
+    UI_KEY_CLOSE_LAB = 3024
+};
 
 #define UI_MAX_HITS 160
 #define UI_TIP_LEN 48
@@ -68,6 +86,8 @@ void ui_end(Ui *u);
 /* Records a rectangle that presses key when clicked. False when the list is
  * full; nothing is written then. */
 bool ui_add_hit(Ui *u, int x, int y, int w, int h, int key);
+/* The same with a hover label; tip may be NULL. */
+bool ui_add_hit_tip(Ui *u, int x, int y, int w, int h, int key, const char *tip);
 /* The key of the topmost shown hit under (x, y): the last one added wins, so
  * a menu drawn after the bar beats the bar. UI_NONE when there is none. */
 int ui_key_at(const Ui *u, int x, int y);
@@ -84,6 +104,9 @@ int ui_button_sized(Ui *u, Canvas *c, int x, int y, int w, const UiButton *b);
 void ui_box(Canvas *c, int x, int y, int w, int h, uint32_t fill, uint32_t edge);
 /* A small x button inside the top right corner of a box: presses Escape. */
 void ui_close_button(Ui *u, Canvas *c, int box_x, int box_y, int box_w);
+/* The same x pressing key instead, with its own tip. */
+void ui_close_button_key(Ui *u, Canvas *c, int box_x, int box_y, int box_w,
+                         int key, const char *tip);
 /* After UI_TIP_DELAY_MS over a button with a tip, draws the tip near the
  * mouse, kept inside the canvas. Drawn last, over everything. */
 void ui_tip(const Ui *u, Canvas *c, uint64_t now_ms);

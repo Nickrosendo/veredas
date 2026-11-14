@@ -102,6 +102,8 @@ static const char WINDOW_USAGE[] =
     "  --keys TEXT       with --frames: press these keys, one a frame, in the\n"
     "                    last frames (\"l\" shows the life story page, \"b\" the\n"
     "                    species lab, \"~\" presses nothing for a frame)\n"
+    "  --hits            on leaving, print where the last frame drew each button\n"
+    "                    and the key it presses (for tests)\n"
     "  -h, --help        this text\n"
     "  --version         the version\n"
     "keys: space pause, +/- speed, r new seed, s save, q quit, arrows move,\n"
@@ -240,18 +242,8 @@ static void say(App *a, const char *text, int frames);
 static void click(App *a, int x, int y)
 {
     playlog_click(&a->playlog);
-    if (a->notices_open) {
-        int bx, by, bw, bh;
-        int rows = notice_box(a, &bx, &by, &bw, &bh);
-        /* Row r of the list starts below the heading and the top margin. */
-        int r = (y - by - FONT_H / 2) / FONT_H - 1;
-        if (x >= bx && x < bx + bw && y >= by && y < by + bh) {
-            if (r >= 0 && r < rows) {
-                follow_notice(a, notices_get(&a->notices, (uint32_t)r));
-            }
-            return; /* a click on the box never reaches the world behind */
-        }
-    }
+    /* The pages and menus over the map are buttons now (ui.h): a click on
+     * one never gets here, so whatever is under this point is the world. */
     int sx = x - a->layout.view_x;
     int sy = y - a->layout.view_y;
     if (!camera_on_world(&a->camera, sx, sy)) {
@@ -268,33 +260,26 @@ static void click(App *a, int x, int y)
     }
 }
 
-/* A click on the panel: follow who it names. While following, the panel lists that
- * creature instead, so these rows are not there to click. */
-static void click_panel(App *a, int x, int y)
+/* A click on one of the world panel's lines: follow who it names. */
+static void follow_from_panel(App *a, int key)
 {
-    if (a->inspect.following) {
-        return;
-    }
     int slot;
-    switch (scene_panel_pick(&a->layout, x, y)) {
-    case PANEL_PICK_TOP_HUNTER:
+    switch (key) {
+    case UI_KEY_FOLLOW_TOP_HUNTER:
         slot = inspect_highest_level(&a->sim);
         break;
-    case PANEL_PICK_OLDEST:
+    case UI_KEY_FOLLOW_OLDEST:
         slot = inspect_oldest(&a->sim);
         break;
-    case PANEL_PICK_LARGEST_FAMILY:
+    default: /* UI_KEY_FOLLOW_LARGEST_FAMILY */
         slot = inspect_largest_of_family(&a->sim,
                                          family_largest(&a->families, &a->sim));
         break;
-    default:
-        return;
     }
     if (slot >= 0) {
         inspect_follow(&a->inspect, &a->sim, slot);
     } else {
-        snprintf(a->notice, sizeof(a->notice), "nobody to follow");
-        a->notice_frames = NOTICE_FRAMES;
+        say(a, "nobody to follow", NOTICE_FRAMES);
     }
 }
 
@@ -891,7 +876,20 @@ static void press_button(App *a, int key)
         return;
     }
     a->world_menu_open = false;
-    handle_key(a, key);
+    switch (key) {
+    case UI_KEY_FOLLOW_TOP_HUNTER:
+    case UI_KEY_FOLLOW_OLDEST:
+    case UI_KEY_FOLLOW_LARGEST_FAMILY:
+        follow_from_panel(a, key);
+        break;
+    /* Each page's x closes that page, whatever else is open. */
+    case UI_KEY_CLOSE_STORY: life_page_close(&a->page); break;
+    case UI_KEY_CLOSE_NOTICES: a->notices_open = false; break;
+    case UI_KEY_CLOSE_COMPARE: a->compare_open = false; break;
+    case UI_KEY_CLOSE_KEYS: a->keys_open = false; break;
+    case UI_KEY_CLOSE_LAB: a->lab_open = false; break;
+    default: handle_key(a, key); break;
+    }
 }
 
 static void handle_event(App *a, const Event *e)
@@ -929,9 +927,6 @@ static void handle_event(App *a, const Event *e)
         /* Anywhere else, the world menu closes, as menus do. */
         a->world_menu_open = false;
         a->pressed = over_view(a, e->x, e->y);
-        if (!a->pressed) {
-            click_panel(a, e->x, e->y);
-        }
         break;
     case EV_UP: {
         /* Braces: a case may declare a variable only inside a block of its own. */
@@ -1078,6 +1073,29 @@ static void draw_family(App *a, const Creature *followed)
     }
 }
 
+/* The world panel's lines that follow someone, as buttons. A line that did
+ * not fit is not on screen, so it gets none. While following, the panel
+ * lists that creature instead, and these lines are not there. */
+static void panel_hits(App *a)
+{
+    const Layout *l = &a->layout;
+    if (PANEL_ROW_TOP_HUNTER < l->panel_rows) {
+        ui_add_hit_tip(&a->ui, l->panel_x, l->panel_y + PANEL_ROW_TOP_HUNTER * FONT_H,
+                       SCENE_PANEL_W, FONT_H, UI_KEY_FOLLOW_TOP_HUNTER,
+                       "follow the top hunter");
+    }
+    if (PANEL_ROW_OLDEST < l->panel_rows) {
+        ui_add_hit_tip(&a->ui, l->panel_x, l->panel_y + PANEL_ROW_OLDEST * FONT_H,
+                       SCENE_PANEL_W, FONT_H, UI_KEY_FOLLOW_OLDEST,
+                       "follow the oldest");
+    }
+    if (l->show_enlarged) {
+        ui_add_hit_tip(&a->ui, l->panel_x, l->family_y, SCENE_PANEL_W,
+                       SCENE_ENLARGED_ROWS * FONT_H, UI_KEY_FOLLOW_LARGEST_FAMILY,
+                       "follow one of the largest family");
+    }
+}
+
 static void draw_panel(App *a, const Creature *followed)
 {
     const Layout *l = &a->layout;
@@ -1093,9 +1111,26 @@ static void draw_panel(App *a, const Creature *followed)
         panel_draw_inspect(&a->sim, &a->inspect, 0, 0, l->panel_rows);
     } else {
         panel_draw(&a->sim, 0, 0, l->panel_rows);
+        panel_hits(a);
     }
     draw_family(a, followed);
 }
+
+/* A page's box over the map: its background, and a hit over all of it so a
+ * click on the page never reaches the world behind. The page's x goes on
+ * after its text (ui_close_button_key), so it is drawn over the text and,
+ * added later, wins over this hit. */
+static void page_box(App *a, int x, int y, int w, int h)
+{
+    canvas_rect(&a->canvas, x, y, w, h,
+                canvas_rgb(PALETTE_TEXT_BACKGROUND.r, PALETTE_TEXT_BACKGROUND.g,
+                           PALETTE_TEXT_BACKGROUND.b));
+    ui_add_hit(&a->ui, x, y, w, h, UI_KEY_BLOCK);
+}
+
+/* Columns of a page's first line the x leaves free: its 16 pixels and the 2
+ * of air beside it are 3 characters of 8. */
+#define CLOSE_COLUMNS 3
 
 /* The L page over the world's area, inset by a character all round, so the
  * world keeps showing (and running) at its edges. */
@@ -1108,9 +1143,6 @@ static void draw_page(App *a)
     if (w < FONT_W * 20 || h < FONT_H * 4) {
         return; /* too small to read; the world shows instead */
     }
-    canvas_rect(&a->canvas, x, y, w, h,
-                canvas_rgb(PALETTE_TEXT_BACKGROUND.r, PALETTE_TEXT_BACKGROUND.g,
-                           PALETTE_TEXT_BACKGROUND.b));
     int cols = w / FONT_W;
     int rows = h / FONT_H;
     if (rows > LIFE_PAGE_MAX_LINES) {
@@ -1121,10 +1153,14 @@ static void draw_page(App *a)
     static char lines[LIFE_PAGE_MAX_LINES][LIFE_PAGE_LINE_BYTES];
     int n = life_page_text(&a->page, a->sim.set.ticks_per_year, cols, lines,
                            rows);
+    page_box(a, x, y, w, h);
     cells_canvas_set(&a->canvas, x, y);
+    /* The first line stops short of the x. */
     for (int r = 0; r < n; r++) {
-        render_text(0, r, lines[r], cols);
+        render_text(0, r, lines[r], r == 0 ? cols - CLOSE_COLUMNS : cols);
     }
+    ui_close_button_key(&a->ui, &a->canvas, x, y, w, UI_KEY_CLOSE_STORY,
+                        "close the story (l)");
 }
 
 /* Columns a line of UTF-8 takes on screen: one per character. A character's
@@ -1165,14 +1201,13 @@ static void draw_sandbox(App *a)
         int len = text_columns(lines[r]);
         cols = len > cols ? len : cols;
     }
-    int w = (cols + 2) * FONT_W, h = (n + 1) * FONT_H;
+    /* A margin of a character each side, and room for the x on the right. */
+    int w = (cols + 2 + CLOSE_COLUMNS) * FONT_W, h = (n + 1) * FONT_H;
     if (w > l->view_w) {
         w = l->view_w;
     }
     int x = l->view_x + FONT_W, y = l->view_y + FONT_H / 2;
-    canvas_rect(&a->canvas, x, y, w, h,
-                canvas_rgb(PALETTE_TEXT_BACKGROUND.r, PALETTE_TEXT_BACKGROUND.g,
-                           PALETTE_TEXT_BACKGROUND.b));
+    page_box(a, x, y, w, h);
     cells_canvas_set(&a->canvas, x + FONT_W, y + FONT_H / 2);
     for (int r = 0; r < n; r++) {
         if (text_columns(lines[r]) == (int)strlen(lines[r])) {
@@ -1181,6 +1216,10 @@ static void draw_sandbox(App *a)
             render_utf8(0, r, lines[r]); /* the skip summary's chart */
         }
     }
+    /* Escape stops a skip under way and closes its summary: the x is Escape. */
+    ui_close_button_key(&a->ui, &a->canvas, x, y, w, KEY_ESCAPE,
+                        sandbox_skipping(&a->sandbox) ? "stop the skip (Esc)"
+                                                      : "close (Esc)");
 }
 
 /* Too small for anything else: a minimised window lands here too. */
@@ -1312,14 +1351,20 @@ static void draw_notices(App *a)
     if (!a->notices_open || rows == 0) {
         return;
     }
-    canvas_rect(&a->canvas, x, y, w, h,
-                canvas_rgb(PALETTE_TEXT_BACKGROUND.r, PALETTE_TEXT_BACKGROUND.g,
-                           PALETTE_TEXT_BACKGROUND.b));
+    page_box(a, x, y, w, h);
     int cols = w / FONT_W - 1;
     cells_canvas_set(&a->canvas, x + FONT_W, y + FONT_H / 2);
     render_text(0, 0, "Notices, newest first: 1-9 or a click follows, e or Esc closes",
-                cols);
+                cols - CLOSE_COLUMNS);
     for (int r = 0; r < rows; r++) {
+        /* Each row a button pressing its number, the key that follows it.
+         * Row r sits below the heading and the half row of margin. r is 0
+         * to 8, so '1' + r is a digit character, and a character is an int. */
+        /* 48: room for any int, which is what gcc checks, not only 1-9. */
+        char tip[48];
+        snprintf(tip, sizeof(tip), "follow who it is about (%d)", r + 1);
+        ui_add_hit_tip(&a->ui, x, y + FONT_H / 2 + (r + 1) * FONT_H, w, FONT_H,
+                       '1' + r, tip);
         const Notice *n = notices_get(&a->notices, (uint32_t)r);
         char line[NOTICE_TEXT + 32];
         int year = years_whole(n->tick, a->sim.set.ticks_per_year) + 1;
@@ -1328,6 +1373,8 @@ static void draw_notices(App *a)
                      ? " (dead)" : "");
         render_text(0, r + 1, line, cols);
     }
+    ui_close_button_key(&a->ui, &a->canvas, x, y, w, UI_KEY_CLOSE_NOTICES,
+                        "close the notices (e)");
 }
 
 /* v: the two branches side by side, in a box at the bottom of the view, so
@@ -1349,15 +1396,13 @@ static void draw_compare(App *a)
         int len = text_columns(lines[r]);
         cols = len > cols ? len : cols;
     }
-    /* A last row for the keys. */
-    int w = (cols + 2) * FONT_W, h = (n + 2) * FONT_H;
+    /* A last row for the keys; a margin each side and room for the x. */
+    int w = (cols + 2 + CLOSE_COLUMNS) * FONT_W, h = (n + 2) * FONT_H;
     if (n == 0 || h > l->view_h || w > l->view_w - 2 * FONT_W) {
         return; /* too small to read */
     }
     int x = l->view_x + FONT_W, y = l->view_y + l->view_h - h - FONT_H / 2;
-    canvas_rect(&a->canvas, x, y, w, h,
-                canvas_rgb(PALETTE_TEXT_BACKGROUND.r, PALETTE_TEXT_BACKGROUND.g,
-                           PALETTE_TEXT_BACKGROUND.b));
+    page_box(a, x, y, w, h);
     cells_canvas_set(&a->canvas, x + FONT_W, y + FONT_H / 2);
     for (int r = 0; r < n; r++) {
         if (text_columns(lines[r]) == (int)strlen(lines[r])) {
@@ -1367,6 +1412,8 @@ static void draw_compare(App *a)
         }
     }
     render_text(0, n, "  Tab shows the other branch | v or Esc closes", cols);
+    ui_close_button_key(&a->ui, &a->canvas, x, y, w, UI_KEY_CLOSE_COMPARE,
+                        "close the comparison (v)");
 }
 
 /* What the ? page lists for the window as it is now. */
@@ -1398,9 +1445,7 @@ static void draw_keys(App *a)
     if (w < FONT_W * 20 || h < FONT_H * 4) {
         return; /* too small to read; the world shows instead */
     }
-    canvas_rect(&a->canvas, x, y, w, h,
-                canvas_rgb(PALETTE_TEXT_BACKGROUND.r, PALETTE_TEXT_BACKGROUND.g,
-                           PALETTE_TEXT_BACKGROUND.b));
+    page_box(a, x, y, w, h);
     int cols = w / FONT_W - 2;
     int rows = h / FONT_H - 1;
     /* A column's width with a gap of 4 after it. */
@@ -1418,6 +1463,8 @@ static void draw_keys(App *a)
         }
         row = top + n + 1; /* one empty row before the second column */
     }
+    ui_close_button_key(&a->ui, &a->canvas, x, y, w, UI_KEY_CLOSE_KEYS,
+                        "close the key list (?)");
 }
 
 static void draw_frame(App *a, float fraction)
@@ -1447,6 +1494,10 @@ static void draw_frame(App *a, float fraction)
     if (a->lab_open) {
         lab_draw(&a->scene.sprites, &a->canvas, a->lab_action, a->lab_parts, a->body_ms,
                  l->view_x, l->view_y, l->view_w, l->view_h);
+        /* The lab covers the whole map: a click on it reaches nothing behind. */
+        ui_add_hit(&a->ui, l->view_x, l->view_y, l->view_w, l->view_h, UI_KEY_BLOCK);
+        ui_close_button_key(&a->ui, &a->canvas, l->view_x, l->view_y, l->view_w,
+                            UI_KEY_CLOSE_LAB, "close the lab (b)");
     }
     if (a->page.open) {
         draw_page(a);
@@ -1698,6 +1749,13 @@ static int app_leave(App *a)
         !playlog_write(&a->playlog, a->opt->playlog_path, err, sizeof(err))) {
         platform_error(err);
         result = EXIT_FAILED;
+    }
+    if (a->opt->hits) {
+        /* x y w h key, one button a line; the key as handle_key takes it. */
+        for (int i = 0; i < a->ui.n_shown; i++) {
+            const UiHit *h = &a->ui.shown[i];
+            printf("hit %d %d %d %d %d\n", h->x, h->y, h->w, h->h, h->key);
+        }
     }
     if (a->opt->checksum) {
         printf("checksum 0x%016" PRIx64 "\n", sim_checksum(&a->sim));

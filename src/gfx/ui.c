@@ -57,9 +57,8 @@ void ui_end(Ui *u)
     u->n_shown = u->n_hits;
 }
 
-/* Adds a hit with its tip; tip may be NULL. */
-static bool add_hit_tip(Ui *u, int x, int y, int w, int h, int key,
-                        const char *tip)
+bool ui_add_hit_tip(Ui *u, int x, int y, int w, int h, int key,
+                    const char *tip)
 {
     if (u->n_hits >= UI_MAX_HITS) {
         return false;
@@ -78,7 +77,7 @@ static bool add_hit_tip(Ui *u, int x, int y, int w, int h, int key,
 
 bool ui_add_hit(Ui *u, int x, int y, int w, int h, int key)
 {
-    return add_hit_tip(u, x, y, w, h, key, NULL);
+    return ui_add_hit_tip(u, x, y, w, h, key, NULL);
 }
 
 /* The topmost shown hit under (x, y), or NULL. Searched from the end, since
@@ -173,11 +172,17 @@ int ui_button_sized(Ui *u, Canvas *c, int x, int y, int w, const UiButton *b)
         /* The font is 16 tall in a 20-tall button: 2 pixels above. */
         text_draw(c, at, y + (h - TEXT_H) / 2, b->word, to_pixel(ink));
     }
-    add_hit_tip(u, x, y, w, h, b->key, b->tip);
+    ui_add_hit_tip(u, x, y, w, h, b->key, b->tip);
     return w;
 }
 
 void ui_close_button(Ui *u, Canvas *c, int box_x, int box_y, int box_w)
+{
+    ui_close_button_key(u, c, box_x, box_y, box_w, KEY_ESCAPE, "close (Esc)");
+}
+
+void ui_close_button_key(Ui *u, Canvas *c, int box_x, int box_y, int box_w,
+                         int key, const char *tip)
 {
     int x = box_x + box_w - CLOSE_SIZE - 2;
     int y = box_y + 2;
@@ -191,7 +196,7 @@ void ui_close_button(Ui *u, Canvas *c, int box_x, int box_y, int box_w)
         canvas_rect(c, x + 4 + i, y + 4 + i, 1, 1, ink);
         canvas_rect(c, x + 11 - i, y + 4 + i, 1, 1, ink);
     }
-    add_hit_tip(u, x, y, CLOSE_SIZE, CLOSE_SIZE, KEY_ESCAPE, "close (Esc)");
+    ui_add_hit_tip(u, x, y, CLOSE_SIZE, CLOSE_SIZE, key, tip);
 }
 
 void ui_tip(const Ui *u, Canvas *c, uint64_t now_ms)

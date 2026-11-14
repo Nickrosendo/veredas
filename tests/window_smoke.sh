@@ -162,5 +162,30 @@ if [ $HAVE_AGON -eq 1 ]; then
     [ $? -eq 2 ] || fail "agon accepted --playlog"
 fi
 
+# 12. Every page drawn over the map has a close button at its top right, and
+# the world panel's lines are buttons. At 1280x720 the map is x 0-1119 and
+# y 24-695; a page is inset 8 pixels, so its 16-pixel x sits 2 pixels inside
+# its corner, at (1094, 34). --hits prints "hit x y w h key" per button.
+# Keys: 3001 follow the top hunter, 3020 close the story, 3021 the notices,
+# 3022 the comparison, 3023 the key list (ui.h).
+hits() {
+    "$OUT/agon-window" --seed 3 --size 64x32 --speed 30 --hits "$@"
+}
+hits --frames 20 | grep -q '^hit 1120 120 160 16 3001$' ||
+    fail "the panel's top hunter line is not a button"
+hits --frames 20 --keys l | grep -q '^hit 1094 34 16 16 3020$' ||
+    fail "the story page has no close button at its top right"
+hits --frames 20 --keys '?' | grep -q '^hit 1094 34 16 16 3023$' ||
+    fail "the key list has no close button at its top right"
+# Sandbox opens on its setup screen: Escape keeps the world, x splits it.
+hits --frames 20 --sandbox --keys "$(printf '\033')xv" | grep -q '^hit [0-9]* [0-9]* 16 16 3022$' ||
+    fail "the comparison has no close button"
+hits --frames 3000 --speed 120 --keys e | grep -q '^hit 1094 34 16 16 3021$' ||
+    fail "the notice list has no close button at its top right"
+if [ $HAVE_AGON -eq 1 ]; then
+    "$OUT/agon" --hits >/dev/null 2>&1
+    [ $? -eq 2 ] || fail "agon accepted --hits"
+fi
+
 [ $failed -eq 0 ] && echo "window_smoke: all passed"
 exit $failed

@@ -53,6 +53,9 @@ typedef struct {
     /* --keys: keys pressed one a frame during the last frames of --frames, so
      * a test or a screenshot can open the L page. Points into argv. */
     const char *keys;
+    /* --hits: on leaving, print every button of the last frame drawn, one a
+     * line, so a test can find a page's close button. */
+    bool hits;
     /* Paths from the command line, NULL when not given. They point into
      * argv, which lives as long as main does; nothing is copied or freed. */
     const char *config_path;

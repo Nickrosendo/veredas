@@ -133,7 +133,8 @@ enum {
     OPT_SANDBOX,
     OPT_CODE,
     OPT_PLAYLOG,
-    OPT_ANCESTORS
+    OPT_ANCESTORS,
+    OPT_HITS
 };
 
 /* The table getopt_long reads: name, whether a value follows, a flag
@@ -163,6 +164,7 @@ static const struct option LONG_OPTIONS[] = {
     {"code", required_argument, NULL, OPT_CODE},
     {"playlog", required_argument, NULL, OPT_PLAYLOG},
     {"ancestors", required_argument, NULL, OPT_ANCESTORS},
+    {"hits", no_argument, NULL, OPT_HITS},
     {NULL, 0, NULL, 0},
 };
 
@@ -204,6 +206,9 @@ static bool take_value(int opt, const char *value, Options *o, char *err,
         return true;
     case OPT_PLAYLOG:
         o->playlog_path = value;
+        return true;
+    case OPT_HITS:
+        o->hits = true;
         return true;
     case OPT_FRAMES:
         if (!parse_long(value, 1, OPTIONS_MAX_FRAMES, &n)) {

@@ -223,16 +223,6 @@ void scene_draw_sample(Scene *sc, Canvas *c, const FamilySample *sample,
  * at most SCENE_STRIP_LINES lines. Nothing when the family has no record. */
 void scene_draw_strip(Scene *sc, Canvas *c, const Families *f, uint32_t lineage,
                       int x, int y, int w);
-/* What a click on the panel asks for. */
-typedef enum {
-    PANEL_PICK_NONE,
-    PANEL_PICK_TOP_HUNTER,
-    PANEL_PICK_OLDEST,
-    PANEL_PICK_LARGEST_FAMILY
-} PanelPick;
-
-/* What is under window pixel (x, y) on the ordinary panel. */
-PanelPick scene_panel_pick(const Layout *l, int x, int y);
 /* A click at world point (wx, wy): follows the nearest creature within two
  * cells, going round the world's edges, or lets go when there is none. */
 void scene_click(Inspect *in, const Sim *s, float wx, float wy);
