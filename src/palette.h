@@ -38,6 +38,15 @@ extern const Colour PALETTE_BARE; /* bark: a leaf plant standing bare in autumn 
 extern const Colour PALETTE_TEXT;
 extern const Colour PALETTE_CURSOR;
 extern const Colour PALETTE_TEXT_BACKGROUND;
+/* The window's buttons (gfx/ui.c): the watching tools blue, the Sandbox tools
+ * brown, a pressed one lighter. */
+extern const Colour PALETTE_BUTTON_FILL;
+extern const Colour PALETTE_BUTTON_EDGE;
+extern const Colour PALETTE_SANDBOX_FILL;
+extern const Colour PALETTE_SANDBOX_EDGE;
+extern const Colour PALETTE_PRESSED_FILL;
+extern const Colour PALETTE_PRESSED_EDGE;
+extern const Colour PALETTE_BUTTON_TEXT;
 
 /* How many colour steps a withering plant goes through on its way from
  * green to straw. */

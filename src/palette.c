@@ -33,6 +33,13 @@ const Colour PALETTE_BARE = {104, 78, 56};
 const Colour PALETTE_TEXT = {150, 155, 165};
 const Colour PALETTE_CURSOR = {255, 255, 255};
 const Colour PALETTE_TEXT_BACKGROUND = {14, 17, 23};
+const Colour PALETTE_BUTTON_FILL = {0x1c, 0x2a, 0x44};
+const Colour PALETTE_BUTTON_EDGE = {0x4d, 0x66, 0x90};
+const Colour PALETTE_SANDBOX_FILL = {0x3a, 0x2a, 0x18};
+const Colour PALETTE_SANDBOX_EDGE = {0xb0, 0x84, 0x4a};
+const Colour PALETTE_PRESSED_FILL = {0x3b, 0x5a, 0x8c};
+const Colour PALETTE_PRESSED_EDGE = {0x9c, 0xc0, 0xff};
+const Colour PALETTE_BUTTON_TEXT = {225, 230, 238};
 
 /* One colour channel, t of the way from a to b (t in 0..1). */
 static uint8_t mix_channel(uint8_t a, uint8_t b, float t)
