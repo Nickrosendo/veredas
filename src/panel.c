@@ -7,6 +7,7 @@
 
 #include "cells.h"
 #include "chronicle.h"
+#include "doing.h"
 #include "palette.h"
 #include "years.h"
 
@@ -19,7 +20,7 @@
 
 /* The band a hue falls in. A hue is below 1, but clamping costs nothing
  * and keeps a stray 1.0 from indexing one past the end of the arrays. */
-static int hue_band(float hue)
+int panel_hue_band(float hue)
 {
     int band = (int)(hue * (float)PANEL_HUE_BANDS);
     if (band < 0) {
@@ -53,7 +54,7 @@ int panel_colour_groups(const Sim *s, ColourGroup *groups, int n)
             float hue = c->genome.g[GENE_HUE];
             /* Banded by the hue drawn on the map, so each group's name
              * describes the colour you see. */
-            int band = hue_band(render_display_hue(hue));
+            int band = panel_hue_band(render_display_hue(hue));
             count[band]++;
             sum[band] += hue;
         }
@@ -444,16 +445,6 @@ void panel_draw(const Sim *s, int col, int row0, int rows)
     }
 }
 
-/* What the brain told a creature to do, by ACT_ value. */
-static const char *const ACTION_NAMES[] = {
-    "rest", "turn left", "turn right", "move", "bite", "mate", "attack",
-    "hibernate",
-};
-/* sizeof the whole array divided by sizeof one element is its length,
- * which only works on a real array (not on a pointer to one). */
-static_assert(sizeof(ACTION_NAMES) / sizeof(ACTION_NAMES[0]) == ACT_COUNT,
-              "one name per action");
-
 /*
  * The lines being built: a pointer to the caller's two-dimensional array, rows
  * of PANEL_LINE_BYTES chars in one block of memory, and how many there is room
@@ -556,6 +547,38 @@ static void describe_cell(Lines *l, const Sim *s, const Inspect *in)
     }
 }
 
+/* text over as many lines as it takes, each indented by two spaces and
+ * broken at a space, so no word is cut by the panel's edge. A word longer
+ * than a line (none of doing_text's are) is cut at the edge. */
+static void add_wrapped(Lines *l, const char *text)
+{
+    enum { WIDTH = PANEL_COLS - 2 };
+    size_t len = strlen(text);
+    size_t start = 0;
+    while (start < len) {
+        size_t end = len;
+        if (end - start > WIDTH) {
+            /* The last space at or before the edge; none: cut at the edge. */
+            end = start + WIDTH;
+            while (end > start && text[end] != ' ') {
+                end--;
+            }
+            if (end == start) {
+                end = start + WIDTH;
+            }
+        }
+        char line[PANEL_LINE_BYTES];
+        /* %.*s prints at most that many chars of the string; the count must
+         * be an int, hence the cast (it is at most WIDTH). */
+        snprintf(line, sizeof(line), "  %.*s", (int)(end - start), text + start);
+        add_text(l, line);
+        start = end;
+        while (start < len && text[start] == ' ') {
+            start++; /* the space a line broke at starts no line */
+        }
+    }
+}
+
 static void describe_creature(Lines *l, const Sim *s, const Creature *c)
 {
     const Settings *set = &s->set;
@@ -588,10 +611,11 @@ static void describe_creature(Lines *l, const Sim *s, const Creature *c)
     add_float(l, "sureness gene", c->genome.g[GENE_SURE], 2);
     add_pair(l, "calling", c->calling ? "yes" : "no");
     add_float(l, "upkeep", creature_upkeep_cost(c, set), 2);
-    /* kind comes from a brain; checked before indexing the array. */
-    const char *doing =
-        c->current.kind < ACT_COUNT ? ACTION_NAMES[c->current.kind] : "?";
-    add_pair(l, "doing", doing);
+    /* What it is doing and why, in the same words as the window's card. */
+    char doing[DOING_LEN];
+    doing_text(s, c, doing, sizeof(doing));
+    add_text(l, " doing:");
+    add_wrapped(l, doing);
 }
 
 /* The top of the panel for a creature: who it is, and the newest few things that

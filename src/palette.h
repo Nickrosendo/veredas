@@ -47,6 +47,10 @@ extern const Colour PALETTE_SANDBOX_EDGE;
 extern const Colour PALETTE_PRESSED_FILL;
 extern const Colour PALETTE_PRESSED_EDGE;
 extern const Colour PALETTE_BUTTON_TEXT;
+extern const Colour PALETTE_TEXT_DIM;
+extern const Colour PALETTE_ENERGY;
+extern const Colour PALETTE_HEALTH;
+extern const Colour PALETTE_TRAIT;
 
 /* How many colour steps a withering plant goes through on its way from
  * green to straw. */

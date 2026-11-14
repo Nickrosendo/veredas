@@ -15,6 +15,7 @@
 #include "branch.h"
 #include "camera.h"
 #include "canvas.h"
+#include "card.h"
 #include "cells.h"
 #include "cells_canvas.h"
 #include "family.h"
@@ -1017,14 +1018,11 @@ static void draw_bottom(App *a)
 }
 
 /* The enlarged body, with a caption above it. */
-static void draw_enlarged(App *a, const Creature *followed, uint32_t lineage,
-                          const FamilySample *newest)
+static void draw_enlarged(App *a, uint32_t lineage, const FamilySample *newest)
 {
     const Layout *l = &a->layout;
     char caption[32] = " no family yet";
-    if (followed != NULL) {
-        snprintf(caption, sizeof(caption), " creature #%u", (unsigned)followed->id);
-    } else if (lineage != FAMILY_NONE) {
+    if (lineage != FAMILY_NONE) {
         snprintf(caption, sizeof(caption), " largest: #%u", (unsigned)lineage);
     }
     cells_canvas_set(&a->canvas, l->panel_x, l->family_y);
@@ -1032,10 +1030,7 @@ static void draw_enlarged(App *a, const Creature *followed, uint32_t lineage,
     /* In the middle of the panel's width, below the caption. */
     int x = l->panel_x + (SCENE_PANEL_W - SCENE_ENLARGED_W) / 2;
     int y = l->family_y + FONT_H;
-    if (followed != NULL) {
-        scene_draw_followed(&a->scene, &a->canvas, &a->sim, followed, a->body_ms,
-                            x, y);
-    } else if (newest != NULL) {
+    if (newest != NULL) {
         scene_draw_sample(&a->scene, &a->canvas, newest, lineage, a->body_ms, x, y);
     }
 }
@@ -1056,18 +1051,17 @@ static void draw_strip(App *a, uint32_t lineage, int samples)
                      y + FONT_H, SCENE_PANEL_W);
 }
 
-/* The bottom of the panel: the followed creature and its family, or else the
- * largest family and its newest body. */
-static void draw_family(App *a, const Creature *followed)
+/* The bottom of the world panel: the largest family and its newest body.
+ * (A followed creature's own family is on its card.) */
+static void draw_family(App *a)
 {
     if (!a->layout.show_enlarged) {
         return;
     }
-    uint32_t lineage = followed != NULL ? followed->lineage
-                                        : family_largest(&a->families, &a->sim);
+    uint32_t lineage = family_largest(&a->families, &a->sim);
     FamilySample samples[FAMILY_STRIP];
     int n = family_strip(&a->families, lineage, samples);
-    draw_enlarged(a, followed, lineage, n > 0 ? &samples[n - 1] : NULL);
+    draw_enlarged(a, lineage, n > 0 ? &samples[n - 1] : NULL);
     if (a->layout.show_strip) {
         draw_strip(a, lineage, n);
     }
@@ -1106,14 +1100,17 @@ static void draw_panel(App *a, const Creature *followed)
     canvas_rect(&a->canvas, l->panel_x, l->panel_y, SCENE_PANEL_W, l->view_h,
                 canvas_rgb(PALETTE_TEXT_BACKGROUND.r, PALETTE_TEXT_BACKGROUND.g,
                            PALETTE_TEXT_BACKGROUND.b));
-    cells_canvas_set(&a->canvas, l->panel_x, l->panel_y);
     if (followed != NULL) {
-        panel_draw_inspect(&a->sim, &a->inspect, 0, 0, l->panel_rows);
-    } else {
-        panel_draw(&a->sim, 0, 0, l->panel_rows);
-        panel_hits(a);
+        /* While following, the panel is that animal's card. */
+        card_draw(&a->ui, &a->scene, &a->canvas, l->panel_x, l->panel_y,
+                  SCENE_PANEL_W, l->view_h, &a->sim, &a->families, followed,
+                  a->body_ms, a->sandbox.on);
+        return;
     }
-    draw_family(a, followed);
+    cells_canvas_set(&a->canvas, l->panel_x, l->panel_y);
+    panel_draw(&a->sim, 0, 0, l->panel_rows);
+    panel_hits(a);
+    draw_family(a);
 }
 
 /* A page's box over the map: its background, and a hit over all of it so a

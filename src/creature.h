@@ -379,6 +379,9 @@ bool creature_upkeep(Creature *c, const Settings *s);
  * to birth_size_max, plus what has grown since; speed in move points per tick
  * and sight in cells come from the genes alone. */
 float creature_size(const Creature *c, const Settings *s);
+/* The energy at which this creature may mate: bigger bodies need more
+ * (mate_threshold * size). */
+float creature_mate_needs(const Creature *c, const Settings *s);
 /* How many density steps of a plant one bite takes at this size: the size to the
  * nearest whole number, at least 1, and at most a whole plant. */
 int bite_steps(float size);

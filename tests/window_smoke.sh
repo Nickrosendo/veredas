@@ -182,6 +182,14 @@ hits --frames 20 --sandbox --keys "$(printf '\033')xv" | grep -q '^hit [0-9]* [0
     fail "the comparison has no close button"
 hits --frames 3000 --speed 120 --keys e | grep -q '^hit 1094 34 16 16 3021$' ||
     fail "the notice list has no close button at its top right"
+# While following (l opens the most notable life, j follows it, Esc closes
+# the page), the panel is the animal's card: story (l, 108) and, in Sandbox,
+# give trait (g, 103) are buttons on it, right of the map's 1120 pixels.
+esc=$(printf '\033')
+card=$(hits --frames 500 --sandbox --keys "${esc}lj${esc}~")
+echo "$card" | grep -q '^hit 11[2-9][0-9] [0-9]* [0-9]* 20 108$' &&
+    echo "$card" | grep -q '^hit 1[12][0-9][0-9] [0-9]* [0-9]* 20 103$' ||
+    fail "the card has no story or give trait button"
 if [ $HAVE_AGON -eq 1 ]; then
     "$OUT/agon" --hits >/dev/null 2>&1
     [ $? -eq 2 ] || fail "agon accepted --hits"

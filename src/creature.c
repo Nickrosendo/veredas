@@ -414,15 +414,14 @@ float creature_crowd_cost(const World *w, const Creature *c, const Settings *s)
     return over > 0 ? s->crowd_upkeep * (float)over : 0.0f;
 }
 
-/* The energy at which this creature may mate: bigger bodies need more. */
-static float mate_needs(const Creature *c, const Settings *s)
+float creature_mate_needs(const Creature *c, const Settings *s)
 {
     return s->mate_threshold * creature_size(c, s);
 }
 
 bool creature_can_hibernate(const Creature *c, const Settings *s)
 {
-    return c->energy >= s->hibernate_energy * mate_needs(c, s);
+    return c->energy >= s->hibernate_energy * creature_mate_needs(c, s);
 }
 
 float attack_chance(float a, float t, float k)
@@ -965,7 +964,7 @@ static void sense_all(const World *w, const Pool *p, int idx,
     const Creature *c = &p->items[idx];
     /* Every sense starts at 0, including those not filled in yet. */
     *out = (Senses){0};
-    out->v[SENSE_ENERGY] = clamp01(c->energy / mate_needs(c, s));
+    out->v[SENSE_ENERGY] = clamp01(c->energy / creature_mate_needs(c, s));
     /* age / (age + half) rises from 0 towards 1 and is 0.5 at half: no
      * upper limit on age is needed. */
     float age = (float)c->age;
@@ -1430,7 +1429,7 @@ BiteChoice creature_bite_choice(const World *w, const Pool *p, int idx,
 static void remember_meal(Creature *c, float gain, int cell, const World *w,
                           uint32_t now, const Settings *s)
 {
-    if (cell < 0 || gain < s->meal_place_share * mate_needs(c, s)) {
+    if (cell < 0 || gain < s->meal_place_share * creature_mate_needs(c, s)) {
         return;
     }
     c->meal_x = cell % w->w;
@@ -1481,7 +1480,7 @@ void creature_start_family(Creature *c)
 static bool can_mate(const Creature *c, const Settings *s)
 {
     return c->age >= (uint32_t)s->mate_age && c->health > 0.0f &&
-           c->energy > 0.0f && c->energy >= mate_needs(c, s);
+           c->energy > 0.0f && c->energy >= creature_mate_needs(c, s);
 }
 
 /* Whether the creature in slot other can be c's partner now. */
@@ -1676,7 +1675,7 @@ static bool crowd_allows_birth(const World *w, const Pool *p, const Creature *a,
         }
         int over = crowd - s->crowd_free;
         if (over > 0 &&
-            a->energy < mate_needs(a, s) *
+            a->energy < creature_mate_needs(a, s) *
                             (1.0f + s->birth_crowd_price * (float)over)) {
             return false; /* too dear here */
         }
@@ -1843,7 +1842,7 @@ static void heal(Creature *c, const Settings *s)
  * enough to mate. growth_cost is at least a small number, by the table's check. */
 static void grow(Creature *c, const Settings *s)
 {
-    float surplus = c->energy - s->growth_surplus * mate_needs(c, s);
+    float surplus = c->energy - s->growth_surplus * creature_mate_needs(c, s);
     if (surplus <= 0.0f) {
         return;
     }

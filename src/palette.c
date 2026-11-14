@@ -40,6 +40,11 @@ const Colour PALETTE_SANDBOX_EDGE = {0xb0, 0x84, 0x4a};
 const Colour PALETTE_PRESSED_FILL = {0x3b, 0x5a, 0x8c};
 const Colour PALETTE_PRESSED_EDGE = {0x9c, 0xc0, 0xff};
 const Colour PALETTE_BUTTON_TEXT = {225, 230, 238};
+/* The card (card.h): second lines, and its bars. */
+const Colour PALETTE_TEXT_DIM = {110, 115, 128};
+const Colour PALETTE_ENERGY = {0xd8, 0xb0, 0x40};
+const Colour PALETTE_HEALTH = {0xc0, 0x50, 0x50};
+const Colour PALETTE_TRAIT = {0x6a, 0x9a, 0xd0};
 
 /* One colour channel, t of the way from a to b (t in 0..1). */
 static uint8_t mix_channel(uint8_t a, uint8_t b, float t)

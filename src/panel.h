@@ -45,6 +45,8 @@ int panel_colour_groups(const Sim *s, ColourGroup *groups, int n);
 /* A short name for a band's colour ("red", "violet", ...), or "?" for a
  * number outside 0 .. PANEL_HUE_BANDS - 1. */
 const char *panel_band_name(int band);
+/* The band a hue (0 to 1) falls in, 0 .. PANEL_HUE_BANDS - 1. */
+int panel_hue_band(float hue);
 
 /* Writes n with a comma every three digits ("12,345") into out, a buffer
  * of size bytes. Always ends out with '\0', cutting the text short if it

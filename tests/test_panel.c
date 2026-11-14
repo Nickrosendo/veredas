@@ -297,7 +297,13 @@ static void test_panel_shows_hibernating(void)
     c->current = (Action){.kind = ACT_SLEEP, .hold = 100};
     n = panel_inspect_text(&sim, &in, lines, PANEL_INSPECT_LINES);
     CHECK(lines_have(lines, n, "hibernating"));
-    CHECK(lines_have(lines, n, "hibernate")); /* the "doing" line */
+    CHECK(lines_have(lines, n, "napping")); /* the "doing" line, by day */
+    /* A long doing line wraps at a space, inside the panel. */
+    c->current = (Action){.kind = ACT_REST, .hold = 1};
+    sim.world.veg[world_idx(&sim.world, c->x, c->y)] = 1;
+    n = panel_inspect_text(&sim, &in, lines, PANEL_INSPECT_LINES);
+    CHECK(lines_have(lines, n, "  resting beside"));
+    CHECK(lines_have(lines, n, "  food: not hungry"));
     for (int k = 0; k < n; k++) {
         CHECK(strlen(lines[k]) <= PANEL_COLS);
     }
