@@ -1,5 +1,9 @@
 #include "weather.h"
 
+#include <stdio.h> /* snprintf */
+
+#include "years.h" /* years_season */
+
 /* How hard each event pushes. Chosen so each moves a number that can be
  * measured within a year (the design's section 11); tuned by probe on
  * 2026-11-13. */
@@ -62,4 +66,33 @@ const char *weather_name(int kind)
     case WEATHER_WARM_YEAR: return "warm year";
     default: return "clear";
     }
+}
+
+float weather_left(const Weather *w, uint64_t tick, uint64_t length)
+{
+    if (length == 0 || !weather_active(w, tick)) {
+        return 0.0f;
+    }
+    /* Active means tick < until, so until - tick is at least 1 and the
+     * unsigned subtraction cannot wrap round. */
+    uint64_t left = w->until - tick;
+    if (left >= length) {
+        return 1.0f;
+    }
+    return (float)left / (float)length;
+}
+
+void weather_label(const Weather *w, uint64_t tick, int ticks_per_year, char *out,
+                   size_t size)
+{
+    if (size == 0) {
+        return;
+    }
+    if (!weather_active(w, tick)) {
+        out[0] = '\0';
+        return;
+    }
+    /* The last tick it holds is until - 1; until is above tick, so above 0. */
+    snprintf(out, size, "%s, ends in %s", weather_name(w->kind),
+             years_season(w->until - 1, ticks_per_year));
 }

@@ -1,5 +1,6 @@
 #include "test.h"
 
+#include <stdio.h>  /* snprintf */
 #include <string.h>
 
 #include "bars.h"
@@ -163,8 +164,79 @@ static void test_world_menu(void)
     canvas_free(&c);
 }
 
+/* Whether any pixel in columns from .. c->w - 1 is not black. */
+static bool inked_from(const Canvas *c, int from)
+{
+    for (int y = 0; y < c->h; y++) {
+        for (int x = from; x < c->w; x++) {
+            if (c->px[y * c->w + x] != 0xFF000000u) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+static void top_state(TopState *st)
+{
+    memset(st, 0, sizeof(*st));
+    st->year = 2;
+    st->season = 0;
+    st->animals = 499;
+    st->speed = 2;
+    snprintf(st->following, sizeof(st->following), "Theloulu");
+}
+
+/* Review Focus 3: long text is cut inside its box, never past the line's end,
+ * and never over the "following" box. */
+static void test_top_line(void)
+{
+    Canvas c, plain;
+    CHECK(canvas_init(&c, 840, UI_BAR_H));
+    CHECK(canvas_init(&plain, 840, UI_BAR_H));
+    TopState st;
+    top_state(&st);
+    canvas_fill(&plain, 0xFF000000u);
+    ui_begin(&u);
+    bar_top_draw(&u, &plain, 800, &st);
+    ui_end(&u);
+    CHECK(u.n_shown == 0); /* boxes, not buttons */
+    CHECK(!inked_from(&plain, 800));
+
+    memset(st.notice, 'm', 200);
+    st.notice[200] = '\0';
+    st.weather_kind = 1;
+    st.weather_left = 0.5f;
+    snprintf(st.weather_label, sizeof(st.weather_label), "drought, ends in summer");
+    canvas_fill(&c, 0xFF000000u);
+    bar_top_draw(&u, &c, 800, &st);
+    CHECK(!inked_from(&c, 800));
+    /* the right end, where "following Theloulu" is, looks the same with or
+     * without the long notice */
+    int same = 1;
+    for (int y = 0; y < UI_BAR_H; y++) {
+        for (int x = 800 - 120; x < 800; x++) {
+            same &= c.px[y * c.w + x] == plain.px[y * plain.w + x];
+        }
+    }
+    CHECK(same);
+    /* very narrow: still inside */
+    canvas_fill(&c, 0xFF000000u);
+    bar_top_draw(&u, &c, 170, &st);
+    CHECK(!inked_from(&c, 170));
+    canvas_free(&c);
+    canvas_free(&plain);
+
+    char text[32];
+    bar_animals_text(1234567, text, sizeof(text));
+    CHECK(strcmp(text, "1,234,567 animals") == 0);
+    bar_animals_text(1, text, sizeof(text));
+    CHECK(strcmp(text, "1 animal") == 0);
+}
+
 int main(void)
 {
+    test_top_line();
     ui_init(&u);
     test_documentary();
     test_sandbox();

@@ -4,6 +4,9 @@
 
 #include "icons.h"
 #include "palette.h"
+#include "panel.h"   /* panel_format_count */
+#include "weather.h" /* WEATHER_ */
+#include "years.h"   /* SEASON_ */
 #include "text.h"
 
 #define EDGE 2        /* air at the bar's two ends */
@@ -250,5 +253,154 @@ void bar_world_menu_draw(Ui *u, Canvas *c, int right_x, int bottom_y, bool page)
     for (int i = 0; i < n; i++) {
         UiButton b = {-1, ROWS[i].word, ROWS[i].tip, ROWS[i].key, false, false, false};
         ui_button_sized(u, c, x + 4, y + 4 + i * (UI_BUTTON_H + 2), widest, &b);
+    }
+}
+
+/* ---- The top line ---------------------------------------------------- */
+
+#define BOX_PAD 4
+#define MIN_NOTICE_W 40 /* a notice narrower than this is not worth showing */
+
+typedef struct {
+    Colour fill, edge, ink;
+} BoxLook;
+
+static uint32_t px_of(Colour k)
+{
+    return canvas_rgb(k.r, k.g, k.b);
+}
+
+static int box_width(int icon, const char *text)
+{
+    return 2 * BOX_PAD + (icon >= 0 ? ICON_SIZE + BOX_PAD : 0) + text_width(text);
+}
+
+/*
+ * A box at x with an icon (or -1) and text, cut with "..." so the box is at
+ * most max_w wide. Returns its width, 0 when not even the icon and "..." fit:
+ * nothing is drawn then.
+ */
+static int top_box(Canvas *c, int x, int icon, const char *text, BoxLook look,
+                   int max_w)
+{
+    char cut[256];
+    int room = max_w - box_width(icon, "");
+    if (room <= 0) {
+        return 0;
+    }
+    text_cut(text, room, cut, sizeof(cut));
+    if (cut[0] == '\0' && text[0] != '\0') {
+        return 0;
+    }
+    int w = box_width(icon, cut);
+    int y = (UI_BAR_H - UI_BUTTON_H) / 2;
+    ui_box(c, x, y, w, UI_BUTTON_H, px_of(look.fill), px_of(look.edge));
+    int at = x + BOX_PAD;
+    if (icon >= 0) {
+        icon_draw(c, at, y + (UI_BUTTON_H - ICON_SIZE) / 2, icon);
+        at += ICON_SIZE + BOX_PAD;
+    }
+    text_draw(c, at, y + (UI_BUTTON_H - TEXT_H) / 2, cut, px_of(look.ink));
+    return w;
+}
+
+void bar_animals_text(int animals, char *out, size_t size)
+{
+    char count[32];
+    panel_format_count(count, sizeof(count), animals);
+    snprintf(out, size, "%s %s", count, animals == 1 ? "animal" : "animals");
+}
+
+static int weather_icon(int kind)
+{
+    switch (kind) {
+    case WEATHER_DROUGHT:
+        return ICON_DROUGHT;
+    case WEATHER_HARD_WINTER:
+        return ICON_HARD_WINTER;
+    case WEATHER_WARM_YEAR:
+        return ICON_WARM_YEAR;
+    default:
+        return -1;
+    }
+}
+
+void bar_top_draw(Ui *u, Canvas *c, int w, const TopState *st)
+{
+    (void)u; /* nothing on the top line is a button (yet); kept for the shape */
+    canvas_rect(c, 0, 0, w, UI_BAR_H, px_of(PALETTE_TEXT_BACKGROUND));
+    BoxLook plain = {PALETTE_TEXT_BACKGROUND, PALETTE_BUTTON_EDGE, PALETTE_BUTTON_TEXT};
+    BoxLook mode = {PALETTE_BUTTON_FILL, PALETTE_BUTTON_EDGE, PALETTE_BUTTON_TEXT};
+    if (st->sandbox) {
+        mode.fill = PALETTE_SANDBOX_FILL;
+        mode.edge = PALETTE_SANDBOX_EDGE;
+    }
+    BoxLook yellow = {{0x4a, 0x3c, 0x0c}, {0xe0, 0xc0, 0x40}, {0xff, 0xe0, 0x70}};
+    BoxLook sky = {{0x16, 0x3a, 0x3a}, {0x5a, 0xb0, 0xa8}, {0xd8, 0xf4, 0xf0}};
+
+    /* The followed animal's box at the right end first, so the rest knows
+     * where it must stop. */
+    char text[300];
+    int right = w - EDGE;
+    if (st->following[0] != '\0') {
+        snprintf(text, sizeof(text), "following %s", st->following);
+        int fw = box_width(-1, text);
+        if (fw <= w - 2 * EDGE) {
+            right -= fw;
+            top_box(c, right, -1, text, plain, fw);
+            right -= BUTTON_GAP;
+        }
+    }
+    int x = EDGE;
+    int drawn;
+    drawn = top_box(c, x, st->sandbox ? ICON_MODE_SANDBOX : ICON_MODE_WATCH,
+                    st->sandbox ? "Sandbox" : "Documentary", mode, right - x);
+    x += drawn > 0 ? drawn + BUTTON_GAP : 0;
+
+    static const char *const SEASONS[SEASON_COUNT] = {"Spring", "Summer", "Autumn",
+                                                      "Winter"};
+    int season = st->season >= 0 && st->season < SEASON_COUNT ? st->season : 0;
+    /* PRId64 would be the exact way to print an int64_t; a year fits a long
+     * long, which "%lld" prints on every system. */
+    snprintf(text, sizeof(text), "Year %lld - %s", (long long)st->year, SEASONS[season]);
+    drawn = top_box(c, x, ICON_SPRING + season, text, plain, right - x);
+    x += drawn > 0 ? drawn + BUTTON_GAP : 0;
+
+    bar_animals_text(st->animals, text, sizeof(text));
+    drawn = top_box(c, x, ICON_ANIMALS, text, plain, right - x);
+    x += drawn > 0 ? drawn + BUTTON_GAP : 0;
+
+    if (st->game_over) {
+        drawn = top_box(c, x, -1, "game over", yellow, right - x);
+    } else if (st->paused) {
+        drawn = top_box(c, x, ICON_PAUSE, "paused", yellow, right - x);
+    } else {
+        snprintf(text, sizeof(text), "%d/s", st->speed);
+        drawn = top_box(c, x, -1, text, plain, right - x);
+    }
+    x += drawn > 0 ? drawn + BUTTON_GAP : 0;
+
+    if (st->split) {
+        snprintf(text, sizeof(text), "branch %c of 2", st->branch);
+        drawn = top_box(c, x, ICON_OTHER_BRANCH, text, mode, right - x);
+        x += drawn > 0 ? drawn + BUTTON_GAP : 0;
+    }
+    if (st->weather_kind != WEATHER_NONE && st->weather_label[0] != '\0') {
+        drawn = top_box(c, x, weather_icon(st->weather_kind), st->weather_label, sky,
+                        right - x);
+        if (drawn > 0) {
+            /* What is left of the event: a 2-pixel bar along the box's bottom
+             * edge, inside it, emptying from the right. */
+            float left = st->weather_left < 0.0f ? 0.0f
+                       : st->weather_left > 1.0f ? 1.0f : st->weather_left;
+            int inner = drawn - 2;
+            int bar_y = (UI_BAR_H - UI_BUTTON_H) / 2 + UI_BUTTON_H - 3;
+            canvas_rect(c, x + 1, bar_y, (int)((float)inner * left + 0.5f), 2,
+                        px_of(sky.edge));
+            x += drawn + BUTTON_GAP;
+        }
+    }
+    if (st->notice[0] != '\0' && right - x >= MIN_NOTICE_W) {
+        top_box(c, x, -1, st->notice, plain, right - x);
     }
 }

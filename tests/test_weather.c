@@ -139,8 +139,36 @@ static void test_hard_winter_costs_more(void)
     CHECK(alive[1] < alive[0]);
 }
 
+/* How much of an event is left, and its label in season words. */
+static void test_left_and_label(void)
+{
+    /* started at tick 0, a 600-tick year: a season is 150 ticks */
+    Weather w = {WEATHER_DROUGHT, 150};
+    CHECK(weather_left(&w, 0, 150) == 1.0f);
+    CHECK(weather_left(&w, 75, 150) == 0.5f);
+    CHECK(weather_left(&w, 150, 150) == 0.0f);
+    CHECK(weather_left(&w, 9999, 150) == 0.0f);
+    Weather none = {0};
+    CHECK(weather_left(&none, 0, 150) == 0.0f);
+    CHECK(weather_left(&w, 0, 0) == 0.0f); /* no length: nothing, not a division by 0 */
+
+    char out[48];
+    weather_label(&w, 0, 600, out, sizeof(out));
+    CHECK(strcmp(out, "drought, ends in spring") == 0); /* last tick 149 */
+    /* a hard winter started at tick 100 ends at 250: its last tick, 249, is
+     * in summer (ticks 150-299) */
+    Weather hard = {WEATHER_HARD_WINTER, 250};
+    weather_label(&hard, 100, 600, out, sizeof(out));
+    CHECK(strcmp(out, "hard winter, ends in summer") == 0);
+    weather_label(&none, 0, 600, out, sizeof(out));
+    CHECK(strcmp(out, "") == 0);
+    weather_label(&hard, 250, 600, out, sizeof(out)); /* ended */
+    CHECK(strcmp(out, "") == 0);
+}
+
 int main(void)
 {
+    test_left_and_label();
     test_none_is_identity();
     test_event_lasts_a_season();
     test_save_mid_event();

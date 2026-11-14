@@ -8,6 +8,7 @@
 #define AGON_WEATHER_H
 
 #include <stdbool.h>
+#include <stddef.h> /* size_t */
 #include <stdint.h>
 
 #include "settings.h"
@@ -34,6 +35,14 @@ typedef struct {
 Settings weather_settings(const Settings *base, const Weather *w, uint64_t tick);
 /* Whether an event holds at tick. */
 bool weather_active(const Weather *w, uint64_t tick);
+/* How much of the event is left at tick, 1 at its start down to 0 at its end;
+ * 0 with none, one that has ended, or a length of 0. length is the event's
+ * length in ticks (a season: ticks_per_year / 4, as actions.c sets it). */
+float weather_left(const Weather *w, uint64_t tick, uint64_t length);
+/* "hard winter, ends in summer": the event's name and the season its last tick
+ * falls in. "" with none or one that has ended. Always terminated within size. */
+void weather_label(const Weather *w, uint64_t tick, int ticks_per_year, char *out,
+                   size_t size);
 /* "drought", "hard winter", "warm year"; "clear" for none. */
 const char *weather_name(int kind);
 

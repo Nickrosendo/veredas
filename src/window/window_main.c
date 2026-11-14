@@ -961,46 +961,38 @@ static void handle_event(App *a, const Event *e)
     }
 }
 
+/* The top line: boxes for the mode, the date, the animals, the speed, the
+ * branch, the weather and who is followed, with the message of the moment. */
 static void draw_title(App *a, const Creature *followed)
 {
-    char year[32];
-    panel_format_count(year, sizeof(year),
-                       years_whole(a->sim.tick, a->sim.set.ticks_per_year));
-    char who[48] = "";
-    if (followed != NULL) {
-        char name[16];
-        name_from_id(followed->id, name, sizeof(name));
-        snprintf(who, sizeof(who), " | following %s #%u", name,
-                 (unsigned)followed->id);
-    }
-    char weather[32] = "";
+    /* static: a TopState holds 300 bytes of text, and this keeps it off the
+     * frame's stack, which the browser keeps small. Filled anew every frame. */
+    static TopState st;
+    memset(&st, 0, sizeof(st));
+    int tpy = a->sim.set.ticks_per_year;
+    st.sandbox = a->sandbox.on;
+    st.paused = a->paused;
+    st.game_over = sim_is_over(&a->sim);
+    st.split = a->branches.split;
+    st.branch = a->branches.shown == 0 ? 'A' : 'B';
+    st.year = years_whole(a->sim.tick, tpy);
+    st.season = years_season_of(a->sim.tick, tpy);
+    st.animals = a->sim.pool.count;
+    st.speed = APP_SPEEDS[a->speed];
     if (weather_active(&a->sim.weather, a->sim.tick)) {
-        snprintf(weather, sizeof(weather), " | %s",
-                 weather_name(a->sim.weather.kind));
+        st.weather_kind = a->sim.weather.kind;
+        /* An event lasts a season (actions.c). The cast: ticks_per_year is a
+         * positive int, the length a tick count. */
+        st.weather_left = weather_left(&a->sim.weather, a->sim.tick,
+                                       (uint64_t)tpy / 4u);
+        weather_label(&a->sim.weather, a->sim.tick, tpy, st.weather_label,
+                      sizeof(st.weather_label));
     }
-    char branch[160] = "";
-    if (a->branches.split) {
-        branch[0] = ' ';
-        branch[1] = '|';
-        branch[2] = ' ';
-        /* Written after the three characters: out points into the middle. */
-        branch_status_text(&a->branches, &a->sim, branch + 3, sizeof(branch) - 3);
+    if (followed != NULL) {
+        name_from_id(followed->id, st.following, sizeof(st.following));
     }
-    char text[600];
-    snprintf(text, sizeof(text),
-             " agon %s | seed 0x%" PRIx64 " | year %s, %s%s | creatures %d | %d/s%s%s%s%s%s",
-             a->sandbox.on ? "Sandbox" : "Documentary", a->sim.seed, year,
-             years_season(a->sim.tick, a->sim.set.ticks_per_year), weather,
-             a->sim.pool.count, APP_SPEEDS[a->speed],
-             sim_is_over(&a->sim) ? " | game over" : a->paused ? " | paused" : "",
-             branch, who,
-             a->notice[0] != '\0' ? " | " : "", a->notice);
-    /* The line is 16 pixels in a 24-pixel bar: filled first, the text 4 down. */
-    canvas_rect(&a->canvas, 0, 0, a->canvas.w, SCENE_BAR_H,
-                canvas_rgb(PALETTE_TEXT_BACKGROUND.r, PALETTE_TEXT_BACKGROUND.g,
-                           PALETTE_TEXT_BACKGROUND.b));
-    cells_canvas_set(&a->canvas, 0, (SCENE_BAR_H - FONT_H) / 2);
-    render_text(0, 0, text, a->canvas.w / FONT_W + 1);
+    snprintf(st.notice, sizeof(st.notice), "%s", a->notice);
+    bar_top_draw(&a->ui, &a->canvas, a->canvas.w, &st);
 }
 
 /* The bar of buttons along the bottom, and the world menu above its right end
