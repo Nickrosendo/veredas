@@ -25,7 +25,7 @@ static const char ALPHABET[] =
 
 /* A character's six bits, or -1 for one that is not in the alphabet. A switch
  * on ranges rather than a search of ALPHABET: the letters and digits are in
- * order in every character set agon will meet, so c - 'A' is the letter's
+ * order in every character set veredas will meet, so c - 'A' is the letter's
  * place. */
 static int six_bits(char c)
 {
@@ -236,7 +236,7 @@ static char *to_text(const unsigned char *bytes, size_t n)
 
 bool worldcode_write(const Sim *s, char **text)
 {
-    return worldcode_write_as(s, AGON_RULES, text);
+    return worldcode_write_as(s, VEREDAS_RULES, text);
 }
 
 bool worldcode_write_as(const Sim *s, unsigned rules, char **text)
@@ -364,7 +364,7 @@ static float get_float(Cursor *c)
 }
 
 /* One setting from the code into *set. False when the row or value is not one
- * this agon allows. A float is checked with !(v >= min && v <= max): every
+ * this veredas allows. A float is checked with !(v >= min && v <= max): every
  * comparison with NaN (not a number) is false, so this refuses NaN too, where
  * (v < min || v > max) would let it through. */
 static bool get_setting(Cursor *c, Settings *set, int row)
@@ -372,7 +372,7 @@ static bool get_setting(Cursor *c, Settings *set, int row)
     const SettingInfo *info = settings_info(row);
     if (info->type == SETTING_INT) {
         /* Back from uint32_t to int: a value above INT_MAX converts in an
-         * implementation-defined way, which on every compiler agon meets is
+         * implementation-defined way, which on every compiler veredas meets is
          * the wrap that put_u32 did. */
         int v = (int)get_u32(c);
         if (!(v >= info->min && v <= info->max)) {
@@ -477,9 +477,9 @@ static bool parse(const unsigned char *bytes, size_t n, WorldCode *code,
     }
     Cursor c = {.bytes = bytes, .len = n - 4, .at = 4}; /* the check left out */
     unsigned rules = get_u16(&c);
-    if (rules != AGON_RULES) {
-        snprintf(err, len, "this world was made with rules %u; this agon has "
-                           "rules %d", rules, AGON_RULES);
+    if (rules != VEREDAS_RULES) {
+        snprintf(err, len, "this world was made with rules %u; this veredas has "
+                           "rules %d", rules, VEREDAS_RULES);
         return false;
     }
     code->seed = get_u64(&c);
@@ -488,17 +488,17 @@ static bool parse(const unsigned char *bytes, size_t n, WorldCode *code,
     code->until = get_u64(&c);
     if (code->w < 1 || code->h < 1 || code->w > OPTIONS_MAX_SIDE ||
         code->h > OPTIONS_MAX_SIDE || code->until > OPTIONS_MAX_TICKS) {
-        snprintf(err, len, "the world code asks for a world this agon cannot "
+        snprintf(err, len, "the world code asks for a world this veredas cannot "
                            "make");
         return false;
     }
     if (!get_settings(&c, &code->set)) {
-        snprintf(err, len, "the world code has settings this agon does not "
+        snprintf(err, len, "the world code has settings this veredas does not "
                            "allow");
         return false;
     }
     if (!get_actions(&c, &code->log, code->until)) {
-        snprintf(err, len, "the world code has actions this agon cannot replay");
+        snprintf(err, len, "the world code has actions this veredas cannot replay");
         return false;
     }
     if (c.short_read || c.at != c.len) {
@@ -508,12 +508,32 @@ static bool parse(const unsigned char *bytes, size_t n, WorldCode *code,
     return true;
 }
 
+/* How many characters at text are a code's prefix, today's or the old one,
+ * or 0 when neither starts there. percent: also take the prefix with its ':'
+ * written as "%3A". */
+static size_t prefix_length(const char *text, bool percent)
+{
+    static const char *const PREFIXES[] = {WORLDCODE_PREFIX, WORLDCODE_OLD_PREFIX};
+    for (size_t i = 0; i < sizeof(PREFIXES) / sizeof(PREFIXES[0]); i++) {
+        size_t n = strlen(PREFIXES[i]);
+        if (strncmp(text, PREFIXES[i], n) == 0) {
+            return n;
+        }
+        /* n - 1: every character but the ':', which is the "%3A" after */
+        if (percent && strncmp(text, PREFIXES[i], n - 1) == 0 && text[n - 1] == '%' &&
+            text[n] == '3' && (text[n + 1] == 'A' || text[n + 1] == 'a')) {
+            return n + 2;
+        }
+    }
+    return 0;
+}
+
 /*
  * Where a code's characters start in text (just after the prefix), with how
  * many of them there are in *count; NULL when text holds no code.
  *
  * A bare code: blanks first are skipped, and it runs to the end of the text.
- * A link to the browser page ("https://.../agon/?code=agon1:..."): the code
+ * A link to the browser page ("https://.../veredas/?code=veredas1:..."): the code
  * follows "code=" and runs up to the next '&' (the link's next field) or '#'
  * (a place on the page), so the rest of the address is not read as a typo.
  * Some programs write the ':' in an address as "%3A", the percent form of its
@@ -521,12 +541,12 @@ static bool parse(const unsigned char *bytes, size_t n, WorldCode *code,
  */
 static const char *find_code(const char *text, size_t *count)
 {
-    size_t prefix = strlen(WORLDCODE_PREFIX);
     const char *bare = text;
     while (is_blank(*bare)) {
         bare++;
     }
-    if (strncmp(bare, WORLDCODE_PREFIX, prefix) == 0) {
+    size_t prefix = prefix_length(bare, false);
+    if (prefix > 0) {
         *count = strlen(bare + prefix);
         return bare + prefix;
     }
@@ -535,17 +555,11 @@ static const char *find_code(const char *text, size_t *count)
         return NULL;
     }
     const char *at = field + strlen(WORLDCODE_LINK_FIELD);
-    const char *start = NULL;
-    if (strncmp(at, WORLDCODE_PREFIX, prefix) == 0) {
-        start = at + prefix;
-    } else if (strncmp(at, WORLDCODE_PREFIX, prefix - 1) == 0 &&
-               at[prefix - 1] == '%' && at[prefix] == '3' &&
-               (at[prefix + 1] == 'A' || at[prefix + 1] == 'a')) {
-        /* prefix - 1: every character but the ':', which is the 3 after */
-        start = at + prefix + 2;
-    } else {
+    prefix = prefix_length(at, true);
+    if (prefix == 0) {
         return NULL;
     }
+    const char *start = at + prefix;
     /* strcspn: how many characters from start before the first of "&#" (or
      * the end, '\0'). */
     *count = strcspn(start, "&#");
@@ -558,7 +572,7 @@ bool worldcode_read(const char *text, WorldCode *code, char *err, size_t len)
     size_t count = 0;
     const char *start = find_code(text, &count);
     if (start == NULL) {
-        snprintf(err, len, "that is not an agon world code (it starts with "
+        snprintf(err, len, "that is not a veredas world code (it starts with "
                            "%s)", WORLDCODE_PREFIX);
         return false;
     }

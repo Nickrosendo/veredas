@@ -4,8 +4,8 @@
  * answers to; the state structs say what to draw, so the bars are tested
  * without a window.
  */
-#ifndef AGON_BARS_H
-#define AGON_BARS_H
+#ifndef VEREDAS_BARS_H
+#define VEREDAS_BARS_H
 
 #include <stdbool.h>
 #include <stddef.h> /* size_t */

@@ -5,8 +5,8 @@
  * where the whole world fits in the view, it is centred instead, with
  * nothing repeated.
  */
-#ifndef AGON_CAMERA_H
-#define AGON_CAMERA_H
+#ifndef VEREDAS_CAMERA_H
+#define VEREDAS_CAMERA_H
 
 #include <stdbool.h>
 

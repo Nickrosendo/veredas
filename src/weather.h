@@ -4,8 +4,8 @@
  * the world runs on a copy of the settings with a few numbers pushed, so every
  * rule the world already has carries its effect.
  */
-#ifndef AGON_WEATHER_H
-#define AGON_WEATHER_H
+#ifndef VEREDAS_WEATHER_H
+#define VEREDAS_WEATHER_H
 
 #include <stdbool.h>
 #include <stddef.h> /* size_t */

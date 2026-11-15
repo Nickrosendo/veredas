@@ -1,5 +1,5 @@
 /*
- * agon-window: the simulation in a window. One function, app_frame, does
+ * veredas-window: the simulation in a window. One function, app_frame, does
  * one frame; platform_run calls it. There is no loop here, because a browser
  * has to own the loop.
  */
@@ -49,7 +49,7 @@
 #define WINDOW_H 720
 /* A press that moves further than this, in pixels, is a drag, not a click. */
 #define CLICK_SLOP 4
-#ifdef AGON_DEMO
+#ifdef VEREDAS_DEMO
 /* The browser demo's smaller map: its peak population (1,400-2,300 over 15
  * years, seeds 1-4) stays well inside the demo's pool of 3,000, where the full
  * map's (3,000-4,400) would not. */
@@ -80,7 +80,7 @@ enum {
 };
 
 static const char WINDOW_USAGE[] =
-    "usage: agon-window [options]\n"
+    "usage: veredas-window [options]\n"
     "  --seed N          the world's seed\n"
     "  --size WxH        world size in cells (default 256x144)\n"
     "  --speed N         ticks per second (default 2)\n"
@@ -265,7 +265,7 @@ static void click(App *a, int x, int y)
     scene_click(&a->inspect, &a->sim, wx, wy);
     if ((a->hints & HINT_FOLLOW) == 0 && inspect_creature(&a->inspect, &a->sim) != NULL) {
         a->hints |= HINT_FOLLOW;
-#ifdef AGON_DEMO
+#ifdef VEREDAS_DEMO
         bool can_give = false; /* the demo has weather only */
 #else
         bool can_give = a->sandbox.on;
@@ -360,7 +360,7 @@ static void restart_with_setup(App *a)
 
 /* Where a copied world code is also printed: in a terminal, except in the
  * browser (no terminal) and on Windows (its clipboard keeps the text after
- * agon closes, and the window program may have no terminal). A plain 0 or 1,
+ * veredas closes, and the window program may have no terminal). A plain 0 or 1,
  * so it works both in #if and as a value in C. */
 #if defined(__EMSCRIPTEN__) || defined(_WIN32)
 #define CODE_IN_TERMINAL 0
@@ -410,10 +410,10 @@ static void copy_code(App *a)
         free(text);
         return;
     }
-    /* Also in the terminal agon was started from. On Linux with X11 the
+    /* Also in the terminal veredas was started from. On Linux with X11 the
      * clipboard is not a store: the program that copied keeps the text and
      * hands it over when another one pastes, so without a clipboard manager
-     * the code is gone once agon closes. The printed line stays. And in a
+     * the code is gone once veredas closes. The printed line stays. And in a
      * --frames run (a test or a screenshot) on every system, Windows too,
      * so the window smoke test can read the code back. fflush: stdout into
      * a pipe or file is written in blocks, and this line should be there at
@@ -447,7 +447,7 @@ static void copy_code(App *a)
  * would be 37 MB a world and 106 MB in all). The demo opens a code only up to
  * these.
  */
-#ifdef AGON_DEMO
+#ifdef VEREDAS_DEMO
 #define DEMO_POOL_CAPACITY 3000
 #define CODE_MAX_CELLS (DEFAULT_WORLD_W * DEFAULT_WORLD_H)
 #define CODE_MAX_POOL DEMO_POOL_CAPACITY
@@ -676,7 +676,7 @@ static void handle_key(App *a, int key)
     /* While the ancestors evolve, any key but q ends that where it got to,
      * and does nothing else: it was pressed to stop the waiting. */
     bool in_setup = a->sandbox.menu == SANDBOX_MENU_SETUP;
-#ifndef AGON_DEMO
+#ifndef VEREDAS_DEMO
     /* m while the ancestors evolve: Sandbox, and its setup screen, since a new
      * start is cheapest before anything has been watched. */
     if (a->prelude.active && !a->prelude.replay && !in_setup &&
@@ -730,7 +730,7 @@ static void handle_key(App *a, int key)
         a->keep_asked = false;
     }
     /* Branching is a Sandbox tool; Documentary never changes a world. */
-#ifdef AGON_DEMO
+#ifdef VEREDAS_DEMO
     if (a->sandbox.on &&
         (key == 'x' || key == 'X' || key == '\t' || key == 'v' || key == 'V')) {
         say(a, "not in the browser demo: weather only (w)", NOTICE_FRAMES);
@@ -1034,7 +1034,7 @@ static void draw_bottom(App *a)
     st.paused = a->paused;
     st.sandbox = a->sandbox.on;
     st.split = a->branches.split;
-#ifdef AGON_DEMO
+#ifdef VEREDAS_DEMO
     st.demo = true;
 #endif
     st.following = a->inspect.following;
@@ -1452,7 +1452,7 @@ static unsigned key_flags(const App *a)
     if (a->sandbox.on) {
         flags |= KEYHELP_SANDBOX;
     }
-#ifdef AGON_DEMO
+#ifdef VEREDAS_DEMO
     flags |= KEYHELP_DEMO;
 #endif
     if (PLATFORM_IS_PAGE) {
@@ -1770,7 +1770,7 @@ static bool read_settings(const Options *o, Settings *settings, char *err,
     if (o->no_floor) {
         settings->min_creatures = 0;
     }
-#ifdef AGON_DEMO
+#ifdef VEREDAS_DEMO
     settings->pool_capacity = DEMO_POOL_CAPACITY;
 #endif
     return true;
@@ -1822,7 +1822,7 @@ int main(int argc, char **argv)
     char err[512];
     if (!options_parse(argc, argv, &opt, err, sizeof(err))) {
         char message[600];
-        snprintf(message, sizeof(message), "%s (see agon-window --help)", err);
+        snprintf(message, sizeof(message), "%s (see veredas-window --help)", err);
         platform_error(message);
         return EXIT_USAGE;
     }
@@ -1831,11 +1831,11 @@ int main(int argc, char **argv)
         return EXIT_FINE;
     }
     if (opt.version) {
-        printf("agon-window %s\n", AGON_VERSION);
+        printf("veredas-window %s\n", VEREDAS_VERSION);
         return EXIT_FINE;
     }
     if (opt.once || opt.list_settings) {
-        platform_error("--once and --settings are for agon");
+        platform_error("--once and --settings are for veredas");
         return EXIT_USAGE;
     }
     if (PLATFORM_IS_PAGE && (opt.save_path != NULL || opt.load_path != NULL)) {
@@ -1895,7 +1895,7 @@ int main(int argc, char **argv)
     if (opt.code == NULL) {
         app_prelude_start(&app.prelude, &app.sim, app.prelude_years);
     }
-#ifndef AGON_DEMO
+#ifndef VEREDAS_DEMO
     /* --sandbox opens on its setup screen: a new world's settings are chosen
      * before its ancestors run. Not for a loaded world, which has lived, nor
      * for a code's, whose settings come with it. */
@@ -1938,7 +1938,7 @@ int main(int argc, char **argv)
         return EXIT_USAGE;
 #endif
     }
-    if (!platform_open("agon", WINDOW_W, WINDOW_H, err, sizeof(err))) {
+    if (!platform_open("Veredas", WINDOW_W, WINDOW_H, err, sizeof(err))) {
         platform_error(err);
         return EXIT_FAILED;
     }

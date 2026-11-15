@@ -3,8 +3,8 @@
  * the camera, the sprites and tiles and the animation memory. Reads the
  * simulation only: no writes through the Sim, and none of its random numbers.
  */
-#ifndef AGON_SCENE_H
-#define AGON_SCENE_H
+#ifndef VEREDAS_SCENE_H
+#define VEREDAS_SCENE_H
 
 #include <stdbool.h>
 #include <stdint.h>

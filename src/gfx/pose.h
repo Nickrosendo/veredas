@@ -9,8 +9,8 @@
  * The attack is not a loop: the window plays it from a share 0..1 that it
  * moves on itself (anim.c), so a fight can hold, end early or skip parts.
  */
-#ifndef AGON_POSE_H
-#define AGON_POSE_H
+#ifndef VEREDAS_POSE_H
+#define VEREDAS_POSE_H
 
 #include <stdint.h>
 

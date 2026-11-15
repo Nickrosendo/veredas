@@ -10,8 +10,8 @@
  * fit a short window are left out from the bottom up (the family strip
  * first), so nothing is drawn outside the card's rectangle.
  */
-#ifndef AGON_CARD_H
-#define AGON_CARD_H
+#ifndef VEREDAS_CARD_H
+#define VEREDAS_CARD_H
 
 #include <stdbool.h>
 #include <stdint.h>

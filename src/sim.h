@@ -2,8 +2,8 @@
  * sim: the whole simulation in one struct, advanced one tick at a time
  * in a fixed order. Never touches the terminal.
  */
-#ifndef AGON_SIM_H
-#define AGON_SIM_H
+#ifndef VEREDAS_SIM_H
+#define VEREDAS_SIM_H
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -94,7 +94,7 @@ typedef struct Sim {
  * here would grow a different world. tests/test_sim.c pins it beside the
  * pinned checksum, so a change that moves the checksum fails until this rises.
  */
-#define AGON_RULES 1
+#define VEREDAS_RULES 1
 
 /* Allocates a w by h world and a creature pool, opens the brain named in
  * set and builds the world from seed. False if the size or the pool

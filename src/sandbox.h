@@ -5,8 +5,8 @@
  * not to the world: nothing here is saved, and switching modes changes no world.
  * What changes a world goes through the action log (actions.h).
  */
-#ifndef AGON_SANDBOX_H
-#define AGON_SANDBOX_H
+#ifndef VEREDAS_SANDBOX_H
+#define VEREDAS_SANDBOX_H
 
 #include <stdbool.h>
 #include <stddef.h> /* size_t */
@@ -71,7 +71,7 @@ void sandbox_open_setup(Sandbox *b, const Settings *set);
 void sandbox_setup_apply(const Sandbox *b, Settings *set);
 
 /* Handles a key: m switches modes in either; the rest only in Sandbox. The
- * browser demo (built with AGON_DEMO) has only the weather of the tools. now_ms
+ * browser demo (built with VEREDAS_DEMO) has only the weather of the tools. now_ms
  * is the clock's reading, kept as the start of a skip. followed is the creature
  * the camera follows, or NULL. A line for the player goes to notice. */
 int sandbox_key(Sandbox *b, Sim *s, int key, const Creature *followed,

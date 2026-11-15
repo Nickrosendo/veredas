@@ -2,8 +2,8 @@
  * terrain: builds a world's terrain and starting fertility from the
  * seeded generator.
  */
-#ifndef AGON_TERRAIN_H
-#define AGON_TERRAIN_H
+#ifndef VEREDAS_TERRAIN_H
+#define VEREDAS_TERRAIN_H
 
 #include <stdint.h>
 

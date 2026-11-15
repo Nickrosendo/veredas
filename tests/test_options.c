@@ -80,7 +80,7 @@ static bool fails_with(char **argv, const char *want);
 
 static void test_defaults(void)
 {
-    char *argv[] = {"agon", NULL};
+    char *argv[] = {"veredas", NULL};
     Options o;
     char err[128];
     CHECK(parse(argv, &o, err, sizeof(err)));
@@ -93,24 +93,24 @@ static void test_defaults(void)
 
 static void test_ancestors_option(void)
 {
-    char *argv[] = {"agon", "--ancestors", "12", NULL};
+    char *argv[] = {"veredas", "--ancestors", "12", NULL};
     Options o;
     char err[128];
     CHECK(parse(argv, &o, err, sizeof(err)));
     CHECK(o.ancestors == 12);
-    char *none[] = {"agon", "--ancestors", "0", NULL};
+    char *none[] = {"veredas", "--ancestors", "0", NULL};
     CHECK(parse(none, &o, err, sizeof(err)) && o.ancestors == 0);
-    char *negative[] = {"agon", "--ancestors", "-1", NULL};
+    char *negative[] = {"veredas", "--ancestors", "-1", NULL};
     CHECK(fails_with(negative, "--ancestors"));
-    char *huge[] = {"agon", "--ancestors", "1001", NULL};
+    char *huge[] = {"veredas", "--ancestors", "1001", NULL};
     CHECK(fails_with(huge, "--ancestors"));
-    char *word[] = {"agon", "--ancestors", "many", NULL};
+    char *word[] = {"veredas", "--ancestors", "many", NULL};
     CHECK(fails_with(word, "--ancestors"));
 }
 
 static void test_every_option(void)
 {
-    char *argv[] = {"agon",    "--seed",  "0x10",       "--size", "80x40",
+    char *argv[] = {"veredas",    "--seed",  "0x10",       "--size", "80x40",
                     "--speed", "30",      "--once",     "--ticks", "500",
                     "--no-floor", NULL};
     Options o;
@@ -122,7 +122,7 @@ static void test_every_option(void)
     CHECK(o.once && o.ticks == 500 && o.no_floor);
 
     /* --name=value works too, and so does -h for --help. */
-    char *argv2[] = {"agon", "--seed=7", "-h", NULL};
+    char *argv2[] = {"veredas", "--seed=7", "-h", NULL};
     CHECK(parse(argv2, &o, err, sizeof(err)));
     CHECK(o.seed == 7 && o.help);
 }
@@ -138,27 +138,27 @@ static bool fails_with(char **argv, const char *want)
 
 static void test_mistakes(void)
 {
-    char *unknown[] = {"agon", "--bogus", NULL};
+    char *unknown[] = {"veredas", "--bogus", NULL};
     CHECK(fails_with(unknown, "--bogus"));
-    char *unknown_short[] = {"agon", "-z", NULL};
+    char *unknown_short[] = {"veredas", "-z", NULL};
     CHECK(fails_with(unknown_short, "-z"));
-    char *missing[] = {"agon", "--seed", NULL};
+    char *missing[] = {"veredas", "--seed", NULL};
     CHECK(fails_with(missing, "--seed"));
-    char *bad_seed[] = {"agon", "--seed", "banana", NULL};
+    char *bad_seed[] = {"veredas", "--seed", "banana", NULL};
     CHECK(fails_with(bad_seed, "banana"));
-    char *bad_size[] = {"agon", "--size", "0x0", NULL};
+    char *bad_size[] = {"veredas", "--size", "0x0", NULL};
     CHECK(fails_with(bad_size, "0x0"));
-    char *bad_speed[] = {"agon", "--speed", "0", NULL};
+    char *bad_speed[] = {"veredas", "--speed", "0", NULL};
     CHECK(fails_with(bad_speed, "speed"));
-    char *bad_ticks[] = {"agon", "--ticks", "-1", NULL};
+    char *bad_ticks[] = {"veredas", "--ticks", "-1", NULL};
     CHECK(fails_with(bad_ticks, "ticks"));
-    char *extra[] = {"agon", "world", NULL};
+    char *extra[] = {"veredas", "world", NULL};
     CHECK(fails_with(extra, "world"));
 }
 
 static void test_file_options(void)
 {
-    char *argv[] = {"agon", "--config", "a.conf", "--save", "b.save", NULL};
+    char *argv[] = {"veredas", "--config", "a.conf", "--save", "b.save", NULL};
     Options o;
     char err[128];
     CHECK(parse(argv, &o, err, sizeof(err)));
@@ -166,23 +166,23 @@ static void test_file_options(void)
     CHECK(strcmp(o.save_path, "b.save") == 0);
     CHECK(o.load_path == NULL);
 
-    char *resume[] = {"agon", "--load", "b.save", "--speed", "5", NULL};
+    char *resume[] = {"veredas", "--load", "b.save", "--speed", "5", NULL};
     CHECK(parse(resume, &o, err, sizeof(err)));
     CHECK(strcmp(o.load_path, "b.save") == 0);
     CHECK(o.config_path == NULL);
 
-    char *list[] = {"agon", "--settings", NULL};
+    char *list[] = {"veredas", "--settings", NULL};
     CHECK(parse(list, &o, err, sizeof(err)) && o.list_settings);
 
-    char *with_seed[] = {"agon", "--load", "x", "--seed", "1", NULL};
+    char *with_seed[] = {"veredas", "--load", "x", "--seed", "1", NULL};
     CHECK(fails_with(with_seed, "--load"));
-    char *with_size[] = {"agon", "--load", "x", "--size", "8x8", NULL};
+    char *with_size[] = {"veredas", "--load", "x", "--size", "8x8", NULL};
     CHECK(fails_with(with_size, "--load"));
-    char *with_config[] = {"agon", "--load", "x", "--config", "y", NULL};
+    char *with_config[] = {"veredas", "--load", "x", "--config", "y", NULL};
     CHECK(fails_with(with_config, "--load"));
-    char *with_floor[] = {"agon", "--no-floor", "--load", "x", NULL};
+    char *with_floor[] = {"veredas", "--no-floor", "--load", "x", NULL};
     CHECK(fails_with(with_floor, "--load"));
-    char *no_path[] = {"agon", "--config", NULL};
+    char *no_path[] = {"veredas", "--config", NULL};
     CHECK(fails_with(no_path, "--config"));
 }
 
@@ -190,12 +190,12 @@ static void test_window_options(void)
 {
     Options o;
     char err[128];
-    char *none[] = {"agon", NULL};
+    char *none[] = {"veredas", NULL};
     CHECK(parse(none, &o, err, sizeof(err)));
     CHECK(!o.checksum && o.frames == 0);
     CHECK(o.screenshot_path == NULL && o.zoom_name == NULL);
 
-    char *all[] = {"agon", "--checksum", "--frames", "500", "--screenshot",
+    char *all[] = {"veredas", "--checksum", "--frames", "500", "--screenshot",
                    "a.ppm", "--zoom", "far", NULL};
     CHECK(parse(all, &o, err, sizeof(err)));
     CHECK(o.checksum);
@@ -203,11 +203,11 @@ static void test_window_options(void)
     CHECK(strcmp(o.screenshot_path, "a.ppm") == 0);
     CHECK(strcmp(o.zoom_name, "far") == 0);
 
-    char *zero[] = {"agon", "--frames", "0", NULL};
+    char *zero[] = {"veredas", "--frames", "0", NULL};
     CHECK(fails_with(zero, "--frames"));
-    char *word[] = {"agon", "--frames", "many", NULL};
+    char *word[] = {"veredas", "--frames", "many", NULL};
     CHECK(fails_with(word, "--frames"));
-    char *no_path[] = {"agon", "--screenshot", NULL};
+    char *no_path[] = {"veredas", "--screenshot", NULL};
     CHECK(fails_with(no_path, "--screenshot"));
 }
 
@@ -215,12 +215,12 @@ static void test_paused_option(void)
 {
     Options o;
     char err[128];
-    char *none[] = {"agon", NULL};
+    char *none[] = {"veredas", NULL};
     CHECK(parse(none, &o, err, sizeof(err)) && !o.paused);
-    char *given[] = {"agon", "--paused", NULL};
+    char *given[] = {"veredas", "--paused", NULL};
     CHECK(parse(given, &o, err, sizeof(err)) && o.paused);
     CHECK(parse(none, &o, err, sizeof(err)) && !o.no_art);
-    char *no_art[] = {"agon", "--no-art", NULL};
+    char *no_art[] = {"veredas", "--no-art", NULL};
     CHECK(parse(no_art, &o, err, sizeof(err)) && o.no_art);
     /* The parser accepts them; the terminal program's main refuses it, like
      * --frames (window_smoke.sh checks the exit code). */
@@ -230,8 +230,8 @@ static void test_parse_twice(void)
 {
     /* getopt_long keeps its place in global variables. A second parse
      * must start from the beginning again, not where the first ended. */
-    char *first[] = {"agon", "--seed", "1", NULL};
-    char *second[] = {"agon", "--seed", "2", NULL};
+    char *first[] = {"veredas", "--seed", "1", NULL};
+    char *second[] = {"veredas", "--seed", "2", NULL};
     Options o;
     char err[128];
     CHECK(parse(first, &o, err, sizeof(err)) && o.seed == 1);

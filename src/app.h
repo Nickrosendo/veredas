@@ -2,8 +2,8 @@
  * app: what both programs do the same way around the simulation: the
  * speed steps, opening a world, the s key.
  */
-#ifndef AGON_APP_H
-#define AGON_APP_H
+#ifndef VEREDAS_APP_H
+#define VEREDAS_APP_H
 
 #include <stdbool.h>
 #include <stddef.h> /* size_t */
@@ -13,7 +13,7 @@
 #include "settings.h"
 #include "sim.h"
 
-#define AGON_VERSION "0.2.0"
+#define VEREDAS_VERSION "0.2.0"
 
 /* What main returns to the shell: 0 for success, 1 when something failed
  * while running, 2 for a mistake on the command line (the convention of

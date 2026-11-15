@@ -2,8 +2,8 @@
  * ramp: colours that shift hue as they get lighter or darker, the way pixel
  * artists paint: shadows lean cool, highlights lean warm. Pure maths.
  */
-#ifndef AGON_RAMP_H
-#define AGON_RAMP_H
+#ifndef VEREDAS_RAMP_H
+#define VEREDAS_RAMP_H
 
 #include "palette.h" /* Colour */
 

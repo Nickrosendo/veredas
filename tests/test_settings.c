@@ -222,7 +222,7 @@ static void test_example_file_is_current(void)
     Settings s = settings_default();
     s.pool_capacity = 1;
     char err[256] = "";
-    bool ok = settings_load(&s, "agon.conf.example", err, sizeof(err));
+    bool ok = settings_load(&s, "veredas.conf.example", err, sizeof(err));
     if (!ok) {
         fprintf(stderr, "%s\n", err);
     }
@@ -231,7 +231,7 @@ static void test_example_file_is_current(void)
     CHECK(memcmp(&s, &defaults, sizeof(s)) == 0);
 
     /* Every setting must be listed, not merely default by omission. */
-    FILE *f = fopen("agon.conf.example", "r");
+    FILE *f = fopen("veredas.conf.example", "r");
     CHECK(f != NULL);
     if (f == NULL) {
         return;
@@ -244,7 +244,7 @@ static void test_example_file_is_current(void)
         char wanted[64];
         snprintf(wanted, sizeof(wanted), "\n%s = ", settings_info(i)->name);
         if (strstr(all, wanted) == NULL) {
-            fprintf(stderr, "agon.conf.example lacks %s\n",
+            fprintf(stderr, "veredas.conf.example lacks %s\n",
                     settings_info(i)->name);
             CHECK(false);
         }

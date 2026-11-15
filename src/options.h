@@ -3,8 +3,8 @@
  * checks every value; prints nothing itself, so tests can run it. main
  * decides what to print and which exit code to return.
  */
-#ifndef AGON_OPTIONS_H
-#define AGON_OPTIONS_H
+#ifndef VEREDAS_OPTIONS_H
+#define VEREDAS_OPTIONS_H
 
 #include <stdbool.h>
 #include <stddef.h> /* size_t */

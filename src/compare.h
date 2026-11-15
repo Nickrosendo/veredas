@@ -4,8 +4,8 @@
  * in either, and charts of the recent past drawn to one scale, so a line that
  * stands higher really is more. No drawing here, so a test can read it.
  */
-#ifndef AGON_COMPARE_H
-#define AGON_COMPARE_H
+#ifndef VEREDAS_COMPARE_H
+#define VEREDAS_COMPARE_H
 
 #include <stdint.h>
 

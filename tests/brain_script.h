@@ -4,8 +4,8 @@
  * tests, never by the program, which shows that a brain can be added
  * without touching the simulation.
  */
-#ifndef AGON_BRAIN_SCRIPT_H
-#define AGON_BRAIN_SCRIPT_H
+#ifndef VEREDAS_BRAIN_SCRIPT_H
+#define VEREDAS_BRAIN_SCRIPT_H
 
 #include "brain.h"
 

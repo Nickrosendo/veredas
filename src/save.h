@@ -5,8 +5,8 @@
  * trusted when it is read: every value that could index an array is
  * checked, so a damaged file is refused rather than obeyed.
  */
-#ifndef AGON_SAVE_H
-#define AGON_SAVE_H
+#ifndef VEREDAS_SAVE_H
+#define VEREDAS_SAVE_H
 
 #include <stdbool.h>
 #include <stddef.h> /* size_t */

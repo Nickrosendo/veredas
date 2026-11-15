@@ -6,8 +6,8 @@
  * they are asked for and kept, so a frame of an unchanged world draws none.
  * Pure: the same body and pose always give the same picture.
  */
-#ifndef AGON_SPRITE_H
-#define AGON_SPRITE_H
+#ifndef VEREDAS_SPRITE_H
+#define VEREDAS_SPRITE_H
 
 #include <stdbool.h>
 #include <stdint.h>

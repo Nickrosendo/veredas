@@ -3,8 +3,8 @@
  * shared by the terminal program and the window program, so a plant or a
  * creature has the same colour in both.
  */
-#ifndef AGON_PALETTE_H
-#define AGON_PALETTE_H
+#ifndef VEREDAS_PALETTE_H
+#define VEREDAS_PALETTE_H
 
 #include <stdint.h>
 

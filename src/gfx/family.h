@@ -5,8 +5,8 @@
  * simulation and writes only its own memory. It is not saved: after a load, a
  * family's record starts afresh.
  */
-#ifndef AGON_FAMILY_H
-#define AGON_FAMILY_H
+#ifndef VEREDAS_FAMILY_H
+#define VEREDAS_FAMILY_H
 
 #include <stdbool.h>
 #include <stdint.h>

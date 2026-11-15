@@ -4,8 +4,8 @@
  * until it dies. Only state and rules here: drawing is in render.c (the
  * cursor) and panel.c (what is under it), keys in main.c.
  */
-#ifndef AGON_INSPECT_H
-#define AGON_INSPECT_H
+#ifndef VEREDAS_INSPECT_H
+#define VEREDAS_INSPECT_H
 
 #include <stdbool.h>
 #include <stdint.h>

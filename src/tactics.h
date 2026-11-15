@@ -13,8 +13,8 @@
  * module knows the tactics' names. It is not saved: after a load it starts
  * counting again.
  */
-#ifndef AGON_TACTICS_H
-#define AGON_TACTICS_H
+#ifndef VEREDAS_TACTICS_H
+#define VEREDAS_TACTICS_H
 
 #include <stdbool.h>
 #include <stddef.h> /* size_t */

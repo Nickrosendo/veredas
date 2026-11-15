@@ -16,7 +16,7 @@ OUT = build/$(MODE)
 PLATFORM ?= linux
 SANITIZE = -fsanitize=address,undefined
 EXE =
-TERM_PROGRAM = $(OUT)/agon
+TERM_PROGRAM = $(OUT)/veredas
 # Keeps a window program from opening a console, and links gcc's support code
 # into the program rather than needing one more DLL beside it.
 WINDOW_LDFLAGS =
@@ -29,10 +29,10 @@ endif
 
 ifeq ($(PLATFORM), web)
 # make web sets these; the objects stay apart so build/web holds only the page.
-# The page is the browser demo (AGON_DEMO): Sandbox has the weather only, and
+# The page is the browser demo (VEREDAS_DEMO): Sandbox has the weather only, and
 # the creature pool is smaller, so two worlds fit its fixed memory (window_main.c).
 OUT = build/web-objects
-CFLAGS += -DAGON_DEMO
+CFLAGS += -DVEREDAS_DEMO
 endif
 
 ifeq ($(MODE), release)
@@ -84,9 +84,9 @@ WTEST_BIN = $(WTEST_SRC:tests/%.c=$(OUT)/tests/%$(EXE))
 WTEST_OBJ = $(CORE_OBJ) $(GFX_OBJ) $(OUT)/window/cells_canvas.o
 
 ifeq ($(PLATFORM), windows)
-all: $(OUT)/agon-window$(EXE)
+all: $(OUT)/veredas-window$(EXE)
 else
-all: $(OUT)/agon
+all: $(OUT)/veredas
 endif
 
 release:
@@ -105,14 +105,14 @@ SDL_CFLAGS = -sUSE_SDL=2
 SDL_LIBS = -sUSE_SDL=2
 endif
 
-window: $(OUT)/agon-window$(EXE)
+window: $(OUT)/veredas-window$(EXE)
 
-$(OUT)/agon-window$(EXE): $(CORE_OBJ) $(GFX_OBJ) $(WIN_OBJ)
+$(OUT)/veredas-window$(EXE): $(CORE_OBJ) $(GFX_OBJ) $(WIN_OBJ)
 	$(CC) $(CFLAGS) $(WINDOW_LDFLAGS) $^ -o $@ $(SDL_LIBS) $(LDLIBS)
 
 # The browser page: emcc turns the same objects into WebAssembly. Its memory is
 # fixed, so nothing can grow without limit: enough for the 4,000-creature pool and
-# a canvas up to 4K. The stack gets 1 MB rather than Emscripten's 64 KB: agon has
+# a canvas up to 4K. The stack gets 1 MB rather than Emscripten's 64 KB: veredas has
 # some large local variables, and Linux gives programs 8 MB without asking.
 web:
 	$(MAKE) PLATFORM=web MODE=release CC=emcc build/web/index.html
@@ -131,10 +131,10 @@ $(OUT)/window/platform_sdl.o: CFLAGS += $(SDL_CFLAGS)
 test-window:
 	$(MAKE) MODE=test run-window-smoke
 
-run-window-smoke: $(TERM_PROGRAM) $(OUT)/agon-window$(EXE)
+run-window-smoke: $(TERM_PROGRAM) $(OUT)/veredas-window$(EXE)
 	sh tests/window_smoke.sh $(OUT)
 
-$(OUT)/agon: $(OBJ)
+$(OUT)/veredas: $(OBJ)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDLIBS)
 
 # -MMD also writes a .d file next to each object listing the headers the
@@ -195,14 +195,14 @@ $(OUT)/balance_report$(EXE): tests/balance_report.c $(LIB_OBJ)
 PREFIX ?= /usr/local
 
 install: release
-	install -d $(DESTDIR)$(PREFIX)/bin $(DESTDIR)$(PREFIX)/share/doc/agon
-	install -m 755 build/release/agon $(DESTDIR)$(PREFIX)/bin/agon
-	install -m 644 agon.conf.example $(DESTDIR)$(PREFIX)/share/doc/agon/
+	install -d $(DESTDIR)$(PREFIX)/bin $(DESTDIR)$(PREFIX)/share/doc/veredas
+	install -m 755 build/release/veredas $(DESTDIR)$(PREFIX)/bin/veredas
+	install -m 644 veredas.conf.example $(DESTDIR)$(PREFIX)/share/doc/veredas/
 
 uninstall:
-	rm -f $(DESTDIR)$(PREFIX)/bin/agon
-	rm -f $(DESTDIR)$(PREFIX)/share/doc/agon/agon.conf.example
-	-rmdir $(DESTDIR)$(PREFIX)/share/doc/agon
+	rm -f $(DESTDIR)$(PREFIX)/bin/veredas
+	rm -f $(DESTDIR)$(PREFIX)/share/doc/veredas/veredas.conf.example
+	-rmdir $(DESTDIR)$(PREFIX)/share/doc/veredas
 
 clean:
 	rm -rf build

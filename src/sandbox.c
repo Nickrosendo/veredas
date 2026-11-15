@@ -28,7 +28,7 @@ static const float JUMP_STEPS[SANDBOX_JUMP_STEPS] = {0.01f, 0.02f, 0.05f,
  * this says so when a cut tool's key is pressed. #ifdef keeps it out of the
  * full build, where nothing calls it: a static function never called draws an
  * "unused function" warning. */
-#ifdef AGON_DEMO
+#ifdef VEREDAS_DEMO
 static int not_in_demo(char *notice, size_t size)
 {
     snprintf(notice, size, "not in the browser demo: weather only (w)");
@@ -227,7 +227,7 @@ int sandbox_key(Sandbox *b, Sim *s, int key, const Creature *followed,
     if (key == 'm' || key == 'M') {
         b->on = !b->on;
         b->menu = SANDBOX_MENU_NONE;
-#ifdef AGON_DEMO
+#ifdef VEREDAS_DEMO
         snprintf(notice, size, b->on ? "Sandbox: w weather (the browser demo has "
                                        "only this tool)"
                                      : "Documentary: watching only");
@@ -241,7 +241,7 @@ int sandbox_key(Sandbox *b, Sim *s, int key, const Creature *followed,
     if (!b->on) {
         return SANDBOX_IGNORED;
     }
-#ifdef AGON_DEMO
+#ifdef VEREDAS_DEMO
     if (key == 'g' || key == 'G' || key == 'k' || key == 'K' || key == 'u' ||
         key == 'U') {
         return not_in_demo(notice, size);
@@ -432,7 +432,7 @@ bool sandbox_weather_check(Sandbox *b, const Sim *s, char *out, size_t size)
     change_text(was.plant_eaters, st->by_level[BAND_PLANT], plants, sizeof(plants));
     change_text(was.meat_eaters, meat_now, meat, sizeof(meat));
     change_text(was.planted, st->planted, ground, sizeof(ground));
-#ifdef AGON_DEMO
+#ifdef VEREDAS_DEMO
     const char *more = "";
 #else
     /* A season changes things with no weather too; a split world shows
@@ -452,7 +452,7 @@ void sandbox_weather_forget(Sandbox *b)
 
 const char *sandbox_help(const Sandbox *b)
 {
-#ifdef AGON_DEMO
+#ifdef VEREDAS_DEMO
     return b->on ? " Sandbox | m mode | w weather | c copy code | o open code"
                  : " Documentary | m mode | c copy code | o open code";
 #else

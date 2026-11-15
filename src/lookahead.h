@@ -11,8 +11,8 @@
  * the shown world; any new action in its log, a new seed or a world put back
  * in time drops the copy and the next sync makes a fresh one.
  */
-#ifndef AGON_LOOKAHEAD_H
-#define AGON_LOOKAHEAD_H
+#ifndef VEREDAS_LOOKAHEAD_H
+#define VEREDAS_LOOKAHEAD_H
 
 #include <stdbool.h>
 #include <stddef.h> /* size_t */

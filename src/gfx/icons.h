@@ -1,8 +1,8 @@
 /*
  * icons: the 16 by 16 pictures on the buttons, the top line and the menus.
  */
-#ifndef AGON_ICONS_H
-#define AGON_ICONS_H
+#ifndef VEREDAS_ICONS_H
+#define VEREDAS_ICONS_H
 
 #include "canvas.h"
 

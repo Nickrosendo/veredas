@@ -6,8 +6,8 @@
  * The generator is xoshiro256** (Blackman and Vigna), with its state
  * filled from the seed by splitmix64.
  */
-#ifndef AGON_RNG_H
-#define AGON_RNG_H
+#ifndef VEREDAS_RNG_H
+#define VEREDAS_RNG_H
 
 #include <stdint.h>
 

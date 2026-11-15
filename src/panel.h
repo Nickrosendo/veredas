@@ -3,8 +3,8 @@
  * latest statistics sample, with history graphs, the food chain, a
  * legend of the map's colours and the commonest family colours.
  */
-#ifndef AGON_PANEL_H
-#define AGON_PANEL_H
+#ifndef VEREDAS_PANEL_H
+#define VEREDAS_PANEL_H
 
 #include <stddef.h> /* size_t */
 #include <stdint.h> /* int64_t */

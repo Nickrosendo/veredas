@@ -3,8 +3,8 @@
  * senses and does in a tick. Never touches the terminal and never calls
  * a brain: the simulation asks the brain and passes the answer here.
  */
-#ifndef AGON_CREATURE_H
-#define AGON_CREATURE_H
+#ifndef VEREDAS_CREATURE_H
+#define VEREDAS_CREATURE_H
 
 #include <stdbool.h>
 #include <stdint.h>

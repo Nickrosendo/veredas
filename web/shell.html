@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>agon</title>
+<title>Veredas</title>
 <link rel="icon" href="data:,">
 <style>
   html, body { margin: 0; height: 100%; background: #000; color: #999; font: 13px monospace; }
@@ -15,10 +15,10 @@
 </head>
 <body>
 <canvas id="canvas" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
-<p id="note">agon runs only in this tab: refreshing the page loses the world.</p>
+<p id="note">veredas runs only in this tab: refreshing the page loses the world.</p>
 <script>
   // The page address chooses the world: ?seed=3 a new world from that seed,
-  // ?code=agon1:... a world someone shared (the c key copies such a link),
+  // ?code=veredas1:... a world someone shared (the c key copies such a link),
   // replayed to where it was copied. The C program reads them as ordinary
   // --seed and --code options, and with neither it takes a seed from the clock.
   // A code goes in whole: the C side checks it and says what is wrong with it.
@@ -36,7 +36,7 @@
     arguments: args,
     onAbort: function (reason) {
       document.getElementById("note").textContent =
-        "agon stopped: " + reason + ". Refreshing starts a new world.";
+        "veredas stopped: " + reason + ". Refreshing starts a new world.";
     },
   };
   // Keys go to the world, not to the page, as soon as it is on screen.

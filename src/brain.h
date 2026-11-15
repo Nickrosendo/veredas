@@ -4,8 +4,8 @@
  * the simulation calls the functions without knowing which brain is
  * behind them. The whole world uses one brain at a time, chosen by name.
  */
-#ifndef AGON_BRAIN_H
-#define AGON_BRAIN_H
+#ifndef VEREDAS_BRAIN_H
+#define VEREDAS_BRAIN_H
 
 #include <stdbool.h>
 #include <stdint.h>

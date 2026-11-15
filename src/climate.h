@@ -4,8 +4,8 @@
  * draws from the simulation's random numbers once the world is built: rain is
  * a pure function of the seed, the place and the tick.
  */
-#ifndef AGON_CLIMATE_H
-#define AGON_CLIMATE_H
+#ifndef VEREDAS_CLIMATE_H
+#define VEREDAS_CLIMATE_H
 
 #include <stdint.h>
 

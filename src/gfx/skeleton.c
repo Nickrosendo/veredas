@@ -1367,7 +1367,7 @@ float skeleton_k_cap(int species)
 {
     /* static: a raster is 22 KB, more than this function should put on the
      * stack. It makes the function unsafe to run on two threads at once, which
-     * agon never does. */
+     * veredas never does. */
     static SkeletonRaster r;
     float cap = 4.0f;
     /* From all traits 1 down to all 0: the widest bodies come early, so the

@@ -3,8 +3,8 @@
  * can be shown smoothly. Reads the simulation and writes only its own
  * memory, so it cannot change what the simulation does.
  */
-#ifndef AGON_ANIM_H
-#define AGON_ANIM_H
+#ifndef VEREDAS_ANIM_H
+#define VEREDAS_ANIM_H
 
 #include <stdbool.h>
 #include <stdint.h>

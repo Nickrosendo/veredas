@@ -4,8 +4,8 @@
  * the title says is what the world does. The same functions also turn ticks
  * into the years people read.
  */
-#ifndef AGON_YEARS_H
-#define AGON_YEARS_H
+#ifndef VEREDAS_YEARS_H
+#define VEREDAS_YEARS_H
 
 #include <stdbool.h>
 #include <stddef.h> /* size_t */

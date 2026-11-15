@@ -182,14 +182,14 @@ static void test_bad_codes_refused(void)
         refused(copy, "cut short");
     }
 
-    refused("hello", "not an agon world code");
-    refused("", "not an agon world code");
+    refused("hello", "not a veredas world code");
+    refused("", "not a veredas world code");
 
     char *other = NULL;
-    CHECK(worldcode_write_as(&s, AGON_RULES + 1, &other));
+    CHECK(worldcode_write_as(&s, VEREDAS_RULES + 1, &other));
     char want[64];
-    snprintf(want, sizeof(want), "made with rules %d; this agon has rules %d",
-             AGON_RULES + 1, AGON_RULES);
+    snprintf(want, sizeof(want), "made with rules %d; this veredas has rules %d",
+             VEREDAS_RULES + 1, VEREDAS_RULES);
     refused(other, want);
 
     free(other);
@@ -245,22 +245,28 @@ static void test_link_opens(void)
 
     /* Three ways a link may come: with fields after the code and a place on
      * the page, with the code last, and with the ':' in percent form. */
-    const char *forms[3][2] = {
-        {"see https://example.org/agon/?seed=3&code=agon1:", "&x=1#top now"},
-        {"https://example.org/agon/?code=agon1:", ""},
-        {"https://example.org/agon/?code=agon1%3a", "\n"},
+    /* And the same with the prefix codes had while the program was called
+     * agon, bare too: those links were shared before the rename. */
+    const char *forms[7][2] = {
+        {"see https://example.org/veredas/?seed=3&code=veredas1:", "&x=1#top now"},
+        {"https://example.org/veredas/?code=veredas1:", ""},
+        {"https://example.org/veredas/?code=veredas1%3a", "\n"},
+        {"https://nickrosendo.github.io/agon/?code=agon1:", "#top"},
+        {"https://example.org/agon/?code=agon1%3A", ""},
+        {"  agon1:", ""},
+        {"veredas1:", ""},
     };
-    for (int k = 0; k < 3; k++) {
+    for (int k = 0; k < 7; k++) {
         snprintf(link, room, "%s%s%s", forms[k][0], body, forms[k][1]);
         Sim again;
         CHECK(replay(link, &again));
         CHECK(sim_checksum(&again) == sim_checksum(&s));
         sim_free(&again);
     }
-    refused("https://example.org/agon/?seed=3", "not an agon world code");
-    refused("https://example.org/agon/?code=hello", "not an agon world code");
+    refused("https://example.org/veredas/?seed=3", "not a veredas world code");
+    refused("https://example.org/veredas/?code=hello", "not a veredas world code");
     /* A link cut inside the code is a cut code, not a typo. */
-    snprintf(link, room, "https://example.org/agon/?code=%s", text);
+    snprintf(link, room, "https://example.org/veredas/?code=%s", text);
     link[strlen(link) - 10] = '\0';
     refused(link, "cut short");
 

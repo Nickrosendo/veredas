@@ -5,8 +5,8 @@
  * is dust blowing across under a warm yellow haze, a warm year is pale
  * specks of light rising under a brighter, greener cast.
  */
-#ifndef AGON_WEATHER_FX_H
-#define AGON_WEATHER_FX_H
+#ifndef VEREDAS_WEATHER_FX_H
+#define VEREDAS_WEATHER_FX_H
 
 #include <stdbool.h>
 #include <stdint.h>

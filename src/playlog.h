@@ -6,8 +6,8 @@
  * be read side by side or added up with a short script. Nothing is sent
  * anywhere; nothing about the world is in it.
  */
-#ifndef AGON_PLAYLOG_H
-#define AGON_PLAYLOG_H
+#ifndef VEREDAS_PLAYLOG_H
+#define VEREDAS_PLAYLOG_H
 
 #include <stdbool.h>
 #include <stddef.h> /* size_t */

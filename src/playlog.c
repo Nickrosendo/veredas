@@ -82,7 +82,7 @@ bool playlog_write(const Playlog *p, const char *path, char *err, size_t len)
         return false;
     }
     uint64_t total = p->last_ms - p->start_ms;
-    fprintf(f, "agon-playlog 1\n");
+    fprintf(f, "veredas-playlog 1\n");
     /* Seconds, whole: %llu with a cast, since uint64_t has no letter of its
      * own in printf (inttypes.h has PRIu64 for it; the cast is simpler). */
     fprintf(f, "seconds %llu\n", (unsigned long long)(total / 1000u));

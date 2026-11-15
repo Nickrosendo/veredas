@@ -7,8 +7,8 @@
  * around its cell and the light. Nothing new is kept for it, so the
  * simulation is exactly as it was (the same fingerprint).
  */
-#ifndef AGON_DOING_H
-#define AGON_DOING_H
+#ifndef VEREDAS_DOING_H
+#define VEREDAS_DOING_H
 
 #include <stddef.h>
 

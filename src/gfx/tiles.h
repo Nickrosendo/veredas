@@ -5,8 +5,8 @@
  * banks above the water. Colours are chosen by scene, not here: a tile holds,
  * for each pixel, which cell it shows, how light it is and what edge it is on.
  */
-#ifndef AGON_TILES_H
-#define AGON_TILES_H
+#ifndef VEREDAS_TILES_H
+#define VEREDAS_TILES_H
 
 #include <stdbool.h>
 #include <stdint.h>

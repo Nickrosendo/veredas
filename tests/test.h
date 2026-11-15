@@ -8,8 +8,8 @@
  * header is included exactly once per program and its static counter is
  * private to that program.
  */
-#ifndef AGON_TEST_H
-#define AGON_TEST_H
+#ifndef VEREDAS_TEST_H
+#define VEREDAS_TEST_H
 
 #include <stdio.h>
 

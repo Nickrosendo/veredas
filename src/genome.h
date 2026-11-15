@@ -5,8 +5,8 @@
  * the rest are the weights of the creature's neural network. A child takes
  * each part from one of its two parents, with small random changes.
  */
-#ifndef AGON_GENOME_H
-#define AGON_GENOME_H
+#ifndef VEREDAS_GENOME_H
+#define VEREDAS_GENOME_H
 
 #include "rng.h"
 #include "settings.h"

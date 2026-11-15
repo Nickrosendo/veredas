@@ -11,8 +11,8 @@
  *
  * Knows nothing about SDL or the simulation: it draws onto a Canvas.
  */
-#ifndef AGON_UI_H
-#define AGON_UI_H
+#ifndef VEREDAS_UI_H
+#define VEREDAS_UI_H
 
 #include <stdbool.h>
 #include <stdint.h>

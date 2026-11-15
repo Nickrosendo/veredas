@@ -4,8 +4,8 @@
  * settings.c lists every field; the parser, the range checks, the printed
  * list and the save file all walk it.
  */
-#ifndef AGON_SETTINGS_H
-#define AGON_SETTINGS_H
+#ifndef VEREDAS_SETTINGS_H
+#define VEREDAS_SETTINGS_H
 
 #include <stdbool.h>
 #include <stddef.h> /* size_t */

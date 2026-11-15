@@ -1,18 +1,18 @@
 #!/bin/sh
-# Measures how heavy agon-window is to leave running, so a later look can be
+# Measures how heavy veredas-window is to leave running, so a later look can be
 # held to "not measurably heavier than before".
 # Usage: sh tests/measure_window.sh SAVE [SECONDS] [--dummy] [--paused]
 #   SAVE      a saved world, loaded by both programs (the same file every time)
 #   SECONDS   how long to measure after a 10 second warm-up (default 60)
 #   --dummy   SDL's dummy video driver: no display needed, repeatable
 #   --paused  start paused: the cost of a window nobody is watching change
-# Needs build/release/agon and build/release/agon-window
+# Needs build/release/veredas and build/release/veredas-window
 # (make release && make window MODE=release). Linux only (/proc).
-# Prints: cpu 23.4% rss 41230kB agon 4120kB over 37110kB
+# Prints: cpu 23.4% rss 41230kB veredas 4120kB over 37110kB
 #   cpu    the window's share of one core over the measured seconds
 #   rss    the window's resident memory at the end
-#   agon   peak memory of the terminal program on the same world
-#   over   rss minus agon: what the window itself adds
+#   veredas   peak memory of the terminal program on the same world
+#   over   rss minus veredas: what the window itself adds
 SAVE=$1
 SECONDS_TO_MEASURE=60
 EXTRA=
@@ -26,8 +26,8 @@ for arg in "$@"; do
     esac
 done
 [ -f "$SAVE" ] || { echo "usage: measure_window.sh SAVE [SECONDS] [--dummy] [--paused]" >&2; exit 2; }
-WINDOW=build/release/agon-window
-TERMINAL=build/release/agon
+WINDOW=build/release/veredas-window
+TERMINAL=build/release/veredas
 [ -x $WINDOW ] && [ -x $TERMINAL ] || { echo "measure_window: build the release programs first" >&2; exit 2; }
 
 TICKS=$(getconf CLK_TCK)
@@ -59,15 +59,15 @@ wait $PID 2>/dev/null
 # Peak memory in kB. GNU time (/usr/bin/time) when installed; otherwise python's
 # getrusage, which reports the same number (ru_maxrss, in kB on Linux).
 if [ -x /usr/bin/time ]; then
-    AGON=$(/usr/bin/time -f %M $TERMINAL --load "$SAVE" --once --ticks 600 2>&1 >/dev/null | tail -1)
+    VEREDAS=$(/usr/bin/time -f %M $TERMINAL --load "$SAVE" --once --ticks 600 2>&1 >/dev/null | tail -1)
 else
-    AGON=$(python3 -I -c 'import resource, subprocess, sys
+    VEREDAS=$(python3 -I -c 'import resource, subprocess, sys
 subprocess.run(sys.argv[1:], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 print(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss)' \
         $TERMINAL --load "$SAVE" --once --ticks 600)
 fi
 
 awk -v s="$START" -v e="$END" -v t="$TICKS" -v secs="$SECONDS_TO_MEASURE" \
-    -v rss="$RSS" -v agon="$AGON" 'BEGIN {
-    printf "cpu %.1f%% rss %dkB agon %dkB over %dkB\n",
-           (e - s) / t / secs * 100, rss, agon, rss - agon }'
+    -v rss="$RSS" -v veredas="$VEREDAS" 'BEGIN {
+    printf "cpu %.1f%% rss %dkB veredas %dkB over %dkB\n",
+           (e - s) / t / secs * 100, rss, veredas, rss - veredas }'

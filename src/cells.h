@@ -5,8 +5,8 @@
  * the terminal; the window's paints them into its pixels. Which one is
  * chosen by the Makefile, at link time.
  */
-#ifndef AGON_CELLS_H
-#define AGON_CELLS_H
+#ifndef VEREDAS_CELLS_H
+#define VEREDAS_CELLS_H
 
 /* ASCII text at (col, row), cut or padded with spaces to exactly
  * max_cols characters. */

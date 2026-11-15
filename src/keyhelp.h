@@ -3,8 +3,8 @@
  * it is for, in two columns. Plain text, no drawing, so a test can check it
  * without a window. The window draws the lines (window_main.c, draw_keys).
  */
-#ifndef AGON_KEYHELP_H
-#define AGON_KEYHELP_H
+#ifndef VEREDAS_KEYHELP_H
+#define VEREDAS_KEYHELP_H
 
 #include <stdbool.h>
 

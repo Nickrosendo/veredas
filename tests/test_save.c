@@ -383,6 +383,20 @@ static bool load_fails(const unsigned char *bytes, size_t size,
     return strstr(err, piece) != NULL;
 }
 
+/* Whether these bytes, as a file, load. */
+static bool loads(const unsigned char *bytes, size_t size)
+{
+    write_whole(BROKEN_FILE, bytes, size);
+    Sim s;
+    char err[256] = "";
+    if (!save_read(&s, BROKEN_FILE, err, sizeof(err))) {
+        printf("  did not load: %s\n", err);
+        return false;
+    }
+    sim_free(&s);
+    return true;
+}
+
 /* A wish to mate and the births a full pool refused are state: without them a
  * loaded world would go on differently. */
 static void test_mate_wish_survives_save(void)
@@ -436,8 +450,15 @@ static void test_wrong_magic_and_version(void)
         return;
     }
     bytes[0] ^= 0x01;
-    CHECK(load_fails(bytes, size, "not an agon save"));
+    CHECK(load_fails(bytes, size, "not a veredas save"));
     bytes[0] ^= 0x01;
+    /* Today's marker, and the one files had while the program was called
+     * agon: both load, into the same world. */
+    CHECK(memcmp(bytes, "VEREDASV", 8) == 0);
+    CHECK(loads(bytes, size));
+    memcpy(bytes, "AGONSAVE", 8);
+    CHECK(loads(bytes, size));
+    memcpy(bytes, "VEREDASV", 8);
     bytes[8] ^= 0x40; /* the version comes right after the 8-byte magic */
     CHECK(load_fails(bytes, size, "version"));
     bytes[8] ^= 0x40;
@@ -754,7 +775,7 @@ static void test_layout_is_as_documented(void)
     if (t.bytes == NULL) {
         return;
     }
-    CHECK(memcmp(t.bytes, "AGONSAVE", 8) == 0);
+    CHECK(memcmp(t.bytes, "VEREDASV", 8) == 0);
     CHECK(get_le32(t.bytes + OFF_WIDTH) == 8);
     CHECK(get_le32(t.bytes + OFF_HEIGHT) == 8);
     CHECK(t.bytes[t.living + AT_ALIVE] == 1);

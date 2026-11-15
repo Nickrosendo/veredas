@@ -39,7 +39,7 @@ if [ "$FROM" = "-" ]; then
         ANCESTORS=$(awk '$1 == "ancestor_years" {print $3}' "$CONFIG")
     fi
     if [ -z "$ANCESTORS" ]; then
-        ANCESTORS=$(build/release/agon --settings | awk '$1 == "ancestor_years" {print $3}')
+        ANCESTORS=$(build/release/veredas --settings | awk '$1 == "ancestor_years" {print $3}')
     fi
     FROM=$((ANCESTORS * YEAR_TICKS))
 fi

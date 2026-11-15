@@ -8,8 +8,8 @@
  * The player changes bodies, the weather and the odds, never a decision:
  * nothing here touches a brain.
  */
-#ifndef AGON_ACTIONS_H
-#define AGON_ACTIONS_H
+#ifndef VEREDAS_ACTIONS_H
+#define VEREDAS_ACTIONS_H
 
 #include <stdbool.h>
 #include <stdint.h>

@@ -25,7 +25,7 @@ jobs:
       - name: Optimised build
         run: make release CC=${{ matrix.cc }} && make window MODE=release CC=${{ matrix.cc }}
       - name: The program runs
-        run: ./build/release/agon --once --seed 1 --ticks 200 --save world.save && ./build/release/agon --once --load world.save --ticks 0
+        run: ./build/release/veredas --once --seed 1 --ticks 200 --save world.save && ./build/release/veredas --once --load world.save --ticks 0
 
   windows:
     runs-on: windows-latest
@@ -52,20 +52,20 @@ jobs:
         run: make window MODE=release PLATFORM=windows
       - name: Package it with every DLL it needs from MSYS2
         run: |
-          mkdir agon-window
-          cp build/release/agon-window.exe agon-window/
-          ldd build/release/agon-window.exe | awk '/mingw64/ {print $3}' | xargs -I{} cp {} agon-window/
-          ls agon-window
-          test -f agon-window/SDL2.dll
-          zip -r agon-window-windows.zip agon-window
+          mkdir veredas-window
+          cp build/release/veredas-window.exe veredas-window/
+          ldd build/release/veredas-window.exe | awk '/mingw64/ {print $3}' | xargs -I{} cp {} veredas-window/
+          ls veredas-window
+          test -f veredas-window/SDL2.dll
+          zip -r veredas-window-windows.zip veredas-window
       - name: The packaged program runs by itself
         run: |
-          cd agon-window
-          SDL_VIDEODRIVER=dummy ./agon-window.exe --seed 3 --size 64x32 --frames 50 --checksum
+          cd veredas-window
+          SDL_VIDEODRIVER=dummy ./veredas-window.exe --seed 3 --size 64x32 --frames 50 --checksum
       - uses: actions/upload-artifact@v4
         with:
-          name: agon-window-windows
-          path: agon-window-windows.zip
+          name: veredas-window-windows
+          path: veredas-window-windows.zip
 
   web:
     runs-on: ubuntu-latest
@@ -78,11 +78,11 @@ jobs:
         run: test "$(cat build/web/* | gzip -c | wc -c)" -lt 2000000
       - uses: actions/upload-artifact@v4
         with:
-          name: agon-web
+          name: veredas-web
           path: build/web
 
   # The browser page, on every push to main that passes. Pages serves it at
-  # https://nickrosendo.github.io/agon/.
+  # https://nickrosendo.github.io/veredas/.
   pages:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [test, windows, web]
@@ -96,7 +96,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: agon-web
+          name: veredas-web
           path: site
       - uses: actions/upload-pages-artifact@v3
         with:
@@ -115,7 +115,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: agon-window-windows
+          name: veredas-window-windows
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -125,6 +125,6 @@ jobs:
           # tail skips its subject line and the blank line after it.
           sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha)
           gh api "repos/$GITHUB_REPOSITORY/git/tags/$sha" --jq .message | tail -n +3 > notes.txt
-          gh release create "$TAG" agon-window-windows.zip \
+          gh release create "$TAG" veredas-window-windows.zip \
             --repo "$GITHUB_REPOSITORY" --verify-tag --notes-file notes.txt \
-            --title "agon ${TAG#v}"
+            --title "veredas ${TAG#v}"

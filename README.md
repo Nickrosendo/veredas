@@ -1,6 +1,9 @@
-# agon
+# Veredas
 
-*agon* (ἀγών): Greek for struggle or contest.
+*Veredas*: in the Brazilian sertão, the paths of water and buriti palms
+where life gathers in the dry backlands; also the word in the title of João
+Guimarães Rosa's *Grande Sertão: Veredas*. The project was called agon until
+November 2026: old `agon1:` world codes and saves still open.
 
 A world where nobody decides who wins. Terrain is generated from a seed,
 vegetation spreads by neighbour rules that it inherits, and creatures with
@@ -8,7 +11,7 @@ inherited neural-network brains graze, hunt, scavenge, reproduce, sleep through
 winter and die. Food chains, population swings and families of related creatures
 are not programmed in; they emerge.
 
-![Seed 1 in spring of year 5, in the window at the closest zoom and the default 2 ticks a second: animals of many families walk and graze among leaf trees, sleepers show a z, and the panel tracks the population.](docs/agon.gif)
+![Seed 1 in spring of year 5, in the window at the closest zoom and the default 2 ticks a second: animals of many families walk and graze among leaf trees, sleepers show a z, and the panel tracks the population.](docs/veredas.gif)
 
 Written in C11 with no dependencies beyond the C standard library and POSIX.
 Leave it running in a terminal or a window, or have it print one snapshot of a
@@ -20,7 +23,7 @@ You need a C compiler and `make` on Linux.
 
 ```sh
 make release
-./build/release/agon
+./build/release/veredas
 ```
 
 To install it (default `/usr/local`, change it with `PREFIX`):
@@ -43,7 +46,7 @@ ground under it.
 
 ## In a window
 
-`agon-window` shows the same simulation as a living pixel map: banks and shores
+`veredas-window` shows the same simulation as a living pixel map: banks and shores
 with height, swaying grass and trees that drop their leaves in autumn, snow,
 rippling water, and every creature drawn as an animal of a species picked from
 its family (wolves, lions and tigers hunt; elephants, rhinos and armadillos wear
@@ -56,13 +59,13 @@ world in both programs.
 
 ![Seed 4 in Sandbox during a hard winter the player started: the map washed pale with snow falling, a box on the top line saying the hard winter ends in summer, and the brown Sandbox buttons (give trait, weather, skip, branch, new start) beside the watching ones.](docs/window-sandbox.png)
 
-It needs SDL 2; nothing else in agon does, and `make` and `make test` work
+It needs SDL 2; nothing else in veredas does, and `make` and `make test` work
 without it.
 
 ```sh
 sudo apt install libsdl2-dev   # on Debian and Ubuntu
 make window MODE=release
-./build/release/agon-window
+./build/release/veredas-window
 ```
 
 The default world is 256x144 cells. `--seed`, `--size`, `--speed`, `--no-floor`,
@@ -100,9 +103,9 @@ their names under them.
 
 ### On Windows
 
-Download `agon-window-windows.zip` from the
-[latest release](https://github.com/Nickrosendo/agon/releases/latest), unpack it and
-run `agon-window.exe`; the DLLs it needs are beside it. The program is not signed, so
+Download `veredas-window-windows.zip` from the
+[latest release](https://github.com/Nickrosendo/veredas/releases/latest), unpack it and
+run `veredas-window.exe`; the DLLs it needs are beside it. The program is not signed, so
 Windows may warn about it first. To build it yourself, in
 MSYS2's MINGW64 shell with `mingw-w64-x86_64-gcc`, `mingw-w64-x86_64-SDL2` and
 `make` installed:
@@ -113,12 +116,12 @@ make window MODE=release PLATFORM=windows
 
 Only the window program exists on Windows; the terminal program needs POSIX. It
 is a windowed program with no console, so `--help` shows nothing when run from
-`cmd`: use `agon-window --help | more`. A save or a seed's world made on one
+`cmd`: use `veredas-window --help | more`. A save or a seed's world made on one
 system may not match another's, because maths functions differ between them.
 
 ### In a browser
 
-**[Run it here](https://nickrosendo.github.io/agon/)**, with nothing to install. The
+**[Run it here](https://nickrosendo.github.io/veredas/)**, with nothing to install. The
 page always holds the latest version. To build it yourself, with
 [Emscripten](https://emscripten.org) set up:
 
@@ -131,13 +134,13 @@ The page needs a web server: browsers refuse to load its code from a plain file.
 Add `?seed=3` to the address for a particular world. The `c` key copies a link to
 the world on screen: whoever opens it sees the same world replayed up to where it
 was copied, with everything done to it (the link carries a world code in its
-`?code=` field). On the desktop, `agon-window --code` opens a code or such a link.
+`?code=` field). On the desktop, `veredas-window --code` opens a code or such a link.
 There is no saving here, so refreshing loses the world, and a hidden tab runs
 slowly and does not catch up.
 
 ## Keys
 
-These are for the terminal program, `agon`.
+These are for the terminal program, `veredas`.
 
 | Key | What it does |
 |---|---|
@@ -173,7 +176,7 @@ The same seed and settings give the same world, tick for tick, on the same
 build. A snapshot works anywhere, even in a pipe:
 
 ```sh
-agon --once --seed 3 --ticks 5000 --size 100x60
+veredas --once --seed 3 --ticks 5000 --size 100x60
 ```
 
 Ctrl-C ends the program without saving; only `q` and `s` save.
@@ -183,7 +186,7 @@ Ctrl-C ends the program without saving; only `q` and `s` save.
 Every number in the simulation can be changed from a text file:
 
 ```sh
-agon --config my.conf
+veredas --config my.conf
 ```
 
 ```ini
@@ -192,8 +195,8 @@ mutation_rate = 0.1
 max_age = 3000
 ```
 
-[`agon.conf.example`](agon.conf.example) lists all of them with their defaults
-and ranges (`agon --settings` prints the same list). A mistake stops the
+[`veredas.conf.example`](veredas.conf.example) lists all of them with their defaults
+and ranges (`veredas --settings` prints the same list). A mistake stops the
 program with the file's name, the line number and what was wrong.
 
 A save file holds its world's settings, seed and size, so `--load` cannot be

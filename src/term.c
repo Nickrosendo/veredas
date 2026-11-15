@@ -108,7 +108,7 @@ static void on_checker_death(void)
         return; /* the report went to a file and is safe there */
     }
     write_text(STDERR_FILENO,
-               "agon: the memory checker stopped the program. Its report "
+               "veredas: the memory checker stopped the program. Its report "
                "was on the full screen and is lost; run again with "
                "2>build/report.txt to keep it.\n");
 }

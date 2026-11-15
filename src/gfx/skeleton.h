@@ -7,8 +7,8 @@
  * palette turns into a colour later (task 8). Pure: the same body and pose
  * always give the same pixels, and no random numbers are used.
  */
-#ifndef AGON_SKELETON_H
-#define AGON_SKELETON_H
+#ifndef VEREDAS_SKELETON_H
+#define VEREDAS_SKELETON_H
 
 #include <stdbool.h>
 #include <stdint.h>

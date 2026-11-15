@@ -8,8 +8,8 @@
  * Lore states facts and never a motive: "attacked by Doru", then "moved into the
  * cold lands", and the reader draws the conclusion.
  */
-#ifndef AGON_CHRONICLE_H
-#define AGON_CHRONICLE_H
+#ifndef VEREDAS_CHRONICLE_H
+#define VEREDAS_CHRONICLE_H
 
 #include <stdbool.h>
 #include <stddef.h> /* size_t */

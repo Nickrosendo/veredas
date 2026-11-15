@@ -2,8 +2,8 @@
  * render: draws the world and short text lines through term. The only
  * module that knows both the world and the terminal.
  */
-#ifndef AGON_RENDER_H
-#define AGON_RENDER_H
+#ifndef VEREDAS_RENDER_H
+#define VEREDAS_RENDER_H
 
 #include "palette.h" /* Colour */
 #include "sim.h"

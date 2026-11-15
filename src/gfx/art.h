@@ -7,8 +7,8 @@
  * are painted over them as layers. Pure: the same arguments always give
  * the same pixels.
  */
-#ifndef AGON_ART_H
-#define AGON_ART_H
+#ifndef VEREDAS_ART_H
+#define VEREDAS_ART_H
 
 #include <stdbool.h>
 #include <stddef.h> /* NULL, for art_data.c */

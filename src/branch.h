@@ -9,8 +9,8 @@
  * points at the caller's Sim (the scene, the panel, the inspector) goes on
  * pointing at the world on screen without being told.
  */
-#ifndef AGON_BRANCH_H
-#define AGON_BRANCH_H
+#ifndef VEREDAS_BRANCH_H
+#define VEREDAS_BRANCH_H
 
 #include <stdbool.h>
 #include <stddef.h> /* size_t */

@@ -3,8 +3,8 @@
  * terminal's), and the block characters of the panel's graphs. The letters
  * themselves are drawn by text.h.
  */
-#ifndef AGON_FONT_H
-#define AGON_FONT_H
+#ifndef VEREDAS_FONT_H
+#define VEREDAS_FONT_H
 
 #include <stdint.h>
 

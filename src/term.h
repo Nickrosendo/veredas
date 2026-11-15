@@ -9,8 +9,8 @@
 
 /* Include guard: if this header is pasted into the same .c file twice
  * (directly or through another header), the second copy is skipped. */
-#ifndef AGON_TERM_H
-#define AGON_TERM_H
+#ifndef VEREDAS_TERM_H
+#define VEREDAS_TERM_H
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -22,7 +22,7 @@ bool term_open(void);
 /* Undoes term_open. Safe to call twice, and from a signal handler. */
 void term_close(void);
 
-/* For output without term_open (agon --once): picks 24-bit or 256
+/* For output without term_open (veredas --once): picks 24-bit or 256
  * colours from the environment, as term_open does. A frame can then be
  * built and written with term_begin ... term_end as usual; it goes to
  * standard output whether or not that is a terminal. */

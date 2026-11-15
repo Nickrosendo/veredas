@@ -3,8 +3,8 @@
  * Knows nothing about the simulation, the terminal or SDL. Every drawing
  * function clips: whatever falls outside the block is simply not drawn.
  */
-#ifndef AGON_CANVAS_H
-#define AGON_CANVAS_H
+#ifndef VEREDAS_CANVAS_H
+#define VEREDAS_CANVAS_H
 
 #include <stdbool.h>
 #include <stdint.h>

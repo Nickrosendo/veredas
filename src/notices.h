@@ -13,8 +13,8 @@
  * Notices holds no pointers, only numbers and fixed arrays, so copying it by
  * assignment makes a whole independent copy (a branch gets one that way).
  */
-#ifndef AGON_NOTICES_H
-#define AGON_NOTICES_H
+#ifndef VEREDAS_NOTICES_H
+#define VEREDAS_NOTICES_H
 
 #include <stdbool.h>
 #include <stdint.h>

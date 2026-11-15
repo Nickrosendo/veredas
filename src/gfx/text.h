@@ -10,8 +10,8 @@
  *
  * ASCII only: a byte outside printable ASCII draws as '?'.
  */
-#ifndef AGON_TEXT_H
-#define AGON_TEXT_H
+#ifndef VEREDAS_TEXT_H
+#define VEREDAS_TEXT_H
 
 #include <stddef.h>
 #include <stdint.h>

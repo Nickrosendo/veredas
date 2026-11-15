@@ -3,8 +3,8 @@
  * with one value per cell, row after row; cell (x, y) is at y * w + x.
  * The edges wrap around on both axes.
  */
-#ifndef AGON_WORLD_H
-#define AGON_WORLD_H
+#ifndef VEREDAS_WORLD_H
+#define VEREDAS_WORLD_H
 
 #include <stdbool.h>
 #include <stdint.h>

@@ -46,7 +46,7 @@ bool world_init(World *w, int width, int height)
     size_t n = (size_t)width * (size_t)height;
 
     /* calloc(count, size) multiplies for us and zeroes the memory. Zero
-     * bits are 0 for integers and 0.0 for floats on every machine agon
+     * bits are 0 for integers and 0.0 for floats on every machine veredas
      * targets (IEEE 754 floats). */
     w->terrain = calloc(n, sizeof(uint8_t));
     w->fertility = calloc(n, sizeof(float));

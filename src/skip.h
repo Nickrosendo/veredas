@@ -4,8 +4,8 @@
  * player agency design, 6.4). Like the ancestors prelude, it only calls
  * sim_step, so a skipped world is the same as one watched the whole time.
  */
-#ifndef AGON_SKIP_H
-#define AGON_SKIP_H
+#ifndef VEREDAS_SKIP_H
+#define VEREDAS_SKIP_H
 
 #include <stdbool.h>
 #include <stddef.h> /* size_t */

@@ -4,8 +4,8 @@
  * touches the simulation's. The pool lives inside its owner (no malloc): a
  * full pool drops newcomers instead of growing.
  */
-#ifndef AGON_PARTICLES_H
-#define AGON_PARTICLES_H
+#ifndef VEREDAS_PARTICLES_H
+#define VEREDAS_PARTICLES_H
 
 #include <stdbool.h>
 #include <stdint.h>

@@ -169,11 +169,11 @@ void platform_error(const char *message)
      * build) writes there: a box would wait for a click nobody will make. */
     HANDLE errors = GetStdHandle(STD_ERROR_HANDLE);
     if (errors == NULL || errors == INVALID_HANDLE_VALUE) {
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "agon", message, NULL);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Veredas", message, NULL);
         return;
     }
 #endif
-    fprintf(stderr, "agon-window: %s\n", message);
+    fprintf(stderr, "veredas-window: %s\n", message);
 }
 
 uint64_t platform_now_ms(void)
@@ -246,7 +246,7 @@ EM_JS(void, page_copy, (const char *text), {
     }
 })
 
-/* origin is "https://example.org", pathname "/agon/": the address up to its
+/* origin is "https://example.org", pathname "/veredas/": the address up to its
  * fields (after '?') and its place on the page (after '#'). */
 EM_JS(char *, page_address, (void), {
     return stringToNewUTF8(location.origin + location.pathname);

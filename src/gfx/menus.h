@@ -3,8 +3,8 @@
  * key that menu already takes (sandbox.c), so a click and a key do the same
  * thing, through the same code.
  */
-#ifndef AGON_MENUS_H
-#define AGON_MENUS_H
+#ifndef VEREDAS_MENUS_H
+#define VEREDAS_MENUS_H
 
 #include <stdbool.h>
 

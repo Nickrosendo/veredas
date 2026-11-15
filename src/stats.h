@@ -4,8 +4,8 @@
  * and the pool; never changes them, and never draws a random number, so
  * sampling cannot change what happens in the simulation.
  */
-#ifndef AGON_STATS_H
-#define AGON_STATS_H
+#ifndef VEREDAS_STATS_H
+#define VEREDAS_STATS_H
 
 #include <stdint.h>
 

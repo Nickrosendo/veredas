@@ -4,8 +4,8 @@
  * drawn from the detailed pictures. It only looks: it reads the picture cache
  * and writes pixels, and touches nothing of the simulation.
  */
-#ifndef AGON_LAB_H
-#define AGON_LAB_H
+#ifndef VEREDAS_LAB_H
+#define VEREDAS_LAB_H
 
 #include <stdint.h>
 

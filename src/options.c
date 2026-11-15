@@ -6,7 +6,7 @@
 #include <stdlib.h> /* strtol, strtoull */
 
 const char OPTIONS_USAGE[] =
-    "usage: agon [options]\n"
+    "usage: veredas [options]\n"
     "  --seed N      the world's seed: a whole number, or 0x hexadecimal\n"
     "  --size WxH    world size in cells (default: fit the window;\n"
     "                80x40 with --once)\n"
@@ -327,7 +327,7 @@ bool options_parse(int argc, char **argv, Options *o, char *err,
         }
     }
     /* getopt_long moved every non-option to the end; any left over is a
-     * mistake: agon takes no file names or other bare words. */
+     * mistake: veredas takes no file names or other bare words. */
     if (optind < argc) {
         snprintf(err, err_size, "unexpected argument '%s'", argv[optind]);
         return false;

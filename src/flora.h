@@ -2,8 +2,8 @@
  * flora: vegetation spreading by a neighbour rule (Life with a fertility
  * term), and carrion rotting back into the soil.
  */
-#ifndef AGON_FLORA_H
-#define AGON_FLORA_H
+#ifndef VEREDAS_FLORA_H
+#define VEREDAS_FLORA_H
 
 #include "rng.h"
 #include "settings.h"

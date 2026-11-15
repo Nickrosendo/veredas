@@ -82,7 +82,7 @@ static void draw_title(int cols, const Sim *sim, int speed, int paused,
      * platform ("lx" here); writing %llx would be wrong on some systems.
      * Adjacent string literals are joined into one by the compiler. */
     snprintf(text, sizeof(text),
-             " agon | seed 0x%" PRIx64 " | year %s, %s | creatures %d | %d/s%s%s%s%s",
+             " veredas | seed 0x%" PRIx64 " | year %s, %s | creatures %d | %d/s%s%s%s%s",
              sim->seed, year,
              years_season(sim->tick, sim->set.ticks_per_year), sim->pool.count, APP_SPEEDS[speed],
              sim_is_over(sim) ? " | game over" : paused ? " | paused" : "",
@@ -205,7 +205,7 @@ static void print_summary(const Sim *sim)
     panel_format_count(year, sizeof(year), years_whole(sim->tick, per_year));
     panel_format_count(plants, sizeof(plants), st->planted);
     years_format(oldest, sizeof(oldest), st->oldest_age, per_year);
-    printf("agon | seed 0x%" PRIx64 " | year %s, %s | world %d x %d\n",
+    printf("veredas | seed 0x%" PRIx64 " | year %s, %s | world %d x %d\n",
            sim->seed, year, years_season(sim->tick, per_year), sim->world.w, sim->world.h);
     printf("creatures %d: %d eat plants, %d eat meat (%d top hunters) | "
            "%d families\n",
@@ -225,7 +225,7 @@ static void print_summary(const Sim *sim)
     }
 }
 
-/* agon --once: build the world, run it, print it and a summary. Never
+/* veredas --once: build the world, run it, print it and a summary. Never
  * opens the terminal, so it works in a pipe, a file or a shell start-up
  * script. */
 static int run_once(const Options *o, const Settings *settings,
@@ -236,7 +236,7 @@ static int run_once(const Options *o, const Settings *settings,
     Sim sim;
     char err[512];
     if (!app_open_world(&sim, o, settings, seed, w, h, err, sizeof(err))) {
-        fprintf(stderr, "agon: %s\n", err);
+        fprintf(stderr, "veredas: %s\n", err);
         return EXIT_FAILED;
     }
     /* With --ancestors, the prelude first, whole: --once must come out the
@@ -252,7 +252,7 @@ static int run_once(const Options *o, const Settings *settings,
      * histories that the running world never took. */
     if (o->save_path != NULL &&
         !save_write(&sim, o->save_path, err, sizeof(err))) {
-        fprintf(stderr, "agon: %s\n", err);
+        fprintf(stderr, "veredas: %s\n", err);
         sim_free(&sim);
         return EXIT_FAILED;
     }
@@ -277,7 +277,7 @@ int main(int argc, char **argv)
     /* Bad options are reported before the screen is taken over, so the
      * message stays visible. */
     if (!options_parse(argc, argv, &opt, err, sizeof(err))) {
-        fprintf(stderr, "agon: %s (see agon --help)\n", err);
+        fprintf(stderr, "veredas: %s (see veredas --help)\n", err);
         return EXIT_USAGE;
     }
     if (opt.help) {
@@ -285,7 +285,7 @@ int main(int argc, char **argv)
         return EXIT_FINE;
     }
     if (opt.version) {
-        printf("agon %s\n", AGON_VERSION);
+        printf("veredas %s\n", VEREDAS_VERSION);
         return EXIT_FINE;
     }
     uint64_t seed = opt.seed_given ? opt.seed : seed_from_clock();
@@ -299,7 +299,7 @@ int main(int argc, char **argv)
      * word, as with most Unix tools. */
     if (opt.config_path != NULL &&
         !settings_load(&settings, opt.config_path, err, sizeof(err))) {
-        fprintf(stderr, "agon: %s\n", err);
+        fprintf(stderr, "veredas: %s\n", err);
         return EXIT_USAGE;
     }
     if (opt.no_floor) {
@@ -309,9 +309,9 @@ int main(int argc, char **argv)
     if (opt.frames > 0 || opt.screenshot_path != NULL || opt.zoom_name != NULL ||
         opt.keys != NULL || opt.paused || opt.no_art || opt.code != NULL ||
         opt.playlog_path != NULL || opt.hits) {
-        fprintf(stderr, "agon: --frames, --screenshot, --zoom, --keys, --paused, "
+        fprintf(stderr, "veredas: --frames, --screenshot, --zoom, --keys, --paused, "
                         "--no-art, --code, --playlog and --hits are for "
-                        "agon-window\n");
+                        "veredas-window\n");
         return EXIT_USAGE;
     }
     if (opt.once) {
@@ -319,8 +319,8 @@ int main(int argc, char **argv)
     }
 
     if (!term_open()) {
-        fprintf(stderr, "agon: needs a terminal (do not redirect input or "
-                        "output; agon --once works without one)\n");
+        fprintf(stderr, "veredas: needs a terminal (do not redirect input or "
+                        "output; veredas --once works without one)\n");
         return EXIT_FAILED;
     }
 
@@ -344,7 +344,7 @@ int main(int argc, char **argv)
     if (!app_open_world(&sim, &opt, &settings, seed, world_w, world_h, err,
                     sizeof(err))) {
         term_close(); /* so the message lands on the normal screen */
-        fprintf(stderr, "agon: %s\n", err);
+        fprintf(stderr, "veredas: %s\n", err);
         return EXIT_FAILED;
     }
 
@@ -500,7 +500,7 @@ int main(int argc, char **argv)
     term_close();
     if (failed) {
         sim_free(&sim);
-        fprintf(stderr, "agon: out of memory while building a new world\n");
+        fprintf(stderr, "veredas: out of memory while building a new world\n");
         return EXIT_FAILED;
     }
     /* On quit, after term_close, so a failure is seen on the normal screen
@@ -510,7 +510,7 @@ int main(int argc, char **argv)
     if (opt.save_path != NULL &&
         !save_write(&sim, opt.save_path, err, sizeof(err))) {
         sim_free(&sim);
-        fprintf(stderr, "agon: %s\n", err);
+        fprintf(stderr, "veredas: %s\n", err);
         return EXIT_FAILED;
     }
     if (opt.checksum) {

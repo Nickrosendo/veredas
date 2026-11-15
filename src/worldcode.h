@@ -7,10 +7,10 @@
  * replays it up to that tick; the same seed, settings and actions give the
  * same world, which tests/test_worldcode.c checks.
  *
- * The text is "agon1:" and then the bytes below in base64 (64 safe characters,
+ * The text is "veredas1:" and then the bytes below in base64 (64 safe characters,
  * six bits each; see worldcode.c):
  *   u32 length of what follows, up to the check;
- *   u16 rules version (AGON_RULES), u64 seed, u16 width, u16 height,
+ *   u16 rules version (VEREDAS_RULES), u64 seed, u16 width, u16 height,
  *   u64 the tick reached;
  *   u16 how many settings differ, then for each u16 its row in the settings
  *   table, rows in rising order, and its value: an int or a float as 4 bytes,
@@ -19,8 +19,8 @@
  *   u32 the check: a fingerprint of every byte before it.
  * The length and the check are what tell a cut code from one with a typo.
  */
-#ifndef AGON_WORLDCODE_H
-#define AGON_WORLDCODE_H
+#ifndef VEREDAS_WORLDCODE_H
+#define VEREDAS_WORLDCODE_H
 
 #include <stdbool.h>
 #include <stddef.h> /* size_t */
@@ -32,10 +32,14 @@
 
 /* What every code starts with. The 1 is the layout of the bytes, which is not
  * the rules version: the rules can change while the layout stays. */
-#define WORLDCODE_PREFIX "agon1:"
+#define WORLDCODE_PREFIX "veredas1:"
+/* What codes started with while the program was called agon. The bytes after
+ * it are laid out the same way, so those codes and links still open; new
+ * codes are always written with WORLDCODE_PREFIX. */
+#define WORLDCODE_OLD_PREFIX "agon1:"
 
 /* In a link to the browser page, the code is this field of the address:
- * ".../agon/?code=agon1:...". */
+ * ".../veredas/?code=veredas1:...". */
 #define WORLDCODE_LINK_FIELD "code="
 
 /* What a code holds, read back. log owns its memory: worldcode_free. */
@@ -59,7 +63,7 @@ bool worldcode_write_as(const Sim *s, unsigned rules, char **text);
  * "code=" field). Spaces and line breaks anywhere are skipped, since a pasted
  * code may have been wrapped. False with one plain line in err, and nothing
  * allocated, for a text that is not a code, a typo, a code cut short, a code
- * from other rules, or values outside what this agon allows. */
+ * from other rules, or values outside what this veredas allows. */
 bool worldcode_read(const char *text, WorldCode *code, char *err, size_t len);
 
 void worldcode_free(WorldCode *code);

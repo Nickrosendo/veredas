@@ -3,8 +3,8 @@
  * program sees only this header, and platform_sdl.c is the only file that
  * includes SDL, so another library or system would mean replacing one file.
  */
-#ifndef AGON_PLATFORM_H
-#define AGON_PLATFORM_H
+#ifndef VEREDAS_PLATFORM_H
+#define VEREDAS_PLATFORM_H
 
 #include <stdbool.h>
 #include <stddef.h> /* size_t */
@@ -71,7 +71,7 @@ bool platform_clipboard_set(const char *text);
  * instead. */
 char *platform_clipboard_get(void);
 /* In a browser page, the page's own address without its fields or '#' part
- * ("https://example.org/agon/"), as a new string the caller frees with free.
+ * ("https://example.org/veredas/"), as a new string the caller frees with free.
  * NULL outside a browser, or when memory ran out. */
 char *platform_page_address(void);
 /* In a browser page, replaces the line of text under the world (the page's

@@ -2,8 +2,8 @@
  * cells_canvas: the window program's version of cells.h: the character
  * cells end up as pixels in a canvas.
  */
-#ifndef AGON_CELLS_CANVAS_H
-#define AGON_CELLS_CANVAS_H
+#ifndef VEREDAS_CELLS_CANVAS_H
+#define VEREDAS_CELLS_CANVAS_H
 
 #include "canvas.h"
 

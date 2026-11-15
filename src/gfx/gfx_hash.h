@@ -3,8 +3,8 @@
  * the same number, so a picture never flickers, and the simulation's random
  * generator is never touched.
  */
-#ifndef AGON_GFX_HASH_H
-#define AGON_GFX_HASH_H
+#ifndef VEREDAS_GFX_HASH_H
+#define VEREDAS_GFX_HASH_H
 
 #include <stdint.h>
 

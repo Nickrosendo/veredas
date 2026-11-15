@@ -8,7 +8,7 @@
  * drawing took, and fails if any one frame built more than 500 pictures: a
  * cache that redraws most bodies every frame.
  *
- * The world: the save named by $AGON_LOOKS_SAVE, or else one made here the
+ * The world: the save named by $VEREDAS_LOOKS_SAVE, or else one made here the
  * way the lightness save was made (seed 3, 256 by 144, run for 300 ticks:
  * about 530 creatures). Made here, it cannot go stale: a save file stops
  * loading whenever the save format's version moves on.
@@ -123,7 +123,7 @@ static void test_cache_keeps_up(const char *path)
 
 int main(void)
 {
-    const char *chosen = getenv("AGON_LOOKS_SAVE");
+    const char *chosen = getenv("VEREDAS_LOOKS_SAVE");
     test_cache_keeps_up(chosen != NULL && chosen[0] != '\0' ? chosen : NULL);
     TEST_SUMMARY();
 }

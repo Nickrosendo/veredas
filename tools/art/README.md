@@ -19,7 +19,7 @@ Regenerate after changing frames (Pillow needed):
 
 ## The wolf (2026-11-11)
 
-PixelLab character "agon wolf standard", id `b69dadb3-b263-4380-b335-50514eb90b5b`:
+PixelLab character "veredas wolf standard", id `b69dadb3-b263-4380-b335-50514eb90b5b`:
 `create_character` in standard mode, quadruped, `dog` template, side view,
 size 48 (a 68×68 canvas), 4 directions. Only `east` is used; the game
 mirrors it for facing left.

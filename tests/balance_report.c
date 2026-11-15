@@ -1162,9 +1162,9 @@ static void print_tactics(const Sim *s)
         }
     }
     printf("\n");
-    /* With AGON_FAMILIES set in the environment, every family's counts too:
+    /* With VEREDAS_FAMILIES set in the environment, every family's counts too:
      * for looking into why a tactic is or is not confirmed. */
-    if (getenv("AGON_FAMILIES") != NULL) {
+    if (getenv("VEREDAS_FAMILIES") != NULL) {
         for (int i = 0; i < TACTIC_FAMILIES; i++) {
             const TacticFamily *f = &s->tactics.rows[i];
             if (!f->used || f->members == 0) {

@@ -8,8 +8,8 @@
  * it shows from the living creature or from the chronicle's table, and when both
  * are gone it keeps the last copy, so a death never empties an open page.
  */
-#ifndef AGON_LIFEPAGE_H
-#define AGON_LIFEPAGE_H
+#ifndef VEREDAS_LIFEPAGE_H
+#define VEREDAS_LIFEPAGE_H
 
 #include <stdbool.h>
 #include <stddef.h> /* size_t */

@@ -5,8 +5,8 @@
  * never with the simulation's random numbers. A port of the mockup's SPECIES,
  * ROLES and anatomy() (attack-v9.html, lines 89-128).
  */
-#ifndef AGON_SPECIES_H
-#define AGON_SPECIES_H
+#ifndef VEREDAS_SPECIES_H
+#define VEREDAS_SPECIES_H
 
 #include <stdbool.h>
 #include <stdint.h>
