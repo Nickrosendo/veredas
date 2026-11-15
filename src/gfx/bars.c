@@ -255,6 +255,15 @@ void bar_world_menu_draw(Ui *u, Canvas *c, int right_x, int bottom_y, bool page)
     int box_w = widest + 8;
     int box_h = n * (UI_BUTTON_H + 2) + 6;
     int x = right_x - box_w, y = bottom_y - box_h;
+    /* A window shorter than the menu: it keeps its top on screen and runs
+     * down over the bar, drawn after the bar so its rows win; what is still
+     * below the window's edge is cut off, and its keys still work. */
+    if (x < 0) {
+        x = 0;
+    }
+    if (y < 0) {
+        y = 0;
+    }
     /* The background first: a click between the rows stops here. */
     ui_add_hit(u, x, y, box_w, box_h, UI_KEY_BLOCK);
     ui_box(c, x, y, box_w, box_h,

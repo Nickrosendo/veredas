@@ -938,7 +938,9 @@ static void handle_event(App *a, const Event *e)
         handle_key(a, e->key);
         break;
     case EV_WHEEL:
-        if (over_view(a, e->x, e->y)) {
+        /* Not over a menu, page or button drawn on the map: the wheel there
+         * belongs to the box, as a press does, not to the world behind it. */
+        if (over_view(a, e->x, e->y) && ui_key_at(&a->ui, e->x, e->y) == UI_NONE) {
             /* The camera counts from the view's own corner. */
             camera_zoom(&a->camera, e->delta, e->x - a->layout.view_x,
                         e->y - a->layout.view_y);
@@ -1212,8 +1214,8 @@ static void draw_sandbox(App *a)
     if (menu_is_drawn(&a->sandbox)) {
         /* The four tool menus as buttons; the skip under way and its summary
          * stay lines of text, below. */
-        menu_draw(&a->ui, &a->canvas, lay->view_x + FONT_W, lay->view_y + FONT_H / 2,
-                  &a->sandbox, &a->sim, PLATFORM_IS_PAGE);
+        menu_draw(&a->ui, &a->canvas, lay->view_x, lay->view_y, lay->view_w,
+                  lay->view_h, &a->sandbox, &a->sim, PLATFORM_IS_PAGE);
         return;
     }
     static char lines[SKIP_LINES][SKIP_COLS]; /* static: off the small web stack */

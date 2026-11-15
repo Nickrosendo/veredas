@@ -10,7 +10,6 @@
 #include "text.h"
 #include "weather.h"
 
-#define MENU_W 380
 #define PAD 8
 #define ROW (UI_BUTTON_H + 2) /* a row of buttons, with 2 pixels between rows */
 #define VALUE_BAR_W 100
@@ -70,9 +69,27 @@ static int value_bar(Canvas *c, int x, int y, float v)
                       px_of(PALETTE_BUTTON_TEXT)) - (x + VALUE_BAR_W + 4));
 }
 
+/* Each menu's height: the title, its rows, the padding under them. One
+ * place for them, so placing a menu and drawing it agree. */
+static int menu_height(int menu)
+{
+    int title = 4 + TEXT_H + 6;
+    switch (menu) {
+    case SANDBOX_MENU_TRAIT: return title + (ACTIONS_GIVABLE_COUNT + 2) * ROW + PAD;
+    case SANDBOX_MENU_WEATHER:
+        return title + (WEATHER_COUNT - 1) * (ROW + TEXT_H + 4) + PAD;
+    case SANDBOX_MENU_SKIP: return title + 2 * ROW + PAD;
+    /* wildness, jumps, the heading, the traits, half a row of air, the two
+     * buttons */
+    case SANDBOX_MENU_SETUP:
+        return title + (3 + ACTIONS_GIVABLE_COUNT) * ROW + ROW / 2 + ROW + PAD;
+    default: return 0;
+    }
+}
+
 static void draw_trait(Ui *u, Canvas *c, int x, int y, const Sandbox *b)
 {
-    int h = 4 + TEXT_H + 6 + ACTIONS_GIVABLE_COUNT * ROW + 2 * ROW + PAD;
+    int h = menu_height(SANDBOX_MENU_TRAIT);
     char name[16], title[96];
     name_from_id(b->target, name, sizeof(name));
     snprintf(title, sizeof(title), "Give %s a trait. Its young inherit it.", name);
@@ -109,7 +126,7 @@ static void draw_weather(Ui *u, Canvas *c, int x, int y)
         [WEATHER_HARD_WINTER] = ICON_HARD_WINTER,
         [WEATHER_WARM_YEAR] = ICON_WARM_YEAR,
     };
-    int h = 4 + TEXT_H + 6 + (WEATHER_COUNT - 1) * (ROW + TEXT_H + 4) + PAD;
+    int h = menu_height(SANDBOX_MENU_WEATHER);
     int row = frame(u, c, x, y, h, "Weather for one season", true);
     for (int k = WEATHER_NONE + 1; k < WEATHER_COUNT; k++) {
         char word[32], tip[48];
@@ -125,7 +142,7 @@ static void draw_weather(Ui *u, Canvas *c, int x, int y)
 
 static void draw_skip(Ui *u, Canvas *c, int x, int y)
 {
-    int h = 4 + TEXT_H + 6 + 2 * ROW + PAD;
+    int h = menu_height(SANDBOX_MENU_SKIP);
     int row = frame(u, c, x, y, h, "Skip ahead", true);
     int at = x + PAD;
     for (int i = 0; i < 3; i++) {
@@ -160,9 +177,7 @@ static void check_row(Ui *u, Canvas *c, int x, int y, int i, bool checked)
 
 static void draw_setup(Ui *u, Canvas *c, int x, int y, const Sandbox *b)
 {
-    /* wildness, jumps, the heading, the traits, half a row of air, the two
-     * buttons */
-    int h = 4 + TEXT_H + 6 + (3 + ACTIONS_GIVABLE_COUNT) * ROW + ROW / 2 + ROW + PAD;
+    int h = menu_height(SANDBOX_MENU_SETUP);
     int row = frame(u, c, x, y, h, "A new start: how bodies change", false);
     char text[64];
     int at = x + PAD;
@@ -205,12 +220,54 @@ bool menu_is_drawn(const Sandbox *b)
            b->menu == SANDBOX_MENU_SKIP || b->menu == SANDBOX_MENU_SETUP;
 }
 
-void menu_draw(Ui *u, Canvas *c, int x, int y, const Sandbox *b, const Sim *s,
-               bool demo)
+bool menu_place(int area_x, int area_y, int area_w, int area_h, int w, int h,
+                int *x, int *y)
+{
+    if (w > area_w - 2 * MENU_MARGIN || h > area_h - 2 * MENU_MARGIN) {
+        return false;
+    }
+    /* Where it wants to be, then moved left and up just enough to end inside
+     * the area. It fits, so moving never takes it past the area's left or top. */
+    int right = area_x + area_w - MENU_MARGIN, bottom = area_y + area_h - MENU_MARGIN;
+    *x = area_x + MENU_INSET_X;
+    *y = area_y + MENU_INSET_Y;
+    if (*x + w > right) {
+        *x = right - w;
+    }
+    if (*y + h > bottom) {
+        *y = bottom - h;
+    }
+    return true;
+}
+
+/* In place of a menu the area cannot hold: one line saying so, with its x.
+ * The menu's keys still work; only its buttons are missing. */
+static void draw_too_small(Ui *u, Canvas *c, int area_x, int area_y, int area_w)
+{
+    int w = area_w - 2 * MENU_MARGIN < MENU_W ? area_w - 2 * MENU_MARGIN : MENU_W;
+    int h = 4 + TEXT_H + 4;
+    int x = area_x + MENU_MARGIN, y = area_y + MENU_MARGIN;
+    ui_box(c, x, y, w, h, px_of(PALETTE_TEXT_BACKGROUND), px_of(PALETTE_SANDBOX_EDGE));
+    ui_add_hit(u, x, y, w, h, UI_KEY_BLOCK);
+    char cut[64];
+    text_cut("too small for the menu: widen or Esc", w - 2 * PAD - 24, cut,
+             sizeof(cut));
+    text_draw(c, x + PAD, y + 4, cut, px_of(PALETTE_BUTTON_TEXT));
+    ui_close_button(u, c, x, y, w);
+}
+
+void menu_draw(Ui *u, Canvas *c, int area_x, int area_y, int area_w, int area_h,
+               const Sandbox *b, const Sim *s, bool demo)
 {
     (void)s;    /* the menus read the Sandbox's own copy of what they show */
     (void)demo; /* the demo opens only the weather menu, which is the same */
     if (!menu_is_drawn(b)) {
+        return;
+    }
+    int x, y;
+    if (!menu_place(area_x, area_y, area_w, area_h, MENU_W, menu_height(b->menu),
+                    &x, &y)) {
+        draw_too_small(u, c, area_x, area_y, area_w);
         return;
     }
     switch (b->menu) {

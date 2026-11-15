@@ -182,6 +182,14 @@ static void test_world_menu(void)
     ui_end(&u);
     CHECK(bar_has_key('r') && bar_has_key('c') && bar_has_key('o'));
     CHECK(!bar_has_key('s') && !bar_has_key('q'));
+    /* The smallest window, 96 tall, its bar's top at 72: the menu is 116
+     * tall and keeps its top on screen, starting at 0. */
+    ui_begin(&u);
+    bar_world_menu_draw(&u, &c, 158, 70, false);
+    ui_end(&u);
+    CHECK(u.shown[0].key == UI_KEY_BLOCK);
+    CHECK(u.shown[0].y == 0 && u.shown[0].x >= 0);
+    CHECK(bar_has_key('r'));
     canvas_free(&c);
 }
 

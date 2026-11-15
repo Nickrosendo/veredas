@@ -17,13 +17,29 @@
  * a checked one has its middle filled in the button text's colour. */
 #define MENU_CHECK_SIZE 10
 
+/* Every menu is this wide. */
+#define MENU_W 380
+/* Where a menu wants its top left corner, from the area's: a little in from
+ * the corner of the map. */
+#define MENU_INSET_X 8
+#define MENU_INSET_Y 8
+/* Air kept between a menu and the area's edges. */
+#define MENU_MARGIN 2
+
 /* True for the menus menu_draw draws: trait, weather, skip and setup. The skip
  * under way and the summary after it stay lines of text. */
 bool menu_is_drawn(const Sandbox *b);
-/* Draws the open menu with its top left corner at (x, y), nothing when none
- * of those four is open. demo: the browser demo's build (no menu differs yet,
- * kept so the caller says it). */
-void menu_draw(Ui *u, Canvas *c, int x, int y, const Sandbox *b, const Sim *s,
-               bool demo);
+/* Where a w x h menu goes inside the area (the map, between the top line and
+ * the bottom bar, which are drawn over it): near the area's top left corner,
+ * moved left and up so it ends inside. False, with x and y untouched, when
+ * the area is too small for it. */
+bool menu_place(int area_x, int area_y, int area_w, int area_h, int w, int h,
+                int *x, int *y);
+/* Draws the open menu inside the area, nothing when none of those four is
+ * open. When the area cannot hold the menu, a line saying so instead, with a
+ * close button: the menu's keys still work. demo: the browser demo's build
+ * (no menu differs yet, kept so the caller says it). */
+void menu_draw(Ui *u, Canvas *c, int area_x, int area_y, int area_w, int area_h,
+               const Sandbox *b, const Sim *s, bool demo);
 
 #endif
