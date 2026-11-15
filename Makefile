@@ -45,8 +45,12 @@ endif
 # programs with the pack's src/*.c in place of content_none.c. Its objects go
 # to a folder of their own (build/debug-content, ...), so a build with the
 # pack and one without never mix their files.
+# RELEASE_OUT is where the release build's programs land, for the rules below
+# that start a release build from a debug one (balance, install).
+RELEASE_OUT = build/release
 ifdef CONTENT
 OUT := $(OUT)-content
+RELEASE_OUT = build/release-content
 CFLAGS += -I$(CONTENT)/include
 endif
 
@@ -204,7 +208,7 @@ run-slow-tests: $(SLOW_BIN)
 # on a large world, and never part of "make test". It is one more program over
 # the same objects as the tests, so it cannot run different rules from the real thing.
 balance:
-	$(MAKE) MODE=release build/release/balance_report
+	$(MAKE) MODE=release $(RELEASE_OUT)/balance_report
 
 $(OUT)/balance_report$(EXE): tests/balance_report.c $(LIB_OBJ)
 	$(CC) $(CFLAGS) -MMD -MP $< $(LIB_OBJ) -o $@ $(LDLIBS)
@@ -216,7 +220,7 @@ PREFIX ?= /usr/local
 
 install: release
 	install -d $(DESTDIR)$(PREFIX)/bin $(DESTDIR)$(PREFIX)/share/doc/veredas
-	install -m 755 build/release/veredas $(DESTDIR)$(PREFIX)/bin/veredas
+	install -m 755 $(RELEASE_OUT)/veredas $(DESTDIR)$(PREFIX)/bin/veredas
 	install -m 644 veredas.conf.example $(DESTDIR)$(PREFIX)/share/doc/veredas/
 
 uninstall:
