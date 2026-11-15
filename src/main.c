@@ -309,8 +309,10 @@ int main(int argc, char **argv)
     if (opt.frames > 0 || opt.screenshot_path != NULL || opt.zoom_name != NULL ||
         opt.keys != NULL || opt.paused || opt.no_art || opt.code != NULL ||
         opt.playlog_path != NULL || opt.hits || opt.window_w > 0 ||
-        opt.until_name != NULL) {
-        fprintf(stderr, "veredas: --frames, --screenshot, --window, --until, "
+        opt.until_name != NULL || opt.record_path != NULL ||
+        opt.after > 0) {
+        fprintf(stderr, "veredas: --frames, --screenshot, --record, --window, "
+                        "--until, --after, "
                         "--zoom, --keys, --paused, --no-art, --code, --playlog "
                         "and --hits are for veredas-window\n");
         return EXIT_USAGE;

@@ -120,6 +120,38 @@ if [ $HAVE_VEREDAS -eq 1 ]; then
     [ $? -eq 2 ] || fail "veredas accepted --until"
 fi
 
+# 5e. --record writes every frame of a --frames run, PPM after PPM, for a video
+# tool: three frames at 320x180 are three headers and three pictures' bytes,
+# the same both times; without --frames it is refused, and so by veredas.
+for run in a b; do
+    "$OUT/veredas-window" --seed 3 --size 64x32 --frames 3 --window 320x180 \
+        --record "$TMP/clip_$run.ppms" || fail "the --record run failed"
+done
+frame_bytes=$((15 + 320 * 180 * 3)) # the header "P6\n320 180\n255\n" is 15 bytes
+[ "$(wc -c <"$TMP/clip_a.ppms")" -eq $((3 * frame_bytes)) ] ||
+    fail "--record did not write three whole frames"
+# cksum, not cmp: Windows' MSYS2 has coreutils but not diffutils.
+[ "$(cksum <"$TMP/clip_a.ppms")" = "$(cksum <"$TMP/clip_b.ppms")" ] ||
+    fail "--record wrote two clips"
+# --after goes on that many frames past --until's moment: the giant run above
+# stops on the moment; with --after 4 the clip holds 4 frames more than the
+# frame it printed, and without --until --after is refused.
+"$OUT/veredas-window" --seed 3 --size 64x32 --ancestors 1 --frames 10 \
+    --window 320x180 --until giant --after 4 --record "$TMP/after.ppms" \
+    >"$TMP/after.txt" || fail "the --after run failed"
+moment=$(sed -n 's/^until frame //p' "$TMP/after.txt")
+[ -n "$moment" ] || fail "--after: --until printed no frame"
+[ "$(wc -c <"$TMP/after.ppms")" -eq $(((moment + 4) * frame_bytes)) ] ||
+    fail "--after did not go on 4 frames past the moment"
+"$OUT/veredas-window" --frames 5 --after 4 >/dev/null 2>&1
+[ $? -eq 2 ] || fail "--after without --until was not refused"
+"$OUT/veredas-window" --record "$TMP/live.ppms" >/dev/null 2>&1
+[ $? -eq 2 ] || fail "--record without --frames was not refused"
+if [ $HAVE_VEREDAS -eq 1 ]; then
+    "$OUT/veredas" --record "$TMP/x.ppms" >/dev/null 2>&1
+    [ $? -eq 2 ] || fail "veredas accepted --record"
+fi
+
 # 6. A world that dies. A small world has too few founders to last: all six seeds
 # tried at 40x20 were empty by tick 5,000. The world stops on the tick it ended,
 # so more frames must not change it, and its save loads to the same dead world.

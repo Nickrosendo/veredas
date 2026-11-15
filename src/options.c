@@ -136,7 +136,9 @@ enum {
     OPT_ANCESTORS,
     OPT_HITS,
     OPT_WINDOW,
-    OPT_UNTIL
+    OPT_UNTIL,
+    OPT_RECORD,
+    OPT_AFTER
 };
 
 /* The table getopt_long reads: name, whether a value follows, a flag
@@ -169,6 +171,8 @@ static const struct option LONG_OPTIONS[] = {
     {"hits", no_argument, NULL, OPT_HITS},
     {"window", required_argument, NULL, OPT_WINDOW},
     {"until", required_argument, NULL, OPT_UNTIL},
+    {"record", required_argument, NULL, OPT_RECORD},
+    {"after", required_argument, NULL, OPT_AFTER},
     {NULL, 0, NULL, 0},
 };
 
@@ -241,6 +245,17 @@ static bool take_value(int opt, const char *value, Options *o, char *err,
         return o->size_given;
     case OPT_UNTIL:
         o->until_name = value;
+        return true;
+    case OPT_RECORD:
+        o->record_path = value;
+        return true;
+    case OPT_AFTER:
+        if (!parse_long(value, 1, OPTIONS_MAX_FRAMES, &n)) {
+            snprintf(err, err_size, "--after needs a whole number of frames from 1 to %ld",
+                     OPTIONS_MAX_FRAMES);
+            return false;
+        }
+        o->after = n;
         return true;
     case OPT_WINDOW:
         /* Into the fields directly: parse_size leaves them alone (0, not
