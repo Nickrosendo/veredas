@@ -10,6 +10,13 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 failed=0
 
+# True when two files hold the same bytes. cksum, not cmp: Windows' MSYS2 has
+# coreutils (cksum) but not diffutils (cmp). Read from stdin, so the file's
+# name is not part of the line.
+same_file() {
+    [ "$(cksum <"$1")" = "$(cksum <"$2")" ]
+}
+
 fail() {
     echo "window_smoke: FAILED: $1" >&2
     failed=1
@@ -89,7 +96,7 @@ for run in a b; do
     "$OUT/veredas-window" --seed 3 --size 64x32 --frames 60 --zoom close \
         --screenshot "$TMP/same_$run.ppm" || fail "the run for the same picture failed"
 done
-cmp -s "$TMP/same_a.ppm" "$TMP/same_b.ppm" || fail "the same run drew two pictures"
+same_file "$TMP/same_a.ppm" "$TMP/same_b.ppm" || fail "the same run drew two pictures"
 
 # 5d. --until giant goes on after --frames until a giant is announced, then
 # follows it and stops: the frame is printed, the same on a second run, and so is
@@ -101,8 +108,8 @@ for run in a b; do
 done
 grep -q '^until frame [0-9]*$' "$TMP/giant_a.txt" ||
     fail "--until giant printed no frame"
-cmp -s "$TMP/giant_a.txt" "$TMP/giant_b.txt" &&
-    cmp -s "$TMP/giant_a.ppm" "$TMP/giant_b.ppm" ||
+same_file "$TMP/giant_a.txt" "$TMP/giant_b.txt" &&
+    same_file "$TMP/giant_a.ppm" "$TMP/giant_b.ppm" ||
     fail "--until giant stopped differently the second time"
 "$OUT/veredas-window" --frames 5 --until sunrise >/dev/null 2>&1
 [ $? -eq 2 ] || fail "a bad --until was not refused"
