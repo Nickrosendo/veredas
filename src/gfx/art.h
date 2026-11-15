@@ -55,7 +55,9 @@ enum { ART_SIZE_MEDIUM, ART_SIZE_FULL, ART_SIZE_COUNT };
  * frame N over frame N; each layer frame holds only the part's pixels, cut
  * to their own box, with the base frame's anchor given in the layer's own
  * pixels and no eye. */
-typedef struct {
+/* The struct has a tag, ArtSet, as well as the short name, so content.h
+ * can name it (struct ArtSet) without including this header. */
+typedef struct ArtSet {
     int species;
     unsigned covers;  /* ART_COVERS_ bits */
     int16_t stand_w, stand_h;
@@ -67,8 +69,11 @@ typedef struct {
 extern const ArtSet ART_SETS[];
 extern const int ART_SET_COUNT;
 
-/* The species' set of frames, or NULL when it has none. */
+/* The species' set of frames, or NULL when it has none: the content pack's
+ * (content.h) when it has one for the species, the built-in one otherwise. */
 const ArtSet *art_set(int species);
+/* The species' set among count sets at sets, or NULL (also for sets NULL). */
+const ArtSet *art_set_in(const ArtSet *sets, int count, int species);
 /* The clip for this species and action, or NULL when it has none. traits
  * (the rounded ones) do not change the answer now: every body is drawn from
  * its species' frames. They stay in the signature for the parts' layers. */

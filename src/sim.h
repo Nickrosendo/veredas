@@ -11,6 +11,7 @@
 #include "actions.h"
 #include "brain.h"
 #include "chronicle.h"
+#include "content.h" /* CONTENT_NAME_MAX */
 #include "creature.h"
 #include "rng.h"
 #include "settings.h"
@@ -85,6 +86,11 @@ typedef struct Sim {
     /* The weather event under way, if any (weather.h). Saved and fingerprinted:
      * it changes what happens. */
     Weather weather;
+    /* The content pack this world needs to be opened (content.h), "" for
+     * none: set by whatever a pack adds that changes a world, which nothing
+     * does yet. Saved, so a build without that pack refuses the file with a
+     * clear message; not fingerprinted, since no rule reads it. */
+    char content[CONTENT_NAME_MAX + 1];
 } Sim;
 
 /*

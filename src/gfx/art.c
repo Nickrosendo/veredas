@@ -1,5 +1,7 @@
 #include "art.h"
 
+#include "content.h"
+
 #include <math.h>   /* ceilf, floorf, sqrtf */
 #include <string.h> /* memset */
 
@@ -7,14 +9,21 @@
  * picture shrunk to an eighth. */
 #define ART_SAMPLES_MAX 8
 
-const ArtSet *art_set(int species)
+const ArtSet *art_set_in(const ArtSet *sets, int count, int species)
 {
-    for (int i = 0; i < ART_SET_COUNT; i++) {
-        if (ART_SETS[i].species == species) {
-            return &ART_SETS[i];
+    for (int i = 0; sets != NULL && i < count; i++) {
+        if (sets[i].species == species) {
+            return &sets[i];
         }
     }
     return NULL;
+}
+
+const ArtSet *art_set(int species)
+{
+    const Content *pack = content_get();
+    const ArtSet *found = art_set_in(pack->art_sets, pack->art_set_count, species);
+    return found != NULL ? found : art_set_in(ART_SETS, ART_SET_COUNT, species);
 }
 
 const ArtClip *art_clip(int species, int action, const BodyTraits *traits)

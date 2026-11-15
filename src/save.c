@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h> /* realloc, free */
-#include <string.h> /* memcpy, memcmp, memset, strlen, strerror */
+#include <string.h> /* memcpy, memcmp, memset, strlen, strnlen, strerror */
 
 #ifdef _WIN32
 /* Asks the huge windows.h for its core only. Must come before the include:
@@ -16,6 +16,7 @@
 #endif
 
 #include "climate.h" /* REGION_NONE, REGION_COUNT */
+#include "content.h" /* CONTENT_NAME_MAX, content_has */
 #include "options.h" /* OPTIONS_MAX_SIDE */
 
 /*
@@ -25,6 +26,8 @@
  *   "VEREDASV" (files made before the rename: "AGONSAVE"), then u32
  *   version, number of settings, genome length, history length (a file
  *   from a different build is refused here);
+ *   u32 length and the bytes of the content pack the world needs, no '\0'
+ *   (length 0: none; a build without that pack refuses the file here);
  *   u32 width, height; u64 seed, tick; u64 x 4 random generator;
  *   every setting, in the table's order;
  *   the world's layers;
@@ -54,7 +57,10 @@
  * ends with is not written. */
 _Static_assert(sizeof(SAVE_MAGIC) == SAVE_MAGIC_LEN + 1, "save marker length");
 _Static_assert(sizeof(SAVE_MAGIC_OLD) == SAVE_MAGIC_LEN + 1, "old save marker length");
-#define SAVE_VERSION 30u
+#define SAVE_VERSION 31u
+/* Version 30 is version 31 without the content pack's name (it needs none),
+ * so its files still load. */
+#define SAVE_VERSION_NO_CONTENT 30u
 
 /* No value in a healthy world comes near this. Bounding them keeps sums
  * from reaching infinity, and float-to-int conversions defined. */
@@ -478,6 +484,10 @@ static void put_everything(Writer *w, const Sim *s)
     put_u32(w, (uint32_t)settings_count());
     put_u32(w, GENOME_LEN);
     put_u32(w, HISTORY);
+    /* strnlen stops at the array's end even if a '\0' were missing. */
+    size_t content_len = strnlen(s->content, CONTENT_NAME_MAX);
+    put_u32(w, (uint32_t)content_len);
+    put_bytes(w, s->content, content_len);
     put_i32(w, s->world.w);
     put_i32(w, s->world.h);
     put_u64(w, s->seed);
@@ -578,6 +588,8 @@ typedef struct {
     /* Room for the one message that has numbers in it. problem may point here:
      * this lives as long as the Reader does, which is long enough. */
     char version_problem[80];
+    /* The same for the message naming a missing content pack. */
+    char content_problem[CONTENT_NAME_MAX + 96];
 } Reader;
 
 static void fail(Reader *r, const char *problem)
@@ -1066,8 +1078,33 @@ static void get_pool(Reader *r, Pool *p, World *w, const Settings *set)
     }
 }
 
-/* The header up to the world's size; false with r->problem set. */
-static bool get_header(Reader *r, int *width, int *height)
+/* The content pack's name, into content (CONTENT_NAME_MAX + 1 bytes, ended
+ * with '\0'); r->problem set when it is impossible or this build lacks it. */
+static void get_content(Reader *r, char *content)
+{
+    uint32_t len = get_u32(r);
+    content[0] = '\0';
+    if (r->problem == NULL && len > CONTENT_NAME_MAX) {
+        fail(r, "the content pack's name in the file is impossible");
+    }
+    if (r->problem != NULL) {
+        return;
+    }
+    get_bytes(r, content, len);
+    /* The file holds no '\0': the string ends here only because we end it.
+     * On a failed read the bytes may be anything, so it is ended at 0. */
+    content[r->problem == NULL ? len : 0] = '\0';
+    if (r->problem == NULL && !content_has(content)) {
+        snprintf(r->content_problem, sizeof(r->content_problem),
+                 "this world needs the content pack '%s', which this veredas "
+                 "was built without", content);
+        fail(r, r->content_problem);
+    }
+}
+
+/* The header up to the world's size, and the content pack the world needs;
+ * false with r->problem set. */
+static bool get_header(Reader *r, int *width, int *height, char *content)
 {
     char magic[SAVE_MAGIC_LEN];
     get_bytes(r, magic, sizeof(magic));
@@ -1080,12 +1117,13 @@ static bool get_header(Reader *r, int *width, int *height)
         return false;
     }
     uint32_t version = get_u32(r);
-    if (r->problem == NULL && version != SAVE_VERSION) {
+    if (r->problem == NULL && version != SAVE_VERSION &&
+        version != SAVE_VERSION_NO_CONTENT) {
         /* problem points at text that must outlive this function, so the
          * wording goes into the Reader, not into a local array. */
         snprintf(r->version_problem, sizeof(r->version_problem),
-                 "the file is save version %u; this veredas reads only version %u",
-                 (unsigned)version, SAVE_VERSION);
+                 "the file is save version %u; this veredas reads only versions %u and %u",
+                 (unsigned)version, SAVE_VERSION_NO_CONTENT, SAVE_VERSION);
         fail(r, r->version_problem);
         return false;
     }
@@ -1097,6 +1135,10 @@ static bool get_header(Reader *r, int *width, int *height)
          history != HISTORY)) {
         fail(r, "the file comes from a different build of veredas");
         return false;
+    }
+    content[0] = '\0';
+    if (version == SAVE_VERSION) {
+        get_content(r, content);
     }
     *width = get_i32(r);
     *height = get_i32(r);
@@ -1173,8 +1215,9 @@ static bool read_world(Reader *r, Sim *s, const char *name, char *err,
     uint64_t seed = 0, tick = 0;
     Rng rng;
     char problem[256] = "";
+    char content[CONTENT_NAME_MAX + 1] = "";
     bool ok = false;
-    if (get_header(r, &width, &height)) {
+    if (get_header(r, &width, &height, content)) {
         seed = get_u64(r);
         tick = get_u64(r);
         for (int i = 0; i < 4; i++) {
@@ -1187,6 +1230,9 @@ static bool read_world(Reader *r, Sim *s, const char *name, char *err,
         return false;
     }
     if (ok) {
+        /* sim_alloc emptied *s, so the name goes in after it. Both arrays
+         * are CONTENT_NAME_MAX + 1 long and content ends in '\0'. */
+        memcpy(s->content, content, sizeof(s->content));
         get_body(r, s, seed, tick, &rng);
         ok = r->problem == NULL;
         if (ok && !sim_resume(s)) {

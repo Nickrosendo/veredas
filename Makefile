@@ -41,6 +41,15 @@ else
 CFLAGS += -g $(SANITIZE)
 endif
 
+# A content pack (content.h): make CONTENT=../veredas-content builds the same
+# programs with the pack's src/*.c in place of content_none.c. Its objects go
+# to a folder of their own (build/debug-content, ...), so a build with the
+# pack and one without never mix their files.
+ifdef CONTENT
+OUT := $(OUT)-content
+CFLAGS += -I$(CONTENT)/include
+endif
+
 # The test build is the debug build with every warning turned into an error.
 ifeq ($(MODE), test)
 CFLAGS += -Werror
@@ -56,6 +65,12 @@ GFX_SRC = $(wildcard src/gfx/*.c)
 WIN_SRC = $(wildcard src/window/*.c)
 
 CORE_OBJ = $(CORE_SRC:src/%.c=$(OUT)/%.o)
+ifdef CONTENT
+# The pack's files join the core: both programs and every test link them.
+CONTENT_SRC = $(wildcard $(CONTENT)/src/*.c)
+CORE_OBJ := $(filter-out $(OUT)/content_none.o, $(CORE_OBJ)) \
+	$(CONTENT_SRC:$(CONTENT)/src/%.c=$(OUT)/content/%.o)
+endif
 TERM_OBJ = $(TERM_SRC:src/%.c=$(OUT)/%.o)
 GFX_OBJ = $(GFX_SRC:src/%.c=$(OUT)/%.o)
 WIN_OBJ = $(WIN_SRC:src/%.c=$(OUT)/%.o)
@@ -142,6 +157,11 @@ $(OUT)/veredas: $(OBJ)
 # not break the build. Including the .d files makes an object rebuild when
 # any header it uses changes.
 $(OUT)/%.o: src/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+# The pack's own files, compiled with the engine's flags and warnings.
+$(OUT)/content/%.o: $(CONTENT)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 

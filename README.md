@@ -301,6 +301,16 @@ for the build that wrote them; a build with a different format refuses them.
     and lasts at least 10 ticks. Whether to hibernate is the brain's choice, so
     it evolves; in every world tested some creatures learned it.
 
+## Content packs
+
+The engine builds and runs complete on its own. A content pack is a folder of
+extra C files built in with `make CONTENT=<folder>` (any target: `make window
+CONTENT=../pack`, `make test CONTENT=../pack`): its `src/*.c` take the place of
+`src/content_none.c`, and define `content_get()` from `src/content.h`. A pack
+can bring drawn frames that replace a species' built-in ones; a save of a
+world that needs a pack names it, and a build without that pack says so
+instead of opening it. Objects go to `build/<mode>-content`.
+
 ## Licence
 
 MIT

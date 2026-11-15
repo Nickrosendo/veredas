@@ -16,6 +16,7 @@
 
 #include "chronicle.h"
 #include "climate.h"
+#include "content.h"
 #include "genome.h"
 #include "rng.h"
 #include "save.h"
@@ -598,10 +599,11 @@ static void test_save_over_existing_file(void)
  * count from the file's start or, for the pool, from its end.
  */
 #define OFF_VERSION 8
-#define OFF_WIDTH 24
-#define OFF_HEIGHT 28
-#define OFF_TICK 40
-#define OFF_SETTINGS 80
+#define OFF_CONTENT 24 /* the content pack name's length: 0, and no bytes */
+#define OFF_WIDTH 28
+#define OFF_HEIGHT 32
+#define OFF_TICK 44
+#define OFF_SETTINGS 84
 #define OFF_SIZE_FREE_SLOT 5 /* alive byte, next_free */
 
 /* The bytes from the living creature's alive byte, in the file's order. */
@@ -776,6 +778,8 @@ static void test_layout_is_as_documented(void)
         return;
     }
     CHECK(memcmp(t.bytes, "VEREDASV", 8) == 0);
+    CHECK(get_le32(t.bytes + OFF_VERSION) == 31);
+    CHECK(get_le32(t.bytes + OFF_CONTENT) == 0);
     CHECK(get_le32(t.bytes + OFF_WIDTH) == 8);
     CHECK(get_le32(t.bytes + OFF_HEIGHT) == 8);
     CHECK(t.bytes[t.living + AT_ALIVE] == 1);
@@ -794,6 +798,8 @@ static void test_refuses_impossible_header(void)
     refuses_u32(&t, OFF_VERSION + 4, 1, "different build"); /* settings */
     refuses_u32(&t, OFF_VERSION + 8, 1, "different build"); /* genome */
     refuses_u32(&t, OFF_VERSION + 12, 1, "different build"); /* history */
+    refuses_u32(&t, OFF_CONTENT, CONTENT_NAME_MAX + 1, "content pack's name");
+    refuses_u32(&t, OFF_CONTENT, 0xFFFFFFFFu, "content pack's name");
     refuses_u32(&t, OFF_WIDTH, 0, "size");
     refuses_u32(&t, OFF_WIDTH, 0xFFFFFFFFu, "size");
     refuses_u32(&t, OFF_HEIGHT, 100000, "size");
@@ -1198,6 +1204,86 @@ static void test_memory_equals_file(void)
     sim_free(&a);
 }
 
+/* A world that needs a content pack keeps its name through a save, and a
+ * build without that pack refuses it with a message naming the pack, leaving
+ * nothing to free (the leak check at exit proves that). */
+static void test_content_pack_named(void)
+{
+    Settings set = settings_default();
+    Sim a;
+    CHECK(sim_init(&a, &set, 4, 32, 16));
+    CHECK(a.content[0] == '\0'); /* a new world needs no pack */
+    /* No build has a pack by this name, the public one or the paid one. */
+    snprintf(a.content, sizeof(a.content), "no-such-pack");
+    char err[256] = "";
+    unsigned char *mem = NULL;
+    size_t len = 0;
+    CHECK(save_to_memory(&a, &mem, &len, err, sizeof(err)));
+    if (mem != NULL) {
+        CHECK(get_le32(mem + OFF_CONTENT) == 12);
+        CHECK(memcmp(mem + OFF_CONTENT + 4, "no-such-pack", 12) == 0);
+        Sim b;
+        CHECK(!save_from_memory(&b, mem, len, err, sizeof(err)));
+        CHECK(strstr(err, "needs the content pack 'no-such-pack'") != NULL);
+        free(mem);
+        mem = NULL;
+    }
+    /* This build's own pack ("" in the public build) opens, and is kept. */
+    snprintf(a.content, sizeof(a.content), "%s", content_get()->name);
+    CHECK(save_to_memory(&a, &mem, &len, err, sizeof(err)));
+    if (mem != NULL) {
+        Sim b;
+        bool ok = save_from_memory(&b, mem, len, err, sizeof(err));
+        CHECK(ok);
+        if (ok) {
+            CHECK(strcmp(b.content, content_get()->name) == 0);
+            CHECK(sim_checksum(&b) == sim_checksum(&a));
+            sim_free(&b);
+        }
+        free(mem);
+    }
+    sim_free(&a);
+}
+
+/* A file from version 30, before the content pack's name was saved, is this
+ * version's file without the name's four length bytes: it still loads, into
+ * the same world, needing no pack. */
+static void test_version_30_still_loads(void)
+{
+    Settings set = settings_default();
+    Sim a;
+    CHECK(sim_init(&a, &set, 4, 32, 16));
+    for (int i = 0; i < 50; i++) {
+        sim_step(&a);
+    }
+    char err[256] = "";
+    unsigned char *mem = NULL;
+    size_t len = 0;
+    CHECK(save_to_memory(&a, &mem, &len, err, sizeof(err)));
+    if (mem != NULL) {
+        CHECK(get_le32(mem + OFF_CONTENT) == 0);
+        /* memmove, not memcpy: the two ranges overlap. */
+        memmove(mem + OFF_CONTENT, mem + OFF_CONTENT + 4, len - OFF_CONTENT - 4);
+        len -= 4;
+        mem[OFF_VERSION] = 30;
+        Sim b;
+        bool ok = save_from_memory(&b, mem, len, err, sizeof(err));
+        CHECK(ok);
+        if (ok) {
+            CHECK(b.content[0] == '\0');
+            CHECK(sim_checksum(&b) == sim_checksum(&a));
+            sim_free(&b);
+        }
+        /* The same bytes called version 31 read the world's width as the
+         * name's length, and are refused. */
+        mem[OFF_VERSION] = 31;
+        CHECK(!save_from_memory(&b, mem, len, err, sizeof(err)));
+        CHECK(strstr(err, "content pack's name") != NULL);
+        free(mem);
+    }
+    sim_free(&a);
+}
+
 int main(void)
 {
     test_round_trip_and_continue();
@@ -1228,6 +1314,8 @@ int main(void)
     test_damaged_bytes_never_crash();
     test_copy_steps_alike();
     test_memory_equals_file();
+    test_content_pack_named();
+    test_version_30_still_loads();
     remove(SAVE_FILE);
     remove(BROKEN_FILE);
     TEST_SUMMARY();
