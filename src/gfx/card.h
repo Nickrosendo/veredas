@@ -25,7 +25,7 @@
 
 /* Draws the card for followed (living, in s) inside the rectangle x, y, w, h,
  * and adds its buttons to u. body_ms is the body clock the picture breathes
- * by. */
+ * by. Nothing, and no buttons, for NULL or a creature no longer alive. */
 void card_draw(Ui *u, Scene *sc, Canvas *c, int x, int y, int w, int h,
                const Sim *s, const Families *f, const Creature *followed,
                uint64_t body_ms, bool sandbox);

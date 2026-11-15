@@ -1,4 +1,5 @@
-/* card_draw: its buttons by mode, and nothing drawn outside its rectangle. */
+/* card_draw: its buttons by mode, nothing drawn outside its rectangle, and
+ * no card once its animal has died. */
 #include "test.h"
 
 #include <stdbool.h>
@@ -9,6 +10,8 @@
 #include "brain_script.h"
 #include "card.h"
 #include "chronicle.h"
+#include "camera.h"
+#include "inspect.h"
 #include "platform.h" /* KEY_ESCAPE */
 
 #define CW 400
@@ -163,10 +166,66 @@ static void test_nothing_outside(void)
     teardown(&t);
 }
 
+/* The followed animal dies while its card is shown. The window's next frame
+ * asks scene_follow who is followed, as draw_frame does through
+ * update_following, and draws the card only for an answer: the answer is
+ * nobody, so that frame has none of the card's buttons. card_draw itself,
+ * given the dead body's slot, draws nothing. */
+static void test_after_death(void)
+{
+    World4 t;
+    if (!setup(&t)) {
+        return;
+    }
+    Camera cam;
+    camera_init(&cam, 16, 16, 16, 16);
+    Inspect in = {0};
+    inspect_follow(&in, &t.sim, t.slot);
+    /* frame 1: followed, the card drawn */
+    ui_begin(&t.ui);
+    const Creature *f = scene_follow(&t.scene, &cam, &in, &t.sim, 0.0f);
+    CHECK(f == &t.sim.pool.items[t.slot]);
+    if (f != NULL) {
+        card_draw(&t.ui, &t.scene, &t.canvas, CX, CY, CARD_W, CARD_H, &t.sim,
+                  &t.families, f, 0, true);
+    }
+    ui_end(&t.ui);
+    CHECK(hits_with(&t.ui, UI_KEY_LET_GO) == 1 && hits_with(&t.ui, 'g') == 1);
+
+    pool_kill(&t.sim.pool, &t.sim.world, t.slot, &t.sim.set, DEATH_WOUNDS);
+    t.sim.tick++;
+
+    /* frame 2: nobody followed, so no card */
+    ui_begin(&t.ui);
+    f = scene_follow(&t.scene, &cam, &in, &t.sim, 0.0f);
+    CHECK(f == NULL);
+    CHECK(!in.following);
+    if (f != NULL) {
+        card_draw(&t.ui, &t.scene, &t.canvas, CX, CY, CARD_W, CARD_H, &t.sim,
+                  &t.families, f, 0, true);
+    }
+    ui_end(&t.ui);
+    CHECK(hits_with(&t.ui, 'l') == 0 && hits_with(&t.ui, UI_KEY_LET_GO) == 0 &&
+          hits_with(&t.ui, 'g') == 0);
+
+    /* and the card asked straight for the dead body draws nothing */
+    uint32_t sentinel = canvas_rgb(255, 0, 255);
+    canvas_fill(&t.canvas, sentinel);
+    draw(&t, true);
+    CHECK(t.ui.n_shown == 0);
+    int inked = 0;
+    for (int i = 0; i < CW * CH; i++) {
+        inked += t.canvas.px[i] != sentinel;
+    }
+    CHECK(inked == 0);
+    teardown(&t);
+}
+
 int main(void)
 {
     CHECK(brain_register(&BRAIN_SCRIPT));
     test_buttons_by_mode();
     test_nothing_outside();
+    test_after_death();
     TEST_SUMMARY();
 }

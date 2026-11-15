@@ -204,6 +204,12 @@ void card_draw(Ui *u, Scene *sc, Canvas *c, int x, int y, int w, int h,
                const Sim *s, const Families *f, const Creature *followed,
                uint64_t body_ms, bool sandbox)
 {
+    /* A dead body's slot keeps its old contents until a newborn takes it
+     * (pool_kill): drawn, it would show a card for an animal that is gone,
+     * with buttons for it. The window never asks, but nothing stops it. */
+    if (followed == NULL || !followed->alive) {
+        return;
+    }
     /* Room is kept for the buttons at the bottom; everything else must end
      * above that. They are drawn right under the last part that fit. */
     int lowest_buttons_y = y + h - UI_BUTTON_H - 2;
