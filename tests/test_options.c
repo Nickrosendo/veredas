@@ -211,6 +211,31 @@ static void test_window_options(void)
     CHECK(fails_with(no_path, "--screenshot"));
 }
 
+/* --window sets the window's starting size, read like --size, so a --frames
+ * run can draw a 1920x1080 screenshot for the store page. Not given: both
+ * sides stay 0 and the window program uses its own default. */
+static void test_window_size_option(void)
+{
+    Options o;
+    char err[128];
+    char *none[] = {"veredas", NULL};
+    CHECK(parse(none, &o, err, sizeof(err)));
+    CHECK(o.window_w == 0 && o.window_h == 0);
+
+    char *full_hd[] = {"veredas", "--window", "1920x1080", NULL};
+    CHECK(parse(full_hd, &o, err, sizeof(err)));
+    CHECK(o.window_w == 1920 && o.window_h == 1080);
+    /* The world's size is a different thing, and stays not given. */
+    CHECK(!o.size_given);
+
+    char *bad[] = {"veredas", "--window", "1920", NULL};
+    CHECK(fails_with(bad, "1920"));
+    char *too_big[] = {"veredas", "--window", "9000x100", NULL};
+    CHECK(fails_with(too_big, "9000x100"));
+    char *no_value[] = {"veredas", "--window", NULL};
+    CHECK(fails_with(no_value, "--window"));
+}
+
 static void test_paused_option(void)
 {
     Options o;
@@ -256,6 +281,7 @@ int main(void)
     test_mistakes();
     test_file_options();
     test_window_options();
+    test_window_size_option();
     test_paused_option();
     test_parse_twice();
     test_default_speed();

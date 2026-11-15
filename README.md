@@ -73,7 +73,9 @@ The default world is 256x144 cells. `--seed`, `--size`, `--speed`, `--no-floor`,
 by both programs. `--zoom close|normal|far|world` picks the starting zoom.
 `--paused` starts paused. `--keys TEXT`, with `--frames`, presses those keys one a
 frame in the last frames, for tests and screenshots:
-`--frames 300 --keys l --screenshot page.ppm`. `--checksum` prints a fingerprint
+`--frames 300 --keys l --screenshot page.ppm`. `--window WxH` sets the window's
+starting size in pixels (default 1280x720), so `--window 1920x1080` makes a full
+HD screenshot. `--checksum` prints a fingerprint
 of the world on leaving, the same one the terminal program gives for that world.
 
 Both programs start at 2 ticks a second, slow enough to watch one animal; `+`

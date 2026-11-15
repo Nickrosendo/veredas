@@ -92,6 +92,7 @@ static const char WINDOW_USAGE[] =
     "  --checksum        print a fingerprint of the world on leaving\n"
     "  --frames N        stop after N frames, without waiting between them\n"
     "  --screenshot PATH write the last frame there as a PPM image\n"
+    "  --window WxH      starting size in pixels (default 1280x720)\n"
     "  --paused          start paused, as if space were pressed first\n"
     "  --no-art          start with the animals drawn from the skeleton, not their\n"
     "                    drawn frames (the a key switches)\n"
@@ -1910,14 +1911,18 @@ int main(int argc, char **argv)
     app.running = true;
     app.redraw = true;
 
+    /* --window: the starting size; a store screenshot wants 1920x1080. The
+     * player can still resize the window after it opens. */
+    int window_w = opt.window_w > 0 ? opt.window_w : WINDOW_W;
+    int window_h = opt.window_h > 0 ? opt.window_h : WINDOW_H;
     if (!scene_init(&app.scene, &app.sim) ||
         !family_init(&app.families, app.sim.pool.capacity) ||
-        !canvas_init(&app.canvas, WINDOW_W, WINDOW_H)) {
+        !canvas_init(&app.canvas, window_w, window_h)) {
         platform_error("out of memory");
         return EXIT_FAILED;
     }
     sprite_cache_set_art(&app.scene.sprites, !opt.no_art);
-    scene_layout(&app.layout, WINDOW_W, WINDOW_H);
+    scene_layout(&app.layout, window_w, window_h);
     camera_init(&app.camera, app.sim.world.w, app.sim.world.h,
                 app.layout.view_w, app.layout.view_h);
     app.camera.level = zoom;
@@ -1938,7 +1943,7 @@ int main(int argc, char **argv)
         return EXIT_USAGE;
 #endif
     }
-    if (!platform_open("Veredas", WINDOW_W, WINDOW_H, err, sizeof(err))) {
+    if (!platform_open("Veredas", window_w, window_h, err, sizeof(err))) {
         platform_error(err);
         return EXIT_FAILED;
     }

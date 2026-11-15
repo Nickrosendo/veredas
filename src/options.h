@@ -41,6 +41,9 @@ typedef struct {
     long frames;             /* --frames: stop after this many; 0 for never */
     const char *screenshot_path; /* --screenshot: the last frame goes here */
     const char *zoom_name;   /* --zoom: the starting zoom step's name */
+    /* --window: the window's starting size in pixels, read like --size; both
+     * 0 when not given, and the window program uses its own default. */
+    int window_w, window_h;
     bool paused;             /* --paused: start as if space were pressed */
     bool no_art;             /* --no-art: start with the drawn frames off (a key) */
     bool sandbox;            /* --sandbox: the window starts in Sandbox mode (m) */

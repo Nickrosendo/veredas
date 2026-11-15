@@ -67,6 +67,22 @@ done
 "$OUT/veredas-window" --zoom sideways >/dev/null 2>&1
 [ $? -eq 2 ] || fail "a bad --zoom was not refused"
 
+# 5b. --window sets the size the picture is drawn at (the store page wants
+# 1920x1080), and only the picture: the world is the same as at 1280x720.
+small=$("$OUT/veredas-window" --seed 3 --size 64x32 --frames 50 --checksum)
+big=$("$OUT/veredas-window" --seed 3 --size 64x32 --frames 50 --checksum \
+    --window 1920x1080 --screenshot "$TMP/full_hd.ppm") ||
+    fail "the run at 1920x1080 failed"
+[ "$(head -c 17 "$TMP/full_hd.ppm" | tr '\n' ' ')" = "P6 1920 1080 255 " ] ||
+    fail "the 1920x1080 screenshot has the wrong header"
+[ "$small" = "$big" ] || fail "--window changed the world"
+"$OUT/veredas-window" --window 1920 >/dev/null 2>&1
+[ $? -eq 2 ] || fail "a bad --window was not refused"
+if [ $HAVE_VEREDAS -eq 1 ]; then
+    "$OUT/veredas" --window 1920x1080 >/dev/null 2>&1
+    [ $? -eq 2 ] || fail "veredas accepted --window"
+fi
+
 # 6. A world that dies. A small world has too few founders to last: all six seeds
 # tried at 40x20 were empty by tick 5,000. The world stops on the tick it ended,
 # so more frames must not change it, and its save loads to the same dead world.

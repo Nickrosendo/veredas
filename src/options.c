@@ -134,7 +134,8 @@ enum {
     OPT_CODE,
     OPT_PLAYLOG,
     OPT_ANCESTORS,
-    OPT_HITS
+    OPT_HITS,
+    OPT_WINDOW
 };
 
 /* The table getopt_long reads: name, whether a value follows, a flag
@@ -165,6 +166,7 @@ static const struct option LONG_OPTIONS[] = {
     {"playlog", required_argument, NULL, OPT_PLAYLOG},
     {"ancestors", required_argument, NULL, OPT_ANCESTORS},
     {"hits", no_argument, NULL, OPT_HITS},
+    {"window", required_argument, NULL, OPT_WINDOW},
     {NULL, 0, NULL, 0},
 };
 
@@ -235,6 +237,17 @@ static bool take_value(int opt, const char *value, Options *o, char *err,
                      value, OPTIONS_MAX_SIDE);
         }
         return o->size_given;
+    case OPT_WINDOW:
+        /* Into the fields directly: parse_size leaves them alone (0, not
+         * given) when the text is not a size. */
+        if (!parse_size(value, &o->window_w, &o->window_h)) {
+            snprintf(err, err_size,
+                     "'%s' is not a window size (WxH in pixels, each 1 to %d, "
+                     "e.g. 1920x1080)",
+                     value, OPTIONS_MAX_SIDE);
+            return false;
+        }
+        return true;
     case OPT_ANCESTORS:
         if (!parse_long(value, 0, OPTIONS_MAX_ANCESTORS, &n)) {
             snprintf(err, err_size,
