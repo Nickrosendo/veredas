@@ -8,6 +8,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h> /* FILE */
 
 /*
  * px holds w * h pixels, row after row, each 0xFFRRGGBB. capacity is how
@@ -74,5 +75,9 @@ void canvas_copy(Canvas *c, const Canvas *from, int x, int y);
  * a short text header, then three bytes per pixel. False if the file could
  * not be written. */
 bool canvas_write_ppm(const Canvas *c, const char *path);
+/* The same picture onto a stream already open, which stays open: --record
+ * writes one after another into one file or pipe, and a video tool reads
+ * them as frames. False if a write failed. */
+bool canvas_write_ppm_to(const Canvas *c, FILE *f);
 
 #endif

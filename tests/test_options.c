@@ -252,6 +252,37 @@ static void test_until_option(void)
     CHECK(fails_with(no_value, "--until"));
 }
 
+/* --record keeps a path for the window program to write every frame to; as
+ * with --screenshot, the parser only keeps it. */
+static void test_record_option(void)
+{
+    Options o;
+    char err[128];
+    char *none[] = {"veredas", NULL};
+    CHECK(parse(none, &o, err, sizeof(err)) && o.record_path == NULL);
+    char *given[] = {"veredas", "--frames", "10", "--record", "clip.ppms", NULL};
+    CHECK(parse(given, &o, err, sizeof(err)));
+    CHECK(o.record_path != NULL && strcmp(o.record_path, "clip.ppms") == 0);
+    char *no_value[] = {"veredas", "--record", NULL};
+    CHECK(fails_with(no_value, "--record"));
+}
+
+/* --after: frames to go on for after --until's moment; 0 when not given. */
+static void test_after_option(void)
+{
+    Options o;
+    char err[128];
+    char *none[] = {"veredas", NULL};
+    CHECK(parse(none, &o, err, sizeof(err)) && o.after == 0);
+    char *given[] = {"veredas", "--frames", "10", "--until", "giant", "--after",
+                     "90", NULL};
+    CHECK(parse(given, &o, err, sizeof(err)) && o.after == 90);
+    char *zero[] = {"veredas", "--after", "0", NULL};
+    CHECK(fails_with(zero, "--after"));
+    char *words[] = {"veredas", "--after", "soon", NULL};
+    CHECK(fails_with(words, "--after"));
+}
+
 static void test_paused_option(void)
 {
     Options o;
@@ -299,6 +330,8 @@ int main(void)
     test_window_options();
     test_window_size_option();
     test_until_option();
+    test_record_option();
+    test_after_option();
     test_paused_option();
     test_parse_twice();
     test_default_speed();

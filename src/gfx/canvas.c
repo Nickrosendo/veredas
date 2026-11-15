@@ -1,7 +1,7 @@
 #include "canvas.h"
 
 #include <stddef.h> /* size_t */
-#include <stdio.h>  /* fopen, fprintf, fputc, fclose */
+#include <stdio.h>  /* fopen, fprintf, fwrite, fclose */
 #include <stdlib.h> /* malloc, free */
 #include <string.h> /* memcpy */
 
@@ -266,6 +266,35 @@ void canvas_copy(Canvas *c, const Canvas *from, int x, int y)
     }
 }
 
+bool canvas_write_ppm_to(const Canvas *c, FILE *f)
+{
+    fprintf(f, "P6\n%d %d\n255\n", c->w, c->h);
+    /* A row at a time into a buffer, then one fwrite: --record writes about
+     * six million bytes a frame at 1920x1080, and a call per byte was the
+     * slow part. The buffer is on the stack, so the widest canvas it takes
+     * is fixed; a wider one falls back to a byte at a time. */
+    unsigned char row[3 * 4096];
+    bool fits = (size_t)c->w * 3 <= sizeof(row);
+    for (int y = 0; y < c->h; y++) {
+        const uint32_t *line = c->px + (size_t)y * (size_t)c->w;
+        for (int x = 0; x < c->w; x++) {
+            uint32_t p = line[x];
+            unsigned char rgb[3] = {(unsigned char)((p >> 16) & 0xFFu),
+                                    (unsigned char)((p >> 8) & 0xFFu),
+                                    (unsigned char)(p & 0xFFu)};
+            if (fits) {
+                memcpy(row + (size_t)x * 3, rgb, 3);
+            } else {
+                fwrite(rgb, 1, 3, f);
+            }
+        }
+        if (fits) {
+            fwrite(row, 1, (size_t)c->w * 3, f);
+        }
+    }
+    return !ferror(f);
+}
+
 bool canvas_write_ppm(const Canvas *c, const char *path)
 {
     /* "wb": binary, or Windows would turn each byte 10 into two bytes. */
@@ -273,14 +302,7 @@ bool canvas_write_ppm(const Canvas *c, const char *path)
     if (f == NULL) {
         return false;
     }
-    fprintf(f, "P6\n%d %d\n255\n", c->w, c->h);
-    for (int i = 0; i < c->w * c->h; i++) {
-        uint32_t p = c->px[i];
-        fputc((int)((p >> 16) & 0xFFu), f);
-        fputc((int)((p >> 8) & 0xFFu), f);
-        fputc((int)(p & 0xFFu), f);
-    }
-    /* Writes are buffered, so a full disk may only show up here. */
-    bool wrote = !ferror(f);
+    /* Writes are buffered, so a full disk may only show up at fclose. */
+    bool wrote = canvas_write_ppm_to(c, f);
     return fclose(f) == 0 && wrote;
 }

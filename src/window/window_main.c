@@ -104,6 +104,9 @@ static const char WINDOW_USAGE[] =
     "  --window WxH      starting size in pixels (default 1280x720)\n"
     "  --until MOMENT    after --frames, wait for pounce (an animal mid-air) or\n"
     "                    giant (one announced), then follow it and stop\n"
+    "  --after N         with --until: go on N frames more, following it\n"
+    "  --record PATH     with --frames: write every frame there, PPM pictures\n"
+    "                    one after another, for a video tool to read\n"
     "  --paused          start paused, as if space were pressed first\n"
     "  --no-art          start with the animals drawn from the skeleton, not their\n"
     "                    drawn frames (the a key switches)\n"
@@ -196,6 +199,13 @@ typedef struct {
      * notice is (another notice of the same check may be newer). */
     uint32_t giant_back;
     bool until_missed; /* waited UNTIL_MAX_FRAMES and it never came */
+    /* --after: the frame count to stop at, set when --until's moment came;
+     * 0 while there is none. */
+    long stop_at;
+    /* --record: the open file every frame is written to; NULL when not
+     * recording. record_failed: a write went wrong, said once on leaving. */
+    FILE *record;
+    bool record_failed;
     int notice_frames;
     char notice[256];
     uint64_t body_ms;  /* a clock that stops while paused */
@@ -1723,10 +1733,19 @@ static int until_subject(const App *a)
  * came to and the same frame is drawn again around it: no tick runs in
  * between, so it is still the moment, now in the middle of the picture, with
  * its card on the right. The quit is seen at the start of the next frame,
- * before any tick, so this drawing is the one the screenshot keeps. */
+ * before any tick, so this drawing is the one the screenshot keeps. With
+ * --after the run goes on instead, the camera following whom it came to, and
+ * stops that many frames later; the screenshot is then the last of those. */
 static void check_stop(App *a)
 {
     long extra = a->frames_done - a->opt->frames;
+    if (a->stop_at > 0) {
+        /* --after: the moment has come; go on following it until here. */
+        if (a->frames_done >= a->stop_at) {
+            platform_post_quit();
+        }
+        return;
+    }
     if (a->until == UNTIL_NONE) {
         if (extra == 0) {
             platform_post_quit();
@@ -1749,7 +1768,11 @@ static void check_stop(App *a)
          * stops on the same frame again. */
         printf("until frame %ld\n", a->frames_done);
         a->until = UNTIL_NONE;
-        platform_post_quit();
+        if (a->opt->after > 0) {
+            a->stop_at = a->frames_done + a->opt->after;
+        } else {
+            platform_post_quit();
+        }
     } else if (extra >= UNTIL_MAX_FRAMES) {
         a->until_missed = true;
         a->until = UNTIL_NONE;
@@ -1884,6 +1907,13 @@ static void app_frame(void *arg)
         platform_present(&a->canvas);
     }
 
+    /* --record: every frame, drawn this time or not, so the video keeps
+     * time: a paused frame shows the last picture again. */
+    if (a->record != NULL && !a->record_failed &&
+        !canvas_write_ppm_to(&a->canvas, a->record)) {
+        a->record_failed = true;
+    }
+
     /* The same way out as the window's X button, so --frames tests it. */
     a->frames_done++;
     if (a->opt->frames > 0 && a->frames_done >= a->opt->frames) {
@@ -1953,6 +1983,15 @@ static int app_leave(App *a)
         !canvas_write_ppm(&a->canvas, a->opt->screenshot_path)) {
         platform_error("could not write the screenshot");
         result = EXIT_FAILED;
+    }
+    if (a->record != NULL) {
+        /* fclose writes what the buffer still holds, so it can fail too. */
+        bool closed = fclose(a->record) == 0;
+        a->record = NULL;
+        if (a->record_failed || !closed) {
+            platform_error("--record: could not write every frame");
+            result = EXIT_FAILED;
+        }
     }
     if (!a->failed && a->opt->save_path != NULL &&
         !save_write(&a->sim, a->opt->save_path, err, sizeof(err))) {
@@ -2027,6 +2066,16 @@ int main(int argc, char **argv)
     }
     if (until != UNTIL_NONE && opt.frames == 0) {
         platform_error("--until waits after --frames: give both");
+        return EXIT_USAGE;
+    }
+    if (opt.after > 0 && until == UNTIL_NONE) {
+        platform_error("--after counts from --until's moment: give both");
+        return EXIT_USAGE;
+    }
+    /* Only a --frames run has the fixed clock that makes every take of a
+     * clip the same; a live window's frames come when the screen allows. */
+    if (opt.record_path != NULL && opt.frames == 0) {
+        platform_error("--record writes the frames of a --frames run: give both");
         return EXIT_USAGE;
     }
     Settings settings;
@@ -2123,6 +2172,16 @@ int main(int argc, char **argv)
     }
     app.last_ms = opt.frames > 0 ? 0 : platform_now_ms();
     playlog_init(&app.playlog);
+    /* "wb": binary, as for a screenshot. Opened last, once nothing else can
+     * fail before the frames, so no early return leaves it open. */
+    if (opt.record_path != NULL) {
+        app.record = fopen(opt.record_path, "wb");
+        if (app.record == NULL) {
+            platform_error("--record: could not open the file to write");
+            platform_close();
+            return EXIT_FAILED;
+        }
+    }
 
     platform_run(app_frame, &app, opt.frames > 0 ? 0 : FRAMES_PER_SECOND);
 

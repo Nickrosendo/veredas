@@ -47,6 +47,14 @@ typedef struct {
     /* --until: after --frames, go on until this moment ("pounce", "giant")
      * and stop on it. Checked by the window program. Points into argv. */
     const char *until_name;
+    /* --record: every frame of a --frames run goes into this file (or pipe)
+     * as a PPM picture, one after another, for a video tool to read. Points
+     * into argv. */
+    const char *record_path;
+    /* --after: with --until, frames to go on for once the moment has come,
+     * the camera following it, so a recorded clip shows what came next; 0
+     * stops on the moment, as without it. */
+    long after;
     bool paused;             /* --paused: start as if space were pressed */
     bool no_art;             /* --no-art: start with the drawn frames off (a key) */
     bool sandbox;            /* --sandbox: the window starts in Sandbox mode (m) */
