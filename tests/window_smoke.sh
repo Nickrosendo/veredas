@@ -83,6 +83,36 @@ if [ $HAVE_VEREDAS -eq 1 ]; then
     [ $? -eq 2 ] || fail "veredas accepted --window"
 fi
 
+# 5c. A --frames run moves its clock a fixed thirtieth of a second a frame, so
+# the same command draws the same picture, byte for byte: bodies, water and all.
+for run in a b; do
+    "$OUT/veredas-window" --seed 3 --size 64x32 --frames 60 --zoom close \
+        --screenshot "$TMP/same_$run.ppm" || fail "the run for the same picture failed"
+done
+cmp -s "$TMP/same_a.ppm" "$TMP/same_b.ppm" || fail "the same run drew two pictures"
+
+# 5d. --until giant goes on after --frames until a giant is announced, then
+# follows it and stops: the frame is printed, the same on a second run, and so is
+# the picture. A young world announces one soon (frame 375 here).
+for run in a b; do
+    "$OUT/veredas-window" --seed 3 --size 64x32 --ancestors 1 --frames 10 \
+        --until giant --screenshot "$TMP/giant_$run.ppm" >"$TMP/giant_$run.txt" ||
+        fail "the --until giant run failed"
+done
+grep -q '^until frame [0-9]*$' "$TMP/giant_a.txt" ||
+    fail "--until giant printed no frame"
+cmp -s "$TMP/giant_a.txt" "$TMP/giant_b.txt" &&
+    cmp -s "$TMP/giant_a.ppm" "$TMP/giant_b.ppm" ||
+    fail "--until giant stopped differently the second time"
+"$OUT/veredas-window" --frames 5 --until sunrise >/dev/null 2>&1
+[ $? -eq 2 ] || fail "a bad --until was not refused"
+"$OUT/veredas-window" --until giant >/dev/null 2>&1
+[ $? -eq 2 ] || fail "--until without --frames was not refused"
+if [ $HAVE_VEREDAS -eq 1 ]; then
+    "$OUT/veredas" --until giant >/dev/null 2>&1
+    [ $? -eq 2 ] || fail "veredas accepted --until"
+fi
+
 # 6. A world that dies. A small world has too few founders to last: all six seeds
 # tried at 40x20 were empty by tick 5,000. The world stops on the tick it ended,
 # so more frames must not change it, and its save loads to the same dead world.

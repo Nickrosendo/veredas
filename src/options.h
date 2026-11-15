@@ -44,6 +44,9 @@ typedef struct {
     /* --window: the window's starting size in pixels, read like --size; both
      * 0 when not given, and the window program uses its own default. */
     int window_w, window_h;
+    /* --until: after --frames, go on until this moment ("pounce", "giant")
+     * and stop on it. Checked by the window program. Points into argv. */
+    const char *until_name;
     bool paused;             /* --paused: start as if space were pressed */
     bool no_art;             /* --no-art: start with the drawn frames off (a key) */
     bool sandbox;            /* --sandbox: the window starts in Sandbox mode (m) */

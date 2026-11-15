@@ -43,8 +43,17 @@
 #include "ui.h"
 #include "weather_fx.h"
 #include "years.h"
+#include "anim.h" /* FIGHT_ON */
+#include "pose.h" /* POSE_POUNCE_AT */
 
 #define FRAMES_PER_SECOND 30
+/* A --frames run's clock moves this many milliseconds a frame (a thirtieth of
+ * a second, rounded down), so its pictures are the same every run. */
+#define FIXED_FRAME_MS (1000 / FRAMES_PER_SECOND)
+/* --until: the moments that can be waited for, and how long to wait at most:
+ * half an hour of frames, then the run gives up. */
+enum { UNTIL_NONE, UNTIL_POUNCE, UNTIL_GIANT };
+#define UNTIL_MAX_FRAMES (30L * 60 * FRAMES_PER_SECOND)
 #define WINDOW_W 1280
 #define WINDOW_H 720
 /* A press that moves further than this, in pixels, is a drag, not a click. */
@@ -93,6 +102,8 @@ static const char WINDOW_USAGE[] =
     "  --frames N        stop after N frames, without waiting between them\n"
     "  --screenshot PATH write the last frame there as a PPM image\n"
     "  --window WxH      starting size in pixels (default 1280x720)\n"
+    "  --until MOMENT    after --frames, wait for pounce (an animal mid-air) or\n"
+    "                    giant (one announced), then follow it and stop\n"
     "  --paused          start paused, as if space were pressed first\n"
     "  --no-art          start with the animals drawn from the skeleton, not their\n"
     "                    drawn frames (the a key switches)\n"
@@ -108,7 +119,11 @@ static const char WINDOW_USAGE[] =
     "  --hits            on leaving, print where the last frame drew each button\n"
     "                    and the key it presses (for tests)\n"
     "  -h, --help        this text\n"
-    "  --version         the version\n"
+    "  --version         the version\n";
+
+/* The keys, apart from the options: ISO C promises only 4095 characters in
+ * one string literal, and the two together are longer. */
+static const char WINDOW_KEYS[] =
     "keys: space pause, +/- speed, r new seed, s save, q quit, arrows move,\n"
     "      [ and ] zoom, Esc lets go of a creature, n new world after game over,\n"
     "      l opens the life story of the followed creature (or of the most\n"
@@ -173,6 +188,14 @@ typedef struct {
     int press_x, press_y;
     int mouse_x, mouse_y;
     long frames_done;
+    /* --until: the moment waited for after --frames (UNTIL_NONE: none), and
+     * whether this frame's notices told of a giant. */
+    int until;
+    bool giant_told;
+    /* When giant_told: how many places back from the newest the giant's
+     * notice is (another notice of the same check may be newer). */
+    uint32_t giant_back;
+    bool until_missed; /* waited UNTIL_MAX_FRAMES and it never came */
     int notice_frames;
     char notice[256];
     uint64_t body_ms;  /* a clock that stops while paused */
@@ -1280,17 +1303,47 @@ static const Creature *update_following(App *a, float fraction)
 /* Takes a look for new notices and puts the newest in the title line. While
  * the ancestors evolve, the list stays empty: its first look after them takes
  * the world as it is then as known, so their years are not news. */
+/* Among the fresh newest notices, the one about the body that set the record:
+ * its size is the record, exactly, since both were worked out by
+ * creature_size from the same creature on the same tick. Its place back from
+ * the newest goes into *back. False when none is (it died at once). */
+static bool giant_notice(const App *a, uint32_t fresh, uint32_t *back)
+{
+    for (uint32_t b = 0; b < fresh; b++) {
+        const Notice *x = notices_get(&a->notices, b);
+        int slot = x != NULL && x->creature != NOTICE_NOBODY
+                       ? life_find_slot(&a->sim, x->creature) : -1;
+        /* Floats compared with == on purpose: the same sum, not a nearby one. */
+        if (slot >= 0 &&
+            creature_size(&a->sim.pool.items[slot], &a->sim.set) ==
+                a->notices.record_size) {
+            *back = b;
+            return true;
+        }
+    }
+    return false;
+}
+
 static void update_notices(App *a)
 {
+    a->giant_told = false;
     if (a->prelude.active) {
         notices_reset(&a->notices);
         return;
     }
     uint32_t before = a->notices.total;
+    float record_before = a->notices.record_size;
     notices_check(&a->notices, &a->sim);
     uint32_t fresh = a->notices.total - before;
     if (fresh == 0) {
         return;
+    }
+    /* The largest body told of moves only with "the first giant" and "the
+     * largest yet" notices, so a move plus a notice is a giant announced.
+     * Floats compared with != on purpose: any change at all counts. */
+    a->giant_told = false;
+    if (a->notices.record_size != record_before) {
+        a->giant_told = giant_notice(a, fresh, &a->giant_back);
     }
     char line[NOTICE_TEXT + 48];
     const Notice *x = notices_newest(&a->notices);
@@ -1569,7 +1622,12 @@ static void advance_weather_fx(App *a, uint64_t elapsed)
 
 static void advance_clocks(App *a)
 {
-    uint64_t now = platform_now_ms();
+    /* --frames: a fixed thirtieth of a second a frame instead of the real
+     * clock, which depends on how fast this computer draws. The ticks were
+     * already counted by frames; now the bodies' poses, the water and the
+     * weather are too, so the same run draws the same picture every time. */
+    uint64_t now = a->opt->frames > 0 ? a->last_ms + FIXED_FRAME_MS
+                                      : platform_now_ms();
     if (!a->paused && !sim_is_over(&a->sim)) {
         a->body_ms += now - a->last_ms;
     }
@@ -1601,6 +1659,102 @@ static bool frame_needs_drawing(App *a)
         a->redraw = false;
     }
     return needed;
+}
+
+/* The --until moment with this name; false when there is none. */
+static bool until_from_name(const char *name, int *until)
+{
+    if (strcmp(name, "pounce") == 0) {
+        *until = UNTIL_POUNCE;
+    } else if (strcmp(name, "giant") == 0) {
+        *until = UNTIL_GIANT;
+    } else {
+        return false;
+    }
+    return true;
+}
+
+/* The largest animal in the air right now, as a pool slot, or -1: its attack
+ * between the pounce and the bite (pose.h). Searched over the whole world, not
+ * the view: at 2 ticks a second a fight of one tick ends before the pounce and
+ * jumps to the bite (anim.c), so one animal's pounces are rare, while the
+ * world has one about every tenth frame. The largest grown hunter, so the
+ * picture shows a body big enough to read. anim's slots are the pool's: the same index. */
+static int pounce_slot(const App *a)
+{
+    int best = -1;
+    float best_size = 0.0f;
+    for (int i = 0; i < a->scene.anim.capacity; i++) {
+        const AnimSlot *m = &a->scene.anim.slots[i];
+        const Creature *c = &a->sim.pool.items[i];
+        /* A hunter's leap, not a grazer fighting back; and grown, a year old
+         * or more: a young body is drawn too small for its leap to read. */
+        if (!c->alive || m->id != c->id || m->fight != FIGHT_ON ||
+            m->fight_c < POSE_POUNCE_AT || m->fight_c >= POSE_IMPACT_AT ||
+            !creature_is_hunter(c) ||
+            c->age < (uint32_t)a->sim.set.ticks_per_year) {
+            continue;
+        }
+        float size = creature_size(c, &a->sim.set);
+        if (size > best_size) {
+            best_size = size;
+            best = i;
+        }
+    }
+    return best;
+}
+
+/* Whom --until waited for, as a pool slot, once it has come in the frame
+ * just drawn; -1 until then. */
+static int until_subject(const App *a)
+{
+    if (a->until == UNTIL_POUNCE) {
+        return pounce_slot(a);
+    }
+    if (!a->giant_told) {
+        return -1;
+    }
+    const Notice *x = notices_get(&a->notices, a->giant_back);
+    return life_find_slot(&a->sim, x->creature);
+}
+
+/* At the end of every frame from the --frames'th on: stop there, or with
+ * --until only once its moment has come. Then the camera follows whom it
+ * came to and the same frame is drawn again around it: no tick runs in
+ * between, so it is still the moment, now in the middle of the picture, with
+ * its card on the right. The quit is seen at the start of the next frame,
+ * before any tick, so this drawing is the one the screenshot keeps. */
+static void check_stop(App *a)
+{
+    long extra = a->frames_done - a->opt->frames;
+    if (a->until == UNTIL_NONE) {
+        if (extra == 0) {
+            platform_post_quit();
+        }
+        return;
+    }
+    int slot = until_subject(a);
+    if (slot >= 0) {
+        const AnimSlot *m = &a->scene.anim.slots[slot];
+        inspect_follow(&a->inspect, &a->sim, slot);
+        if (a->until == UNTIL_GIANT) {
+            /* The top line tells of the giant, whatever else came with it. */
+            say(a, notices_get(&a->notices, a->giant_back)->text,
+                RARE_NOTICE_FRAMES);
+        }
+        /* + 0.5f: the middle of its cell, not the corner. */
+        camera_centre_on(&a->camera, (float)m->x + 0.5f, (float)m->y + 0.5f);
+        draw_frame(a, (float)a->ticks_due / (float)FRAMES_PER_SECOND);
+        /* The frame count, to say how long the wait was; the same command
+         * stops on the same frame again. */
+        printf("until frame %ld\n", a->frames_done);
+        a->until = UNTIL_NONE;
+        platform_post_quit();
+    } else if (extra >= UNTIL_MAX_FRAMES) {
+        a->until_missed = true;
+        a->until = UNTIL_NONE;
+        platform_post_quit();
+    }
 }
 
 /* --keys: in the last strlen(keys) frames of --frames, one key a frame, so the
@@ -1732,8 +1886,8 @@ static void app_frame(void *arg)
 
     /* The same way out as the window's X button, so --frames tests it. */
     a->frames_done++;
-    if (a->opt->frames > 0 && a->frames_done == a->opt->frames) {
-        platform_post_quit();
+    if (a->opt->frames > 0 && a->frames_done >= a->opt->frames) {
+        check_stop(a);
     }
 }
 
@@ -1786,7 +1940,16 @@ static int app_leave(App *a)
         platform_error("out of memory while building a new world");
         result = EXIT_FAILED;
     }
-    if (a->opt->screenshot_path != NULL &&
+    if (a->until_missed) {
+        char message[160];
+        snprintf(message, sizeof(message),
+                 "--until: it did not happen within %ld frames after --frames",
+                 UNTIL_MAX_FRAMES);
+        platform_error(message);
+        result = EXIT_FAILED;
+    }
+    /* A missed wait leaves no picture: it would not show the moment. */
+    if (!a->until_missed && a->opt->screenshot_path != NULL &&
         !canvas_write_ppm(&a->canvas, a->opt->screenshot_path)) {
         platform_error("could not write the screenshot");
         result = EXIT_FAILED;
@@ -1829,6 +1992,7 @@ int main(int argc, char **argv)
     }
     if (opt.help) {
         fputs(WINDOW_USAGE, stdout);
+        fputs(WINDOW_KEYS, stdout);
         return EXIT_FINE;
     }
     if (opt.version) {
@@ -1856,6 +2020,15 @@ int main(int argc, char **argv)
         platform_error("--zoom needs close, normal, far or world");
         return EXIT_USAGE;
     }
+    int until = UNTIL_NONE;
+    if (opt.until_name != NULL && !until_from_name(opt.until_name, &until)) {
+        platform_error("--until needs pounce or giant");
+        return EXIT_USAGE;
+    }
+    if (until != UNTIL_NONE && opt.frames == 0) {
+        platform_error("--until waits after --frames: give both");
+        return EXIT_USAGE;
+    }
     Settings settings;
     if (!read_settings(&opt, &settings, err, sizeof(err))) {
         platform_error(err);
@@ -1868,6 +2041,7 @@ int main(int argc, char **argv)
     app.opt = &opt;
     ui_init(&app.ui);
     app.paused = opt.paused;
+    app.until = until;
     app.sandbox.on = opt.sandbox;
     /* --frames runs make pictures for tests, which a camera choosing whom to
      * follow would change; f still turns it on there. */
@@ -1947,7 +2121,7 @@ int main(int argc, char **argv)
         platform_error(err);
         return EXIT_FAILED;
     }
-    app.last_ms = platform_now_ms();
+    app.last_ms = opt.frames > 0 ? 0 : platform_now_ms();
     playlog_init(&app.playlog);
 
     platform_run(app_frame, &app, opt.frames > 0 ? 0 : FRAMES_PER_SECOND);

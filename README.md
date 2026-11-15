@@ -75,7 +75,10 @@ by both programs. `--zoom close|normal|far|world` picks the starting zoom.
 frame in the last frames, for tests and screenshots:
 `--frames 300 --keys l --screenshot page.ppm`. `--window WxH` sets the window's
 starting size in pixels (default 1280x720), so `--window 1920x1080` makes a full
-HD screenshot. `--checksum` prints a fingerprint
+HD screenshot. `--until pounce` or `--until giant`, after `--frames`, goes on
+until a grown hunter is mid-leap or a giant is announced, follows it and stops
+there; a `--frames` run's clock moves a fixed thirtieth of a second a frame, so
+the same command always draws the same picture. `--checksum` prints a fingerprint
 of the world on leaving, the same one the terminal program gives for that world.
 
 Both programs start at 2 ticks a second, slow enough to watch one animal; `+`

@@ -308,10 +308,11 @@ int main(int argc, char **argv)
     /* These only mean something with a window to draw in. */
     if (opt.frames > 0 || opt.screenshot_path != NULL || opt.zoom_name != NULL ||
         opt.keys != NULL || opt.paused || opt.no_art || opt.code != NULL ||
-        opt.playlog_path != NULL || opt.hits || opt.window_w > 0) {
-        fprintf(stderr, "veredas: --frames, --screenshot, --window, --zoom, "
-                        "--keys, --paused, --no-art, --code, --playlog and "
-                        "--hits are for veredas-window\n");
+        opt.playlog_path != NULL || opt.hits || opt.window_w > 0 ||
+        opt.until_name != NULL) {
+        fprintf(stderr, "veredas: --frames, --screenshot, --window, --until, "
+                        "--zoom, --keys, --paused, --no-art, --code, --playlog "
+                        "and --hits are for veredas-window\n");
         return EXIT_USAGE;
     }
     if (opt.once) {

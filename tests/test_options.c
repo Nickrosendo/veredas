@@ -236,6 +236,22 @@ static void test_window_size_option(void)
     CHECK(fails_with(no_value, "--window"));
 }
 
+/* --until names a moment the window program waits for after --frames; the
+ * parser only keeps the name, and the window program checks it, as for
+ * --zoom. */
+static void test_until_option(void)
+{
+    Options o;
+    char err[128];
+    char *none[] = {"veredas", NULL};
+    CHECK(parse(none, &o, err, sizeof(err)) && o.until_name == NULL);
+    char *given[] = {"veredas", "--frames", "10", "--until", "pounce", NULL};
+    CHECK(parse(given, &o, err, sizeof(err)));
+    CHECK(o.until_name != NULL && strcmp(o.until_name, "pounce") == 0);
+    char *no_value[] = {"veredas", "--until", NULL};
+    CHECK(fails_with(no_value, "--until"));
+}
+
 static void test_paused_option(void)
 {
     Options o;
@@ -282,6 +298,7 @@ int main(void)
     test_file_options();
     test_window_options();
     test_window_size_option();
+    test_until_option();
     test_paused_option();
     test_parse_twice();
     test_default_speed();
