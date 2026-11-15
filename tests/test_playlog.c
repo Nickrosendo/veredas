@@ -32,7 +32,7 @@ static void test_written_file(void)
     playlog_key(&p, 1000); /* an arrow */
     playlog_click(&p);
     playlog_frame(&p, 65000, false);
-    const char *path = "build/test/playlog_test.txt";
+    const char *path = "build/playlog_test.txt";
     char err[160];
     CHECK(playlog_write(&p, path, err, sizeof(err)));
     FILE *f = fopen(path, "r");
@@ -67,7 +67,7 @@ static void test_buttons_apart_from_keys(void)
     playlog_button(&p, ' ');
     playlog_button(&p, 3020); /* a page's close button */
     playlog_frame(&p, 1000, false);
-    const char *path = "build/test/playlog_buttons.txt";
+    const char *path = "build/playlog_buttons.txt";
     char err[160];
     CHECK(playlog_write(&p, path, err, sizeof(err)));
     FILE *f = fopen(path, "r");
