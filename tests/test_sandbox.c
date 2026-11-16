@@ -70,11 +70,13 @@ static void test_give_by_keys(void)
     press(&b, &s, '2', c); /* armour */
     press(&b, &s, '9', c); /* all the way */
     press(&b, &s, ',', c); /* one step back */
+    CHECK(b.did == SANDBOX_DID_NONE); /* moving through the menu is no verb */
     char lines[SKIP_LINES][SKIP_COLS];
     int n = sandbox_menu_lines(&b, &s, 0, lines, SKIP_LINES);
     CHECK(n == ACTIONS_GIVABLE_COUNT + 2);
     CHECK(strstr(lines[2], "> 2 armour") != NULL);
     press(&b, &s, '\r', c);
+    CHECK(b.did == SANDBOX_DID_TRAIT);
     CHECK(b.menu == SANDBOX_MENU_NONE);
     CHECK(s.actions.count == 1);
     CHECK(s.actions.items[0].gene == GENE_ARMOUR);
@@ -91,9 +93,14 @@ static void test_weather_by_keys(void)
     CHECK(sim_init(&s, &set, 2, 64, 32));
     Sandbox b = {.on = true};
     press(&b, &s, 'w', NULL);
+    CHECK(b.did == SANDBOX_DID_NONE);
     press(&b, &s, '1', NULL);
+    CHECK(b.did == SANDBOX_DID_WEATHER);
     CHECK(s.actions.count == 1);
     CHECK(s.actions.items[0].weather == WEATHER_DROUGHT);
+    /* The next key, whatever it is, starts again from no verb. */
+    press(&b, &s, ' ', NULL);
+    CHECK(b.did == SANDBOX_DID_NONE);
     sandbox_free(&b);
     sim_free(&s);
 }
@@ -151,6 +158,7 @@ static void test_skip_by_keys(void)
     Sandbox b = {.on = true};
     press(&b, &s, 'k', NULL);
     press(&b, &s, '1', NULL);
+    CHECK(b.did == SANDBOX_DID_SKIP);
     CHECK(sandbox_skipping(&b));
     CHECK(sandbox_skip_step(&b, &s, fake_ms, 25));
     CHECK(press(&b, &s, 'g', NULL) == SANDBOX_TAKEN); /* tools wait */

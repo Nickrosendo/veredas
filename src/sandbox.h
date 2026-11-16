@@ -29,6 +29,10 @@ enum {
  * (sandbox_setup_apply), which only the window can do. */
 enum { SANDBOX_IGNORED, SANDBOX_TAKEN, SANDBOX_RESTART };
 
+/* Which tool the last key used, when it changed the world: the playlog counts
+ * these (playlog.h). A key that only opens or moves through a menu is NONE. */
+enum { SANDBOX_DID_NONE, SANDBOX_DID_TRAIT, SANDBOX_DID_WEATHER, SANDBOX_DID_SKIP };
+
 /* The steps the setup screen offers: how many times a body trait's usual
  * change (trait_mutation_scale), and the chance a change is a jump. */
 enum { SANDBOX_WILD_STEPS = 6, SANDBOX_JUMP_STEPS = 5 };
@@ -62,6 +66,7 @@ typedef struct {
     int wild_step, jump_step;
     int jump_genes;
     WeatherWatch weather;
+    int did;          /* a SANDBOX_DID_ value, for the last key only */
 } Sandbox;
 
 /* Opens the setup screen at the values set has now (the nearest steps). */

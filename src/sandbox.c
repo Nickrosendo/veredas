@@ -63,6 +63,7 @@ static void give(Sandbox *b, Sim *s, char *notice, size_t size)
     char name[16];
     name_from_id(b->target, name, sizeof(name));
     if (actions_give_trait(s, b->target, gene, b->value)) {
+        b->did = SANDBOX_DID_TRAIT;
         snprintf(notice, size, "gave %s %s %.2f", name,
                  actions_gene_name(gene), (double)b->value);
     } else {
@@ -103,6 +104,7 @@ static int weather_key(Sandbox *b, Sim *s, int key, char *notice, size_t size)
     if (d >= 0) {
         int kind = WEATHER_NONE + 1 + d;
         if (actions_weather(s, kind)) {
+            b->did = SANDBOX_DID_WEATHER;
             snprintf(notice, size, "a %s begins, for one season",
                      weather_name(kind));
         }
@@ -118,6 +120,7 @@ static int skip_key(Sandbox *b, Sim *s, int key, uint64_t now_ms,
     if (d >= 0) {
         b->menu = SANDBOX_MENU_NONE;
         if (skip_start(&b->skip, s, SKIP_YEARS[d])) {
+            b->did = SANDBOX_DID_SKIP;
             b->skip_started_ms = now_ms;
         } else {
             snprintf(notice, size, "nothing to skip: the world has ended");
@@ -201,6 +204,7 @@ static int setup_key(Sandbox *b, int key)
 int sandbox_key(Sandbox *b, Sim *s, int key, const Creature *followed,
                 uint64_t now_ms, char *notice, size_t size)
 {
+    b->did = SANDBOX_DID_NONE;
     if (sandbox_skipping(b)) {
         /* While skipping, Escape stops it and nothing else does anything. */
         if (key == SANDBOX_KEY_ESCAPE) {
