@@ -130,9 +130,8 @@ done
 frame_bytes=$((15 + 320 * 180 * 3)) # the header "P6\n320 180\n255\n" is 15 bytes
 [ "$(wc -c <"$TMP/clip_a.ppms")" -eq $((3 * frame_bytes)) ] ||
     fail "--record did not write three whole frames"
-# cksum, not cmp: Windows' MSYS2 has coreutils but not diffutils.
-[ "$(cksum <"$TMP/clip_a.ppms")" = "$(cksum <"$TMP/clip_b.ppms")" ] ||
-    fail "--record wrote two clips"
+same_file "$TMP/clip_a.ppms" "$TMP/clip_b.ppms" ||
+    fail "--record wrote two different clips"
 # --after goes on that many frames past --until's moment: the giant run above
 # stops on the moment; with --after 4 the clip holds 4 frames more than the
 # frame it printed, and without --until --after is refused.
