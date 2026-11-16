@@ -34,7 +34,7 @@ static void test_written_file(void)
     playlog_frame(&p, 65000, false);
     const char *path = "build/playlog_test.txt";
     char err[160];
-    CHECK(playlog_write(&p, path, err, sizeof(err)));
+    CHECK(playlog_write(&p, path, "9.9.9", err, sizeof(err)));
     FILE *f = fopen(path, "r");
     CHECK(f != NULL);
     char line[64];
@@ -50,7 +50,8 @@ static void test_written_file(void)
     }
     CHECK(saw_g && saw_space && saw_other && saw_seconds);
     remove(path);
-    CHECK(!playlog_write(&p, "build/no/such/folder/playlog.txt", err, sizeof(err)));
+    CHECK(!playlog_write(&p, "build/no/such/folder/playlog.txt", "9.9.9", err,
+                         sizeof(err)));
     CHECK(strstr(err, "cannot write the playlog") != NULL);
 }
 
@@ -69,7 +70,7 @@ static void test_buttons_apart_from_keys(void)
     playlog_frame(&p, 1000, false);
     const char *path = "build/playlog_buttons.txt";
     char err[160];
-    CHECK(playlog_write(&p, path, err, sizeof(err)));
+    CHECK(playlog_write(&p, path, "9.9.9", err, sizeof(err)));
     FILE *f = fopen(path, "r");
     CHECK(f != NULL);
     char line[64];
@@ -90,8 +91,82 @@ static void test_buttons_apart_from_keys(void)
     remove(path);
 }
 
+/* Each verb's count and first moment; the earliest of them on its own line;
+ * a verb before the first frame counts as at the start; a number outside the
+ * table is ignored. */
+static void test_verbs(void)
+{
+    Playlog p;
+    playlog_init(&p);
+    playlog_verb(&p, PLAYLOG_VERB_SPLIT, 500); /* before any frame */
+    playlog_frame(&p, 1000, false);
+    playlog_verb(&p, PLAYLOG_VERB_WEATHER, 91000);
+    playlog_verb(&p, PLAYLOG_VERB_WEATHER, 95000);
+    playlog_verb(&p, PLAYLOG_VERBS, 2000);
+    playlog_verb(&p, -1, 2000);
+    playlog_frame(&p, 100000, true);
+    CHECK(p.verbs[PLAYLOG_VERB_WEATHER] == 2);
+    CHECK(p.first_verb_ms[PLAYLOG_VERB_WEATHER] == 90000);
+    CHECK(p.first_verb_ms[PLAYLOG_VERB_SPLIT] == 0);
+    CHECK(p.first_verb_ms[PLAYLOG_VERB_TRAIT] == -1);
+    const char *path = "build/playlog_verbs.txt";
+    char err[160];
+    CHECK(playlog_write(&p, path, "9.9.9", err, sizeof(err)));
+    FILE *f = fopen(path, "r");
+    CHECK(f != NULL);
+    char line[64];
+    int n = 0;
+    bool head = false, version = false, first = false, weather = false,
+         trait = false, skip = false;
+    while (f != NULL && fgets(line, sizeof(line), f) != NULL) {
+        n++;
+        head = head || (n == 1 && strcmp(line, "veredas-playlog 2\n") == 0);
+        version = version || (n == 2 && strcmp(line, "version 9.9.9\n") == 0);
+        first = first || strcmp(line, "first_verb_second 0\n") == 0;
+        weather = weather || strcmp(line, "verb weather 2 90\n") == 0;
+        trait = trait || strcmp(line, "verb trait 0 -1\n") == 0;
+        skip = skip || strcmp(line, "verb skip 0 -1\n") == 0;
+    }
+    if (f != NULL) {
+        fclose(f);
+    }
+    CHECK(head);
+    CHECK(version);
+    CHECK(first);
+    CHECK(weather);
+    CHECK(trait);
+    CHECK(skip);
+    remove(path);
+}
+
+/* No verb at all: the earliest is -1, as for Sandbox never opened. */
+static void test_no_verbs(void)
+{
+    Playlog p;
+    playlog_init(&p);
+    playlog_frame(&p, 0, false);
+    playlog_frame(&p, 5000, false);
+    const char *path = "build/playlog_noverbs.txt";
+    char err[160];
+    CHECK(playlog_write(&p, path, "9.9.9", err, sizeof(err)));
+    FILE *f = fopen(path, "r");
+    CHECK(f != NULL);
+    char line[64];
+    bool never = false;
+    while (f != NULL && fgets(line, sizeof(line), f) != NULL) {
+        never = never || strcmp(line, "first_verb_second -1\n") == 0;
+    }
+    if (f != NULL) {
+        fclose(f);
+    }
+    CHECK(never);
+    remove(path);
+}
+
 int main(void)
 {
+    test_verbs();
+    test_no_verbs();
     test_time_by_mode();
     test_written_file();
     test_buttons_apart_from_keys();

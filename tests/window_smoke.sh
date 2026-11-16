@@ -241,8 +241,16 @@ done
     --playlog "$TMP/play.txt" >/dev/null || fail "the run with --playlog failed"
 grep -q '^key g 2$' "$TMP/play.txt" && grep -q '^key m 1$' "$TMP/play.txt" &&
     ! grep -q '^first_sandbox_second -1$' "$TMP/play.txt" &&
-    grep -q '^button other 0$' "$TMP/play.txt" && ! grep -q '^button g' "$TMP/play.txt" ||
+    grep -q '^button other 0$' "$TMP/play.txt" && ! grep -q '^button g' "$TMP/play.txt" &&
+    grep -q '^version ' "$TMP/play.txt" && grep -q '^first_verb_second -1$' "$TMP/play.txt" ||
     fail "the playlog is not as expected: $(tr '\n' '|' < "$TMP/play.txt")"
+# A verb: m, then w 1 starts a drought; and x splits the world. Both are
+# counted, with the moment each was first done.
+"$OUT/veredas-window" --seed 3 --size 64x32 --frames 30 --keys "mw1x" \
+    --playlog "$TMP/verb.txt" >/dev/null || fail "the run with a verb failed"
+grep -q '^verb weather 1 ' "$TMP/verb.txt" && grep -q '^verb split 1 ' "$TMP/verb.txt" &&
+    ! grep -q '^first_verb_second -1$' "$TMP/verb.txt" ||
+    fail "the playlog missed the verbs: $(tr '\n' '|' < "$TMP/verb.txt")"
 if [ $HAVE_VEREDAS -eq 1 ]; then
     "$OUT/veredas" --playlog "$TMP/x.txt" >/dev/null 2>&1
     [ $? -eq 2 ] || fail "veredas accepted --playlog"

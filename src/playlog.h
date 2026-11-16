@@ -17,6 +17,17 @@
  * and the rest together as "other". */
 enum { PLAYLOG_KEYS = 128 };
 
+/* The Sandbox verbs a playtest watches for: the things a player does to a
+ * world, as against looking at it. A new start from the setup screen is not
+ * one of them (it begins another world rather than changing this one). */
+enum {
+    PLAYLOG_VERB_TRAIT,   /* g, then Enter: a trait given */
+    PLAYLOG_VERB_WEATHER, /* w and a digit: a weather event started */
+    PLAYLOG_VERB_SKIP,    /* k and a digit: a skip started */
+    PLAYLOG_VERB_SPLIT,   /* x: the world split in two */
+    PLAYLOG_VERBS
+};
+
 typedef struct {
     bool started;
     uint64_t start_ms;   /* the first frame */
@@ -31,6 +42,10 @@ typedef struct {
     uint32_t buttons[PLAYLOG_KEYS];
     uint32_t other_buttons;
     uint32_t clicks;
+    /* Each verb: how often it was done, and when first, in ms after the
+     * start (-1 while never). */
+    uint32_t verbs[PLAYLOG_VERBS];
+    int64_t first_verb_ms[PLAYLOG_VERBS];
 } Playlog;
 
 /* Empty: nothing counted yet. */
@@ -44,8 +59,13 @@ void playlog_click(Playlog *p);
 /* One click on a button standing for key; a button with no key below 128 (a
  * close button, say) counts as "other". */
 void playlog_button(Playlog *p, int key);
-/* Writes the record to path, replacing the file. False with one line in err
- * when the file cannot be written. */
-bool playlog_write(const Playlog *p, const char *path, char *err, size_t len);
+/* One verb done (a PLAYLOG_VERB_ value) at the clock's now_ms. Done before the
+ * first frame, it counts as at the start. */
+void playlog_verb(Playlog *p, int verb, uint64_t now_ms);
+/* Writes the record to path, replacing the file, with version (the program's,
+ * VEREDAS_VERSION) as its second line, so a tester's file says which build
+ * made it. False with one line in err when the file cannot be written. */
+bool playlog_write(const Playlog *p, const char *path, const char *version,
+                   char *err, size_t len);
 
 #endif

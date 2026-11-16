@@ -687,6 +687,7 @@ static void branch_key(App *a)
     if (!a->branches.split) {
         if (branch_make(&a->branches, &a->sim, err, sizeof(err))) {
             a->other_notices = a->notices; /* the same past on both sides */
+            playlog_verb(&a->playlog, PLAYLOG_VERB_SPLIT, platform_now_ms());
             say(a, "split in two: this is A, Tab shows B; "
                    "try something in one", 2 * NOTICE_FRAMES);
         } else {
@@ -699,6 +700,18 @@ static void branch_key(App *a)
         branch_keep_shown(&a->branches);
         a->keep_asked = false;
         say(a, "kept this branch; one world again", NOTICE_FRAMES);
+    }
+}
+
+/* The Sandbox tool the last key used, if any, into the playlog. The two
+ * modules keep their own numbers, so neither header needs the other. */
+static void record_verb(App *a)
+{
+    switch (a->sandbox.did) {
+    case SANDBOX_DID_TRAIT: playlog_verb(&a->playlog, PLAYLOG_VERB_TRAIT, platform_now_ms()); break;
+    case SANDBOX_DID_WEATHER: playlog_verb(&a->playlog, PLAYLOG_VERB_WEATHER, platform_now_ms()); break;
+    case SANDBOX_DID_SKIP: playlog_verb(&a->playlog, PLAYLOG_VERB_SKIP, platform_now_ms()); break;
+    default: break;
     }
 }
 
@@ -742,6 +755,7 @@ static void handle_key(App *a, int key)
         bool was_sandbox = a->sandbox.on;
         int took = sandbox_key(&a->sandbox, &a->sim, key, followed,
                                platform_now_ms(), line, sizeof(line));
+        record_verb(a);
         if (took == SANDBOX_RESTART) {
             restart_with_setup(a);
             a->redraw = true;
@@ -1999,7 +2013,8 @@ static int app_leave(App *a)
         result = EXIT_FAILED;
     }
     if (a->opt->playlog_path != NULL &&
-        !playlog_write(&a->playlog, a->opt->playlog_path, err, sizeof(err))) {
+        !playlog_write(&a->playlog, a->opt->playlog_path, VEREDAS_VERSION, err,
+                       sizeof(err))) {
         platform_error(err);
         result = EXIT_FAILED;
     }

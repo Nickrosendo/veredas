@@ -7,6 +7,11 @@
 void playlog_init(Playlog *p)
 {
     *p = (Playlog){.first_sandbox_ms = -1};
+    /* A designated initializer can set one array element ([0] = -1) but not
+     * all of them; a loop sets the rest. */
+    for (int v = 0; v < PLAYLOG_VERBS; v++) {
+        p->first_verb_ms[v] = -1;
+    }
 }
 
 void playlog_frame(Playlog *p, uint64_t now_ms, bool sandbox)
@@ -53,6 +58,30 @@ void playlog_button(Playlog *p, int key)
     }
 }
 
+void playlog_verb(Playlog *p, int verb, uint64_t now_ms)
+{
+    /* A verb number from outside the table would write past its end: C does
+     * not check an array index, so this function does. */
+    if (verb < 0 || verb >= PLAYLOG_VERBS) {
+        return;
+    }
+    p->verbs[verb]++;
+    if (p->first_verb_ms[verb] < 0) {
+        uint64_t at = p->started && now_ms > p->start_ms ? now_ms - p->start_ms : 0;
+        p->first_verb_ms[verb] = (int64_t)at;
+    }
+}
+
+/* The verbs' names in the file, in the order of the PLAYLOG_VERB_ values. */
+static const char *const VERB_NAMES[PLAYLOG_VERBS] = {"trait", "weather", "skip",
+                                                      "split"};
+
+/* Whole seconds of a time that may be -1 (never), as the file writes it. */
+static long long seconds_or_never(int64_t ms)
+{
+    return ms < 0 ? -1LL : (long long)(ms / 1000);
+}
+
 /* A key's name in the file: the character itself, or a word for a key that
  * is blank or would make the line hard to read. */
 static void key_name(int key, char *out, size_t size)
@@ -71,7 +100,8 @@ static void key_name(int key, char *out, size_t size)
     }
 }
 
-bool playlog_write(const Playlog *p, const char *path, char *err, size_t len)
+bool playlog_write(const Playlog *p, const char *path, const char *version,
+                   char *err, size_t len)
 {
     FILE *f = fopen(path, "w");
     if (f == NULL) {
@@ -82,14 +112,28 @@ bool playlog_write(const Playlog *p, const char *path, char *err, size_t len)
         return false;
     }
     uint64_t total = p->last_ms - p->start_ms;
-    fprintf(f, "veredas-playlog 1\n");
+    /* 2: the version line and the verb lines were added (2026-11-16). */
+    fprintf(f, "veredas-playlog 2\n");
+    fprintf(f, "version %s\n", version);
     /* Seconds, whole: %llu with a cast, since uint64_t has no letter of its
      * own in printf (inttypes.h has PRIu64 for it; the cast is simpler). */
     fprintf(f, "seconds %llu\n", (unsigned long long)(total / 1000u));
     fprintf(f, "seconds_documentary %llu\n", (unsigned long long)(p->ms_in[0] / 1000u));
     fprintf(f, "seconds_sandbox %llu\n", (unsigned long long)(p->ms_in[1] / 1000u));
-    fprintf(f, "first_sandbox_second %lld\n",
-            p->first_sandbox_ms < 0 ? -1LL : (long long)(p->first_sandbox_ms / 1000));
+    fprintf(f, "first_sandbox_second %lld\n", seconds_or_never(p->first_sandbox_ms));
+    /* The earliest of the verbs: the playtest asks whether any was found. */
+    int64_t first_verb = -1;
+    for (int v = 0; v < PLAYLOG_VERBS; v++) {
+        int64_t at = p->first_verb_ms[v];
+        if (at >= 0 && (first_verb < 0 || at < first_verb)) {
+            first_verb = at;
+        }
+    }
+    fprintf(f, "first_verb_second %lld\n", seconds_or_never(first_verb));
+    for (int v = 0; v < PLAYLOG_VERBS; v++) {
+        fprintf(f, "verb %s %u %lld\n", VERB_NAMES[v], (unsigned)p->verbs[v],
+                seconds_or_never(p->first_verb_ms[v]));
+    }
     fprintf(f, "clicks %u\n", (unsigned)p->clicks);
     for (int k = 0; k < PLAYLOG_KEYS; k++) {
         if (p->keys[k] > 0) {
