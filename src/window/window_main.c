@@ -1581,25 +1581,73 @@ static uint32_t colour_pixel(Colour k)
     return canvas_rgb(k.r, k.g, k.b);
 }
 
+/* A palette colour times keep / 256, for the spinner's fading dots. The
+ * casts: each channel times at most 256, shifted back, stays under 256. */
+static uint32_t colour_faded(Colour k, int keep)
+{
+    return canvas_rgb((uint8_t)((k.r * keep) >> 8), (uint8_t)((k.g * keep) >> 8),
+                      (uint8_t)((k.b * keep) >> 8));
+}
+
+/* The eight dots of the loading ring, round a circle of radius 7 pixels from
+ * the top, clockwise: whole numbers worked out once, so no sinf a frame. */
+static const int SPINNER_DOTS[8][2] = {{0, -7}, {5, -5}, {7, 0},  {5, 5},
+                                       {0, 7},  {-5, 5}, {-7, 0}, {-5, -5}};
+
+/* A ring of dots round (cx, cy) with a bright one going round every 0.72 s
+ * and a fading tail behind it: the sign, known from every loading screen,
+ * that work is under way. ms is the wall clock. */
+static void draw_spinner(Canvas *c, int cx, int cy, uint64_t ms)
+{
+    /* The cast: % 8 is 0..7. */
+    int head = (int)((ms / 90u) % 8u);
+    for (int i = 0; i < 8; i++) {
+        /* How many steps behind the head this dot is: 0 is the head. + 8
+         * before the %, which keeps a minus sign in C. */
+        int behind = (head - i + 8) % 8;
+        int keep = 256 - behind * 28;
+        canvas_rect(c, cx + SPINNER_DOTS[i][0] - 1, cy + SPINNER_DOTS[i][1] - 1, 3, 3,
+                    colour_faded(PALETTE_TEXT, keep));
+    }
+}
+
 /*
  * The map while a world's first years run (the ancestors, or a code's
  * replay): not the world, which changes too fast to watch and cost a whole
  * frame to draw on top of the 28 ms of ticks, so a busy machine stuttered.
- * A name, how far the run has got as a bar, and a few animals walking: a
- * millisecond or so. The line saying the year and "any key" stays on top.
+ * The name; a turning ring and "Growing a new world..." saying that work is
+ * going on; a bar of how far it has got, the year under it; and a few
+ * animals walking. A millisecond or two in all.
  */
 static void draw_prelude(App *a)
 {
     const Layout *l = &a->layout;
     int x = l->view_x, y = l->view_y, w = l->view_w, h = l->view_h;
+    uint64_t ms = a->last_ms; /* the wall clock: the prelude runs paused or not */
     canvas_rect(&a->canvas, x, y, w, h, colour_pixel(PALETTE_TEXT_BACKGROUND));
     int strip_h = lab_parade_height(w);
-    /* The title, the bar under it and the strip, as one block in the middle. */
-    int block = 3 * FONT_H + strip_h;
+    /* Title, working line, bar, year line, then the strip, as one block in
+     * the middle. Rows in FONT_H steps from its top. */
+    int block = 6 * FONT_H + strip_h;
     int top = y + (h - block) / 2;
     const char *title = "Veredas";
     text_draw(&a->canvas, x + (w - text_width(title)) / 2, top, title,
               colour_pixel(PALETTE_TEXT));
+
+    /* The working line. Its place is worked out with all three dots, so the
+     * words stay still while the dots come and go. */
+    const char *doing = a->prelude.replay ? "Replaying the world code"
+                                          : "Growing a new world";
+    char line[64];
+    snprintf(line, sizeof(line), "%s...", doing);
+    int spinner_w = 16 + 10; /* the ring and the gap after it */
+    int line_x = x + (w - spinner_w - text_width(line)) / 2;
+    int line_y = top + 2 * FONT_H;
+    draw_spinner(&a->canvas, line_x + 8, line_y + FONT_H / 2, ms);
+    int dots = (int)((ms / 400u) % 4u); /* 0 to 3, a step every 0.4 s */
+    snprintf(line, sizeof(line), "%s%.*s", doing, dots, "...");
+    text_draw(&a->canvas, line_x + spinner_w, line_y, line, colour_pixel(PALETTE_TEXT));
+
     /* The share of the run done, in 0..1. until is above the start tick
      * while the prelude is on, so there is no division by zero; a double,
      * since a tick count is a uint64_t. */
@@ -1608,14 +1656,19 @@ static void draw_prelude(App *a)
                       : 0.0;
     done = done > 1.0 ? 1.0 : done;
     int bar_w = w / 3, bar_h = 6;
-    int bar_x = x + (w - bar_w) / 2, bar_y = top + 2 * FONT_H;
+    int bar_x = x + (w - bar_w) / 2, bar_y = top + 3 * FONT_H + FONT_H / 2;
     canvas_rect(&a->canvas, bar_x, bar_y, bar_w, bar_h, colour_pixel(PALETTE_BLACK));
     canvas_rect(&a->canvas, bar_x, bar_y, (int)(done * (double)bar_w), bar_h,
                 colour_pixel(PALETTE_TEXT));
-    /* The wall clock, not the body clock: that one stops while paused, and the
-     * prelude runs on paused or not. */
-    lab_draw_parade(&a->scene.sprites, &a->canvas, a->last_ms, x, top + 3 * FONT_H, w,
-                    y + h - (top + 3 * FONT_H));
+
+    /* "evolving ancestors: year 3 of 8, any key to stop", dimmed. */
+    char year[120];
+    app_prelude_text(&a->prelude, &a->sim, year, sizeof(year));
+    text_draw(&a->canvas, x + (w - text_width(year)) / 2, top + 4 * FONT_H, year,
+              colour_faded(PALETTE_TEXT, 170));
+
+    lab_draw_parade(&a->scene.sprites, &a->canvas, ms, x, top + 6 * FONT_H, w,
+                    y + h - (top + 6 * FONT_H));
 }
 
 static void draw_frame(App *a, float fraction)
