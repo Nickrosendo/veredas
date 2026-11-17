@@ -354,6 +354,58 @@ static void test_cache_art_switch(void)
     sprite_cache_free(&c);
 }
 
+/* FNV-1a over a byte block, carried on from h: a pixel's bytes mixed into a
+ * running number, so one number stands for many pictures. */
+static uint64_t mix_bytes(uint64_t h, const void *bytes, size_t n)
+{
+    const uint8_t *b = bytes;
+    for (size_t i = 0; i < n; i++) {
+        h = (h ^ b[i]) * 1099511628211u;
+    }
+    return h;
+}
+
+/* The pixels art_raster drew on 2026-11-17, before it learned to sample only
+ * where the frame lands: every species, action, the first two frames, with
+ * every part painted over, at five shrinks and two anchors (one so far left
+ * that the body runs off the grid). The number below is what the old loop
+ * gave. A change to what the frames look like re-pins it, with a reason in
+ * the commit; a speed change never may. */
+#define RASTER_PIN 0x8568525c92b4d6a6u
+static void test_raster_pinned(void)
+{
+    static SkeletonRaster r;
+    BodyTraits t = all_traits(1.0f);
+    const float scales[] = {1.0f, 0.6f, 0.33f, 0.2f, 0.125f};
+    const float anchors[2][2] = {{30.0f, 48.0f}, {3.5f, 20.0f}};
+    uint64_t h = 1469598103934665603u;
+    for (int sp = 0; sp < SPECIES_COUNT; sp++) {
+        for (int a = 0; a < ACTION_COUNT; a++) {
+            const ArtClip *clip = art_clip(sp, a, &t);
+            const ArtClip *layers[ART_PART_COUNT];
+            art_layers(sp, a, &t, layers);
+            for (int fr = 0; fr < 2; fr++) {
+                for (size_t s = 0; s < sizeof scales / sizeof scales[0]; s++) {
+                    for (int k = 0; k < 2; k++) {
+                        small_grid(&r);
+                        art_raster(&r, clip, layers, fr, scales[s], anchors[k][0],
+                                   anchors[k][1]);
+                        size_t cells = (size_t)r.w * (size_t)r.h;
+                        h = mix_bytes(h, r.ink, cells);
+                        h = mix_bytes(h, r.part, cells);
+                        int box[6] = {r.x0, r.y0, r.x1, r.y1, r.eye_x, r.eye_y};
+                        h = mix_bytes(h, box, sizeof box);
+                    }
+                }
+            }
+        }
+    }
+    if (h != RASTER_PIN) {
+        fprintf(stderr, "test_raster_pinned: got 0x%llxu\n", (unsigned long long)h);
+    }
+    CHECK(h == RASTER_PIN);
+}
+
 int main(void)
 {
     test_clips();
@@ -367,5 +419,6 @@ int main(void)
     test_art_layers_pick();
     test_layers_match_clips();
     test_cache_art_switch();
+    test_raster_pinned();
     TEST_SUMMARY();
 }

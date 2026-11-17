@@ -137,6 +137,25 @@ static uint8_t sample_ink(const ArtFrame *f, int gx, int gy, int sx, int sy, int
     return art_ink(f, (int)floorf(ax), (int)floorf(ay));
 }
 
+/* The grid columns lo..hi-1 where a frame `size` art pixels long, its anchor
+ * pixel at `anchor_art`, can land when that pixel's middle sits on grid
+ * position `anchor_grid`: sample_ink's sum turned round, so art 0 and art
+ * `size` give the two ends. One pixel more on each side, so a float rounded
+ * differently there cannot lose a sample; clamped to the grid's 0..limit.
+ * Every grid pixel outside it would take only empty samples, so skipping it
+ * draws the same picture: at far zoom the frame covers a few dozen of the
+ * grid's 3,584 pixels, and each one takes up to 64 samples. */
+static void frame_span(int size, int anchor_art, float scale, float anchor_grid,
+                       int limit, int *lo, int *hi)
+{
+    float first = anchor_grid + 0.5f + (0.0f - (float)anchor_art - 0.5f) * scale;
+    float last = anchor_grid + 0.5f + ((float)size - (float)anchor_art - 0.5f) * scale;
+    int a = (int)floorf(first) - 1;
+    int b = (int)ceilf(last) + 1;
+    *lo = a < 0 ? 0 : (a > limit ? limit : a);
+    *hi = b < 0 ? 0 : (b > limit ? limit : b);
+}
+
 /* The PART_ value a layer's pixels are given, by ART_PART_ slot. */
 static const uint8_t LAYER_PART[ART_PART_COUNT] = {
     [ART_PART_ARMOUR] = PART_SHELL, [ART_PART_SWIM] = PART_BODY,
@@ -158,8 +177,11 @@ static void draw_layer(SkeletonRaster *r, const ArtFrame *f, uint8_t part, bool 
                        int samples, float scale, float anchor_x, float anchor_y,
                        int *x0, int *y0, int *x1, int *y1)
 {
-    for (int gy = 0; gy < r->h; gy++) {
-        for (int gx = 0; gx < r->w; gx++) {
+    int gx0, gx1, gy0, gy1;
+    frame_span(f->w, f->ax, scale, anchor_x, r->w, &gx0, &gx1);
+    frame_span(f->h, f->ay, scale, anchor_y, r->h, &gy0, &gy1);
+    for (int gy = gy0; gy < gy1; gy++) {
+        for (int gx = gx0; gx < gx1; gx++) {
             int count[INK_COUNT] = {0};
             int inked = 0;
             for (int sy = 0; sy < samples; sy++) {
@@ -222,8 +244,11 @@ void art_raster(SkeletonRaster *r, const ArtClip *clip, const ArtClip *const *la
 
     bool any = false;
     int x0 = r->w, y0 = r->h, x1 = 0, y1 = 0;
-    for (int gy = 0; gy < r->h; gy++) {
-        for (int gx = 0; gx < r->w; gx++) {
+    int gx0, gx1, gy0, gy1;
+    frame_span(f->w, f->ax, scale, anchor_x, r->w, &gx0, &gx1);
+    frame_span(f->h, f->ay, scale, anchor_y, r->h, &gy0, &gy1);
+    for (int gy = gy0; gy < gy1; gy++) {
+        for (int gx = gx0; gx < gx1; gx++) {
             /* How many samples landed on each ink. An array sized by the
              * enum's last value: a C array's length must be known when the
              * program is compiled, and INK_COUNT is. */
