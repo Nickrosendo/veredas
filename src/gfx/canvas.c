@@ -210,9 +210,33 @@ void canvas_darken_clip(Canvas *c, int keep, CanvasClip clip)
     int y0 = clip.y < 0 ? 0 : clip.y;
     int x1 = clip.x + clip.w > c->w ? c->w : clip.x + clip.w;
     int y1 = clip.y + clip.h > c->h ? c->h : clip.y + clip.h;
+    /* Every pixel of the view, twice a frame at night: about 4 ms a pass at
+     * 1920x1080 one pixel at a time (2026-11-17). So two pixels side by side
+     * are read as one 64-bit number and darkened with two multiplies, the
+     * way weather_fx.c washes them. Red and blue sit 16 bits apart and each
+     * product is at most 255 * 256 = 0xFF00, so it fits its 16 bits without
+     * reaching the next byte's; green has its 32-bit half to itself. The
+     * results are the same bytes darkened() gives, pixel for pixel. */
+    const uint64_t rb2 = 0x00FF00FF00FF00FFull; /* red and blue of two pixels */
+    const uint64_t g2 = 0x0000FF000000FF00ull;  /* green of two pixels */
+    const uint64_t top2 = 0xFF000000FF000000ull; /* the top bytes, kept */
+    uint64_t k = (uint64_t)keep;
     for (int py = y0; py < y1; py++) {
         uint32_t *row = &c->px[py * c->w];
-        for (int px = x0; px < x1; px++) {
+        int px = x0;
+        for (; px + 1 < x1; px += 2) {
+            uint64_t two;
+            /* memcpy, not *(uint64_t *)&row[px]: reading uint32_t memory
+             * through a uint64_t pointer breaks C's aliasing rule, and
+             * row[px] need not sit on an 8-byte boundary. The compiler turns
+             * the memcpy into one plain load. */
+            memcpy(&two, &row[px], sizeof(two));
+            uint64_t rb = (((two & rb2) * k) >> 8) & rb2;
+            uint64_t g = (((two & g2) * k) >> 8) & g2;
+            two = (two & top2) | rb | g;
+            memcpy(&row[px], &two, sizeof(two));
+        }
+        if (px < x1) { /* an odd width leaves one pixel */
             row[px] = darkened(row[px], keep);
         }
     }

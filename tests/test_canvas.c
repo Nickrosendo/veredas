@@ -344,6 +344,43 @@ static void test_darken_ellipse(void)
     canvas_free(&c);
 }
 
+/* Night's darkening, two pixels a multiply, against the plain formula: each
+ * colour byte times keep / 256 rounded down, the top byte kept. Random
+ * pixels, every keep, a clip starting and ending on odd columns so the last
+ * pixel of a row is done alone; nothing outside the clip changes. */
+static void test_darken_clip_matches_plain(void)
+{
+    Canvas c;
+    CHECK(canvas_init(&c, 37, 5));
+    static uint32_t start[37 * 5];
+    uint32_t seed = 12345u;
+    for (int i = 0; i < 37 * 5; i++) {
+        seed = seed * 1664525u + 1013904223u; /* any pixels will do */
+        start[i] = seed;
+    }
+    CanvasClip clip = {3, 1, 31, 3};
+    int wrong = 0;
+    for (int keep = 0; keep <= 256; keep++) {
+        memcpy(c.px, start, sizeof(start));
+        canvas_darken_clip(&c, keep, clip);
+        for (int y = 0; y < c.h; y++) {
+            for (int x = 0; x < c.w; x++) {
+                uint32_t p = start[y * c.w + x];
+                bool in = x >= clip.x && x < clip.x + clip.w && y >= clip.y &&
+                          y < clip.y + clip.h;
+                uint32_t k = (uint32_t)keep;
+                uint32_t want = (p & 0xFF000000u) |
+                                (((((p >> 16) & 0xFFu) * k) >> 8) << 16) |
+                                (((((p >> 8) & 0xFFu) * k) >> 8) << 8) |
+                                (((p & 0xFFu) * k) >> 8);
+                wrong += pixel(&c, x, y) != (in ? want : p);
+            }
+        }
+    }
+    CHECK(wrong == 0);
+    canvas_free(&c);
+}
+
 static void test_pixel_clips(void)
 {
     Canvas c;
@@ -376,6 +413,7 @@ int main(void)
     test_picture_clips_each_edge();
     test_picture_scale();
     test_darken_ellipse();
+    test_darken_clip_matches_plain();
     test_pixel_clips();
     TEST_SUMMARY();
 }
