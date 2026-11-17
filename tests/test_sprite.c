@@ -2,7 +2,9 @@
 
 #include <math.h>   /* fabsf, INFINITY, NAN */
 #include <stdlib.h> /* abs */
+#include <string.h> /* memcmp */
 
+#include "art.h"
 #include "canvas.h"
 #include "palette.h"
 #include "ramp.h"
@@ -73,6 +75,9 @@ static void test_cache_replaces_the_oldest(void)
 {
     SpriteCache c;
     CHECK(sprite_cache_init(&c, 8, 1));
+    /* Skeleton bodies: with drawn frames, attack poses 0 to 8 share fewer
+     * pictures than nine (test_art_frames_share_pictures). */
+    sprite_cache_set_art(&c, false);
     BodyTraits t = all_traits(0.3f);
     SpriteBody b = sprite_body_of(&t, SPECIES_WOLF, 1.0f, SPRITE_BASE_NORMAL);
     /* Frames of the attack are eight different keys. */
@@ -92,6 +97,33 @@ static void test_cache_replaces_the_oldest(void)
     sprite_picture(&c, &b, ACTION_ATTACK, 1);
     CHECK(c.builds == 10); /* 1 was the one replaced */
     sprite_cache_free(&c);
+}
+
+/* A body drawn from art frames has fewer of them than the skeleton has poses
+ * (a wolf walks in 4, the skeleton in 24), and its picture depends only on
+ * the art frame: every pose showing the same art frame is one picture, built
+ * once, the same pixels as drawn for any of those poses. */
+static void test_art_frames_share_pictures(void)
+{
+    SpriteCache c, plain;
+    CHECK(sprite_cache_init(&c, 64, 4));
+    CHECK(sprite_cache_init(&plain, 64, 4));
+    BodyTraits t = all_traits(0.5f);
+    SpriteBody b = sprite_body_of(&t, SPECIES_WOLF, 1.0f, SPRITE_BASE_NORMAL);
+    const ArtClip *clip = art_clip(SPECIES_WOLF, ACTION_WALK, &b.traits);
+    CHECK(clip != NULL && clip->frames < SPRITE_FRAMES[ACTION_WALK]);
+    for (int f = 0; f < SPRITE_FRAMES[ACTION_WALK]; f++) {
+        SpritePicture shared = sprite_picture(&c, &b, ACTION_WALK, f);
+        /* The same body in a cache asked for this one pose only. */
+        sprite_cache_reset(&plain);
+        SpritePicture alone = sprite_picture(&plain, &b, ACTION_WALK, f);
+        CHECK(shared.w == alone.w && shared.h == alone.h && shared.ox == alone.ox &&
+              shared.oy == alone.oy && shared.eye_x == alone.eye_x);
+        CHECK(memcmp(shared.ink, alone.ink, (size_t)(shared.w * shared.h)) == 0);
+    }
+    CHECK(c.builds == clip->frames);
+    sprite_cache_free(&c);
+    sprite_cache_free(&plain);
 }
 
 /* After r or a load nothing of the old world is kept. */
@@ -312,6 +344,7 @@ int main(void)
 {
     test_picture_cached();
     test_cache_replaces_the_oldest();
+    test_art_frames_share_pictures();
     test_reset_forgets_bodies();
     test_family_shares_a_body();
     test_body_of_matches_body();

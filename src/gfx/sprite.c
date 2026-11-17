@@ -472,12 +472,36 @@ static void keep(SpriteCache *c, SpriteStore *st, int e, const Anatomy *a)
     p->eye_detail = a->k > 1.6f;
 }
 
+/*
+ * With drawn frames, pose `frame` of n shows art frame frame * frames / n
+ * (draw_raster), and nothing else about the pose changes the picture: the
+ * skeleton under the art is always posed standing. So every pose showing the
+ * same art frame is handed the first of them, and they share one key and one
+ * picture: a wolf's 24 walking poses become its 4 drawn frames.
+ * The first pose showing art frame k is the smallest f with
+ * f * frames >= k * n, which is k * n / frames rounded up; adding frames - 1
+ * before dividing rounds an integer division up. Without art, or for a clip
+ * that has more frames than poses, the pose stays as it is.
+ */
+static int first_pose_of_art_frame(const SpriteCache *c, const SpriteBody *b,
+                                   int action, int frame)
+{
+    const ArtClip *clip = c->art ? art_clip(b->species, action, &b->traits) : NULL;
+    int n = SPRITE_FRAMES[action];
+    if (clip == NULL || clip->frames >= n) {
+        return frame;
+    }
+    int k = frame * clip->frames / n;
+    return (k * n + clip->frames - 1) / clip->frames;
+}
+
 SpritePicture sprite_picture(SpriteCache *c, const SpriteBody *b, int action, int frame)
 {
     action = action >= 0 && action < ACTION_COUNT ? action : ACTION_REST;
     int n = SPRITE_FRAMES[action];
     /* % keeps the sign of a negative number, so n is added before the second %. */
     frame = (frame % n + n) % n;
+    frame = first_pose_of_art_frame(c, b, action, frame);
     uint64_t key = key_of(b, action, frame);
     c->clock++;
     /* A small picture may be in either small store, by its size. */
