@@ -295,6 +295,37 @@ static void test_lab_pixels(void)
     canvas_free(&c);
 }
 
+/* The prelude's parade: inside its strip only, moving with the clock, the
+ * larger size from 1200 wide, and nothing in an area too short for it. */
+static void test_parade(void)
+{
+    Canvas c;
+    CHECK(canvas_init(&c, 1300, 400));
+    uint32_t magenta = canvas_rgb(255, 0, 255);
+    CHECK(lab_parade_height(1199) == 100 && lab_parade_height(1200) == 200);
+    canvas_fill(&c, magenta);
+    lab_draw_parade(&sprites, &c, 5000, 0, 50, 1300, 300);
+    int outside = 0, inside = 0;
+    for (int y = 0; y < c.h; y++) {
+        for (int x = 0; x < c.w; x++) {
+            bool in_strip = y >= 50 && y < 250;
+            uint32_t p = c.px[y * c.w + x];
+            outside += !in_strip && p != magenta;
+            inside += in_strip && p != magenta;
+        }
+    }
+    CHECK(outside == 0);
+    CHECK(inside == 1300 * 200);  /* the ground strip covers all of it */
+    uint64_t at_5s = hash_canvas(&c);
+    lab_draw_parade(&sprites, &c, 6000, 0, 50, 1300, 300);
+    CHECK(hash_canvas(&c) != at_5s);  /* a second on, the animals have walked */
+    canvas_fill(&c, magenta);
+    uint64_t empty = hash_canvas(&c);
+    lab_draw_parade(&sprites, &c, 5000, 0, 50, 1300, 150);  /* too short */
+    CHECK(hash_canvas(&c) == empty);
+    canvas_free(&c);
+}
+
 int main(void)
 {
     CHECK(sprite_cache_init(&sprites, SPRITE_ENTRIES, SPRITE_DETAIL_ENTRIES));
@@ -307,6 +338,7 @@ int main(void)
     test_lab_scale_at_window_size();
     test_lab_tiny_area_is_safe();
     test_lab_pixels();
+    test_parade();
     sprite_cache_free(&sprites);
     TEST_SUMMARY();
 }

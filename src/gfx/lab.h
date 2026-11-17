@@ -40,6 +40,17 @@ int lab_species_at(int role, int column);
 void lab_draw(SpriteCache *sprites, Canvas *c, int action, bool parts, uint64_t body_ms,
               int x, int y, int w, int h);
 
+/* The light screen while a world's first years run (the prelude): a strip
+ * of ground across (x, y, w) with a few animals walking along it, left to
+ * right and round again, by the body clock body_ms. A few dozen pixels' worth
+ * of cached pictures a frame, so it costs next to nothing beside the world.
+ * Drawn only when h holds lab_parade_height(w) rows. */
+void lab_draw_parade(SpriteCache *sprites, Canvas *c, uint64_t body_ms, int x, int y,
+                     int w, int h);
+/* The parade strip's height in pixels for an area w wide: 100, or 200 (the
+ * animals at twice the size) from 1200 wide. */
+int lab_parade_height(int w);
+
 /* The sky's colour above a ground strip, as a canvas pixel. */
 uint32_t lab_sky(void);
 /* A strip of the mockup's lab ground in the box (x, y, w, h): sky, then a

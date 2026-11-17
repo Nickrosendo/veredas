@@ -40,6 +40,7 @@
 #include "scene.h"
 #include "settings.h"
 #include "sim.h"
+#include "text.h" /* text_draw, text_width */
 #include "ui.h"
 #include "weather_fx.h"
 #include "years.h"
@@ -1574,6 +1575,49 @@ static void draw_keys(App *a)
                         "close the key list (?)");
 }
 
+/* A palette colour as a canvas pixel. */
+static uint32_t colour_pixel(Colour k)
+{
+    return canvas_rgb(k.r, k.g, k.b);
+}
+
+/*
+ * The map while a world's first years run (the ancestors, or a code's
+ * replay): not the world, which changes too fast to watch and cost a whole
+ * frame to draw on top of the 28 ms of ticks, so a busy machine stuttered.
+ * A name, how far the run has got as a bar, and a few animals walking: a
+ * millisecond or so. The line saying the year and "any key" stays on top.
+ */
+static void draw_prelude(App *a)
+{
+    const Layout *l = &a->layout;
+    int x = l->view_x, y = l->view_y, w = l->view_w, h = l->view_h;
+    canvas_rect(&a->canvas, x, y, w, h, colour_pixel(PALETTE_TEXT_BACKGROUND));
+    int strip_h = lab_parade_height(w);
+    /* The title, the bar under it and the strip, as one block in the middle. */
+    int block = 3 * FONT_H + strip_h;
+    int top = y + (h - block) / 2;
+    const char *title = "Veredas";
+    text_draw(&a->canvas, x + (w - text_width(title)) / 2, top, title,
+              colour_pixel(PALETTE_TEXT));
+    /* The share of the run done, in 0..1. until is above the start tick
+     * while the prelude is on, so there is no division by zero; a double,
+     * since a tick count is a uint64_t. */
+    double done = a->prelude.until > 0
+                      ? (double)a->sim.tick / (double)a->prelude.until
+                      : 0.0;
+    done = done > 1.0 ? 1.0 : done;
+    int bar_w = w / 3, bar_h = 6;
+    int bar_x = x + (w - bar_w) / 2, bar_y = top + 2 * FONT_H;
+    canvas_rect(&a->canvas, bar_x, bar_y, bar_w, bar_h, colour_pixel(PALETTE_BLACK));
+    canvas_rect(&a->canvas, bar_x, bar_y, (int)(done * (double)bar_w), bar_h,
+                colour_pixel(PALETTE_TEXT));
+    /* The wall clock, not the body clock: that one stops while paused, and the
+     * prelude runs on paused or not. */
+    lab_draw_parade(&a->scene.sprites, &a->canvas, a->last_ms, x, top + 3 * FONT_H, w,
+                    y + h - (top + 3 * FONT_H));
+}
+
 static void draw_frame(App *a, float fraction)
 {
     /* Every frame records its buttons afresh; ui_end makes them the ones a
@@ -1586,6 +1630,16 @@ static void draw_frame(App *a, float fraction)
         return;
     }
     const Layout *l = &a->layout;
+    if (a->prelude.active && a->sandbox.menu != SANDBOX_MENU_SETUP) {
+        draw_prelude(a);
+        draw_keys(a);
+        draw_title(a, followed);
+        draw_panel(a, followed);
+        draw_bottom(a);
+        ui_tip(&a->ui, &a->canvas, platform_now_ms());
+        ui_end(&a->ui);
+        return;
+    }
     scene_draw_world(&a->scene, &a->canvas, &a->camera, &a->sim, fraction,
                      a->last_ms, a->body_ms, l->view_x, l->view_y);
     /* Over the ground and the bodies, under the names and the cursor, so

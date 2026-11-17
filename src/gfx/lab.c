@@ -632,3 +632,57 @@ void lab_draw(SpriteCache *sprites, Canvas *c, int action, bool parts, uint64_t 
         }
     }
 }
+
+/* The animals of the parade, in the order they walk, and how fast all of them
+ * go, in art pixels a second. One speed for all keeps their gaps the same. */
+static const int PARADE[] = {SPECIES_DEER, SPECIES_WOLF, SPECIES_ZEBRA, SPECIES_FOX,
+                             SPECIES_ELEPHANT, SPECIES_HARE};
+#define PARADE_SPEED 24
+/* How tall the strip is, in art pixels: room for the elephant's detailed
+ * picture over the ground's rows. */
+#define PARADE_ROWS 100
+
+int lab_parade_height(int w)
+{
+    return PARADE_ROWS * (w >= 1200 ? 2 : 1);
+}
+
+void lab_draw_parade(SpriteCache *sprites, Canvas *c, uint64_t body_ms, int x, int y,
+                     int w, int h)
+{
+    int strip_h = lab_parade_height(w);
+    int s = strip_h / PARADE_ROWS;
+    if (w <= 0 || h < strip_h) {
+        return;
+    }
+    CanvasClip strip = {x, y, w, strip_h};
+    int line_y = lab_draw_ground(c, x, y, w, strip_h, s, 7, strip);
+    int count = (int)(sizeof PARADE / sizeof PARADE[0]);
+    /* The road is the strip plus room off its right end for the widest
+     * animal, so one leaves on the right before it comes back on the left;
+     * the animals share it in equal gaps. In art pixels, then times s. */
+    int road = w / s + SKELETON_DETAIL_W;
+    int gap = road / count;
+    /* The clock's milliseconds to pixels walked, before the %: a uint64_t,
+     * so a window left open for weeks does not overflow. */
+    uint64_t walked = body_ms * PARADE_SPEED / 1000u;
+    for (int i = 0; i < count; i++) {
+        int species = PARADE[i];
+        SpriteBody body = lab_body(species, false);
+        /* The cast: road is a few thousand at most, so the remainder fits. */
+        int along = (int)((walked + (uint64_t)(i * gap)) % (uint64_t)road);
+        int foot_x = x + (along - SKELETON_DETAIL_W / 2) * s;
+        uint32_t id = (uint32_t)species;
+        int frame = pose_frame(body_ms, id, ACTION_WALK,
+                               pose_cycle_seconds(&body, ACTION_WALK));
+        SpritePicture p = sprite_picture(sprites, &body, ACTION_WALK, frame);
+        if (p.x1 <= p.x0) {
+            continue;
+        }
+        SpritePalette pal;
+        sprite_palette_look(&pal, species);
+        int left, top;
+        place_by_foot(&p, foot_x, line_y, s, false, &left, &top);
+        paint_animal(c, &p, &pal, pose_eyes(body_ms, id), left, top, s, false, strip);
+    }
+}
