@@ -55,10 +55,11 @@ static void test_pack_frames_come_first(void)
         const ArtSet *built_in = art_set_in(ART_SETS, ART_SET_COUNT, sp);
         CHECK(art_set(sp) == (mine != NULL ? mine : built_in));
     }
-    /* The public build draws all 17 species from the built-in frames. */
+    /* The public build draws the 17 land species from the built-in frames;
+     * the sea's four have none and are drawn by the skeleton. */
     if (pack->art_sets == NULL) {
         for (int sp = 0; sp < SPECIES_COUNT; sp++) {
-            CHECK(art_set(sp) != NULL);
+            CHECK((art_set(sp) != NULL) == (SPECIES[sp].plan == PLAN_LAND));
         }
     }
 }

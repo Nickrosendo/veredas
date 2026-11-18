@@ -13,21 +13,21 @@ static SkeletonRaster raster_a, raster_b;
 /* The mockup's role genes (v9:82-86), rounded as the drawing rounds them. */
 static BodyTraits role_traits(int role)
 {
-    BodyTraits raw = {0.5f, 0.4f, 0.35f, 1.0f, 0.0f, 0.0f, 0.0f, 0.55f, 0.0f};
+    BodyTraits raw = {0.5f, 0.4f, 0.35f, 1.0f, 0.0f, 0.0f, 0.0f, 0.55f, 0.0f, 0};
     if (role == ROLE_RUNNER) {
-        BodyTraits r = {0.25f, 1.0f, 0.5f, 0.5f, 0.2f, 0.0f, 0.0f, 1.0f, 0.0f};
+        BodyTraits r = {0.25f, 1.0f, 0.5f, 0.5f, 0.2f, 0.0f, 0.0f, 1.0f, 0.0f, 0};
         raw = r;
     } else if (role == ROLE_HUNTER) {
-        BodyTraits r = {0.85f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.5f, 0.0f};
+        BodyTraits r = {0.85f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.5f, 0.0f, 0};
         raw = r;
     } else if (role == ROLE_WATCHER) {
-        BodyTraits r = {0.3f, 0.4f, 1.0f, 0.6f, 0.2f, 0.0f, 0.0f, 0.35f, 0.0f};
+        BodyTraits r = {0.3f, 0.4f, 1.0f, 0.6f, 0.2f, 0.0f, 0.0f, 0.35f, 0.0f, 0};
         raw = r;
     } else if (role == ROLE_ARMOURED) {
-        BodyTraits r = {0.8f, 0.2f, 0.3f, 0.8f, 0.1f, 1.0f, 0.0f, 0.3f, 0.0f};
+        BodyTraits r = {0.8f, 0.2f, 0.3f, 0.8f, 0.1f, 1.0f, 0.0f, 0.3f, 0.0f, 0};
         raw = r;
     } else if (role == ROLE_SWIMMER) {
-        BodyTraits r = {0.5f, 0.4f, 0.3f, 0.6f, 0.2f, 0.0f, 0.0f, 0.3f, 1.0f};
+        BodyTraits r = {0.5f, 0.4f, 0.3f, 0.6f, 0.2f, 0.0f, 0.0f, 0.3f, 1.0f, 0};
         raw = r;
     }
     return species_round(&raw);
@@ -44,7 +44,7 @@ static BodyTraits corner(int c)
     for (int i = 0; i < 7; i++) {
         v[i] = ((c >> i) & 1) ? 1.0f : 0.0f;
     }
-    BodyTraits t = {v[0], v[1], v[2], v[3], v[4], v[6], v[6], v[5], 0.0f};
+    BodyTraits t = {v[0], v[1], v[2], v[3], v[4], v[6], v[6], v[5], 0.0f, 0};
     return t;
 }
 
@@ -252,11 +252,13 @@ static void test_shape_list_fits(void)
     int most = 0;
     for (int s = 0; s < SPECIES_COUNT; s++) {
         for (int n = 0; n < 3; n++) {
+            /* A legless sea body is built from fewer shapes than four legs. */
+            int fewest = SPECIES[s].plan == PLAN_LAND ? 10 : 4;
             raster_species(&raster_a, s, largest_k(s), &poses[n], true, false);
-            CHECK(raster_a.shapes > 10 && raster_a.shapes <= SKELETON_SHAPES_MAX);
+            CHECK(raster_a.shapes > fewest && raster_a.shapes <= SKELETON_SHAPES_MAX);
             most = raster_a.shapes > most ? raster_a.shapes : most;
             raster_species(&raster_a, s, largest_k(s) * 1.6f, &poses[n], true, true);
-            CHECK(raster_a.shapes > 10 && raster_a.shapes <= SKELETON_SHAPES_MAX);
+            CHECK(raster_a.shapes > fewest && raster_a.shapes <= SKELETON_SHAPES_MAX);
         }
     }
     printf("  the most shapes a body asks for: %d of %d\n", most, SKELETON_SHAPES_MAX);
@@ -309,6 +311,13 @@ static void test_large_grid_keeps_the_ground_point(void)
         CHECK(raster_b.w == SKELETON_DETAIL_W && raster_b.oy == SKELETON_DETAIL_OY);
         /* The lowest ink is the outline under the feet, on the ground row,
          * for every species, pillar legs included. */
+        if (SPECIES[s].plan != PLAN_LAND) {
+            /* A sea body floats: nothing below the ground row, and its lowest
+             * ink within two rows of it. */
+            CHECK(raster_a.y1 - 1 <= raster_a.oy && raster_a.y1 - 1 >= raster_a.oy - 2);
+            CHECK(raster_b.y1 - 1 <= raster_b.oy && raster_b.y1 - 1 >= raster_b.oy - 3);
+            continue;
+        }
         CHECK(raster_a.y1 - 1 == raster_a.oy);
         CHECK(raster_b.y1 - 1 == raster_b.oy);
         if (raster_a.y1 - 1 != raster_a.oy || raster_b.y1 - 1 != raster_b.oy) {
@@ -709,8 +718,34 @@ static void test_far_silhouette_keeps_parts_drops_marks(void)
     CHECK(count_part_inks(&raster_b, PART_SHELL, INK_SHELL1, INK_SHELL1 + 3) > 0);
 }
 
+/* The four sea animals have no legs: none of their pixels is a leg's, and
+ * each fits the small grid at its K cap, as every species must. */
+static void test_sea_species_drawn_without_legs(void)
+{
+    const int sea[4] = {SPECIES_SHARK, SPECIES_DOLPHIN, SPECIES_SEA_TURTLE,
+                        SPECIES_MANATEE};
+    for (int k = 0; k < 4; k++) {
+        BodyTraits t = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f};
+        SpritePose p;
+        Anatomy a;
+        skeleton_pose_standing(&p);
+        species_anatomy(&a, sea[k], &t, skeleton_k_cap(sea[k]));
+        skeleton_raster(&raster_a, &a, &p, true, false);
+        int inked = 0, legs = 0;
+        for (int i = 0; i < raster_a.w * raster_a.h; i++) {
+            inked += raster_a.ink[i] != INK_NONE;
+            legs += raster_a.part[i] == PART_LEG || raster_a.part[i] == PART_FAR;
+        }
+        CHECK(inked > 50);
+        CHECK(legs == 0);
+        CHECK(raster_a.x1 - raster_a.x0 <= SPRITE_MAX_W);
+        CHECK(raster_a.eye_x >= 0);
+    }
+}
+
 int main(void)
 {
+    test_sea_species_drawn_without_legs();
     test_same_input_same_pixels();
     test_everything_inside_the_grid();
     test_other_traits_change_nothing();

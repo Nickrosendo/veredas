@@ -13,7 +13,7 @@ BodyTraits species_traits(const Genome *g)
     BodyTraits t = {g->g[GENE_SIZE], g->g[GENE_SPEED], g->g[GENE_SIGHT],
                     leaf > fruit ? leaf : fruit, g->g[GENE_MEAT],
                     g->g[GENE_ARMOUR], g->g[GENE_WEAPON], g->g[GENE_LEGS],
-                    g->g[GENE_SWIM]};
+                    g->g[GENE_SWIM], g->g[GENE_SWIM] >= SEA_FROM ? 1.0f : 0.0f};
     return t;
 }
 
@@ -40,12 +40,18 @@ BodyTraits species_round(const BodyTraits *t)
                     round_trait(t->sight),  round_trait(t->plant),
                     round_trait(t->meat),   round_trait(t->armour),
                     round_trait(t->weapon), round_trait(t->legs),
-                    round_trait(t->swim)};
+                    round_trait(t->swim),  t->sea};
     return r;
 }
 
 int species_role(const BodyTraits *t)
 {
+    if (t->sea > 0.5f) {
+        if (t->meat > t->plant && t->meat >= PART_FROM) {
+            return ROLE_SEA_HUNTER;
+        }
+        return t->armour >= PART_FROM ? ROLE_SEA_ARMOURED : ROLE_SEA_GRAZER;
+    }
     if (t->meat > t->plant && t->meat >= PART_FROM) {
         return ROLE_HUNTER;
     }
@@ -132,6 +138,21 @@ const Species SPECIES[SPECIES_COUNT] = {
     [SPECIES_GOAT] = {"goat", ROLE_GRAZER, HEX(0xa988e8),
         1, 1, 1, 1, 0.85f, 1, 0.8f, 0, 1, 1, 1, 0.7f, EAR_LEAF, TAIL_TUFT,
         true, false, false, false, FEATURE_CURL_HORNS | FEATURE_BEARD, NO_STRIPE},
+    /* The sea (the water and air design, 5.6). No legs: leg_len and leg_w
+     * stay 1 for the layout's sake and are never drawn. body_len stretches
+     * the body, chest and hip set its depth. */
+    [SPECIES_SHARK] = {"shark", ROLE_SEA_HUNTER, HEX(0x6b98c4),
+        1, 1.35f, 0.75f, 0.6f, 1, 1, 1, 0, 1, 1, 1, 1, EAR_POINTED, TAIL_LONG,
+        false, false, false, false, FEATURE_PALE_FACE, NO_STRIPE, PLAN_FISH},
+    [SPECIES_DOLPHIN] = {"dolphin", ROLE_SEA_HUNTER, HEX(0x5aa0dc),
+        0.95f, 1.25f, 0.8f, 0.65f, 1, 1, 1, 0, 1, 1.3f, 0.8f, 1, EAR_POINTED, TAIL_LONG,
+        false, false, false, false, 0, NO_STRIPE, PLAN_FISH},
+    [SPECIES_SEA_TURTLE] = {"sea turtle", ROLE_SEA_ARMOURED, HEX(0x86b05a),
+        0.9f, 1, 0.9f, 0.9f, 1, 1, 1, 0, 0.8f, 0.6f, 1, 1, EAR_POINTED, TAIL_STUB,
+        false, false, false, false, FEATURE_SHELL, NO_STRIPE, PLAN_TURTLE},
+    [SPECIES_MANATEE] = {"manatee", ROLE_SEA_GRAZER, HEX(0xb48c6c),
+        1.15f, 1.2f, 1.05f, 1.05f, 1, 1, 1, 0, 1, 0.7f, 1.2f, 1, EAR_POINTED, TAIL_PADDLE,
+        false, false, false, false, FEATURE_FOLDS, NO_STRIPE, PLAN_FISH},
 };
 
 uint32_t species_hash(uint32_t lineage, int role)

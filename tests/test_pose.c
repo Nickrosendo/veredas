@@ -14,7 +14,7 @@ static SkeletonRaster standing, sleeping;
 /* A middling body of this species, at Normal. */
 static SpriteBody middling(int species)
 {
-    BodyTraits t = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f};
+    BodyTraits t = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0};
     return sprite_body_of(&t, species, 1.0f, SPRITE_BASE_NORMAL);
 }
 
@@ -48,10 +48,14 @@ static void raster_of(SkeletonRaster *out, const SpriteBody *b, int action, int 
     skeleton_raster(out, &a, &p, true, false);
 }
 
-/* Asleep, every species lies down: its body drops to the ground. */
+/* Asleep, every land species lies down: its body drops to the ground. A sea
+ * body has no legs to fold: it floats as it is. */
 static void test_sleep_folds_the_legs(void)
 {
     for (int s = 0; s < SPECIES_COUNT; s++) {
+        if (SPECIES[s].plan != PLAN_LAND) {
+            continue;
+        }
         SpriteBody b = middling(s);
         raster_of(&standing, &b, ACTION_REST, 0);
         raster_of(&sleeping, &b, ACTION_SLEEP, 0);
@@ -253,7 +257,7 @@ static void test_walk_has_a_planted_and_a_lifted_foot(void)
         if (SPECIES[sp].hop) {
             continue;
         }
-        BodyTraits t = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f};
+        BodyTraits t = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0};
         SpriteBody b = sprite_body_of(&t, sp, 1.0f, SPRITE_BASE_DETAIL);
         bool lifted_bent = false;
         for (int f = 0; f < SPRITE_FRAMES[ACTION_WALK]; f++) {

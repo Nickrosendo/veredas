@@ -3,19 +3,20 @@
 #include <string.h> /* memcmp, memcpy */
 
 #include "art.h"
+#include "content.h" /* content_get */
 #include "sprite.h"
 
 /* All nine traits at one value. */
 static BodyTraits all_traits(float v)
 {
-    BodyTraits t = {v, v, v, v, v, v, v, v, v};
+    BodyTraits t = {v, v, v, v, v, v, v, v, v, 0};
     return t;
 }
 
 /* The lab's hunter genes: long legs (0.5, rounded to 2/3), no other part. */
 static BodyTraits hunter(void)
 {
-    BodyTraits t = {0.85f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.5f, 0.0f};
+    BodyTraits t = {0.85f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.5f, 0.0f, 0};
     return species_round(&t);
 }
 
@@ -28,12 +29,19 @@ static void small_grid(SkeletonRaster *r)
     r->oy = SKELETON_OY;
 }
 
-/* Every species has frames for every action; a species number with no art
- * set (there is none among the seventeen now, so one past them) has none. */
+/* Every land species has frames for every action; a species with no art set
+ * (the sea's four in the public build, and one past the last species) has
+ * none, and is drawn by the skeleton. */
 static void test_clips(void)
 {
     BodyTraits t = hunter();
     for (int sp = 0; sp < SPECIES_COUNT; sp++) {
+        if (SPECIES[sp].plan != PLAN_LAND) {
+            if (content_get()->art_sets == NULL) {
+                CHECK(art_clip(sp, ACTION_REST, &t) == NULL);
+            }
+            continue;
+        }
         for (int a = 0; a < ACTION_COUNT; a++) {
             const ArtClip *clip = art_clip(sp, a, &t);
             CHECK(clip != NULL && clip->frames > 0);
@@ -68,6 +76,9 @@ static void test_parts_keep_frames(void)
     CHECK(art_clip(SPECIES_WOLF, ACTION_REST, &t) != NULL);
     BodyTraits all = all_traits(1.0f);
     for (int sp = 0; sp < SPECIES_COUNT; sp++) {
+        if (SPECIES[sp].plan != PLAN_LAND) {
+            continue; /* no frames in the public build: the skeleton draws it */
+        }
         CHECK(art_clip(sp, ACTION_WALK, &all) != NULL);
     }
 }
@@ -379,7 +390,8 @@ static void test_raster_pinned(void)
     const float scales[] = {1.0f, 0.6f, 0.33f, 0.2f, 0.125f};
     const float anchors[2][2] = {{30.0f, 48.0f}, {3.5f, 20.0f}};
     uint64_t h = 1469598103934665603u;
-    for (int sp = 0; sp < SPECIES_COUNT; sp++) {
+    /* The seventeen land species: the sea's have no built-in frames. */
+    for (int sp = 0; sp < SPECIES_SHARK; sp++) {
         for (int a = 0; a < ACTION_COUNT; a++) {
             const ArtClip *clip = art_clip(sp, a, &t);
             const ArtClip *layers[ART_PART_COUNT];

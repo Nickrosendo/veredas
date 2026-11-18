@@ -10,16 +10,18 @@
 /* One picture cache for all the tests: building it is the slow part. */
 static SpriteCache sprites;
 
-/* Every species shows in exactly one cell, in the row of its role. */
+/* Every species shows in exactly one cell, in the row of its role (a sea
+ * animal in its land role's row). */
 static void test_lab_shows_every_species_once(void)
 {
     int seen[SPECIES_COUNT] = {0};
-    for (int role = 0; role < ROLE_COUNT; role++) {
+    for (int role = 0; role < LAB_ROWS; role++) {
         for (int col = 0; col < LAB_COLUMNS; col++) {
             int s = lab_species_at(role, col);
             if (s >= 0) {
                 CHECK(s < SPECIES_COUNT);
-                CHECK(SPECIES[s].role == role);
+                CHECK(lab_row_of(s) == role);
+                CHECK(SPECIES[s].role == role || SPECIES[s].role >= ROLE_SEA_HUNTER);
                 seen[s]++;
             }
         }
@@ -28,7 +30,7 @@ static void test_lab_shows_every_species_once(void)
         CHECK(seen[s] == 1);
     }
     CHECK(lab_species_at(-1, 0) == -1);
-    CHECK(lab_species_at(ROLE_COUNT, 0) == -1);
+    CHECK(lab_species_at(LAB_ROWS, 0) == -1);
     CHECK(lab_species_at(0, -1) == -1);
     CHECK(lab_species_at(0, LAB_COLUMNS) == -1);
 }
@@ -75,7 +77,7 @@ static void check_cells_not_empty(int w, int h, int action, uint64_t body_ms)
     Canvas c;
     CHECK(canvas_init(&c, w, h));
     lab_draw(&sprites, &c, action, false, body_ms, 0, 0, w, h);
-    for (int role = 0; role < ROLE_COUNT; role++) {
+    for (int role = 0; role < LAB_ROWS; role++) {
         for (int col = 0; col < LAB_COLUMNS; col++) {
             if (lab_species_at(role, col) < 0) {
                 continue;
@@ -283,8 +285,11 @@ static void test_lab_pixels(void)
      * looked at by eye in the lab, Nicolas's approval of the new look still
      * to come. Re-pinned 2026-11-12: all seventeen species drawn from
      * frames; looked at by eye in all seven actions, his approval to come.
-     * Re-pinned 2026-11-14: the lab's title in the new fixed font (text.h). */
-    static const uint64_t EXPECTED = 0x5970d3a90df2970eu;
+     * Re-pinned 2026-11-14: the lab's title in the new fixed font (text.h).
+     * Re-pinned 2026-11-18: the four sea animals, drawn by the skeleton, in
+     * their land roles' rows (five columns); looked at by eye, his approval
+     * to come. */
+    static const uint64_t EXPECTED = 0x20716f6c0618cb4eu;
     if (h != EXPECTED) {
         printf("lab: 0x%llxu\n", (unsigned long long)h);
     }

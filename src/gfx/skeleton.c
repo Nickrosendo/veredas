@@ -840,13 +840,151 @@ static bool has(const Body *b, unsigned feature)
     return (b->sp->features & feature) != 0;
 }
 
+/* ---- the sea's bodies (the water and air design, 5.6) ---- */
+
+/* A flat triangle through three points: a fin or a flipper. */
+static Shape *new_triangle(ShapeList *list, int part, int bias, float x0, float y0,
+                           float x1, float y1, float x2, float y2)
+{
+    Shape *s = new_shape(list, part, bias);
+    add_point(s, x0, y0);
+    add_point(s, x1, y1);
+    add_point(s, x2, y2);
+    s->triangle = true;
+    return s;
+}
+
+/* The sea plans' numbers, worked out once per picture from the land layout:
+ * len is about half the body without its tail, depth its half-height, swing
+ * how far the tail and flippers have moved this frame. */
+typedef struct {
+    float len, depth, swing;
+} SeaBody;
+
+/* Moves the land layout's body, head and mouth to where a legless body has
+ * them: floating just above the ground point (the water's surface), the head
+ * at the front end in line with the body. Everything that reads the head and
+ * mouth afterwards (the eye, the nose, the teeth) then finds them there. */
+static SeaBody lay_out_sea(Body *b, bool turtle)
+{
+    const Anatomy *a = b->a;
+    SeaBody sb;
+    sb.len = b->body_len;
+    sb.depth = (b->hip_r + b->chest_r) * (turtle ? 0.42f : 0.38f);
+    /* The pose's tail swing, and a slow beat from the walk cycle. sinf of a
+     * phase in 0..1 times 2 pi goes once round per cycle. */
+    sb.swing = (b->p->tail * 0.5f + 0.35f * sinf(b->p->phase * 6.2831853f)) * sb.depth;
+    /* High enough that the lowest flipper tip (1.45 depths below the middle)
+     * ends at the ground point, like a land body's feet: nothing is drawn
+     * below the ground row, where the grid has little room. */
+    b->by = -sb.depth * 1.5f + b->bob;
+    b->hx = b->bx + sb.len * (turtle ? 1.15f : 1.0f);
+    b->hy = b->by + sb.depth * (turtle ? 0.05f : -0.05f);
+    b->mx = b->hx + a->muzzle * (turtle ? 0.45f : 0.9f);
+    b->my = b->hy + sb.depth * 0.15f;
+    b->jpx = b->hx;
+    b->jpy = b->hy + sb.depth * 0.3f;
+    b->jtx = b->mx - a->skull * 0.3f;
+    b->jty = b->my + sb.depth * 0.3f + b->jaw * sb.depth * 0.4f;
+    return sb;
+}
+
+/* Shark, dolphin and manatee: far flipper, tail fin, body, back fin, head,
+ * near flipper. The manatee's tail is a round paddle and it has no back fin;
+ * the shark's tail stands tall, the dolphin's flukes lie flat. */
+static void build_fish(ShapeList *list, Body *b)
+{
+    SeaBody sb = lay_out_sea(b, false);
+    float L = sb.len, R = sb.depth, sw = sb.swing, bx = b->bx, by = b->by;
+    const Anatomy *a = b->a;
+    int species = a->species;
+    new_triangle(list, PART_EAR_BACK, -2, bx + 0.35f * L, by + 0.4f * R,
+                 bx + 0.05f * L, by + 0.5f * R, bx - 0.05f * L + 0.2f * sw, by + 1.25f * R);
+    float tail_x = bx - 1.25f * L;
+    if (b->sp->tail == TAIL_PADDLE) {
+        new_ellipse(list, PART_TAIL, -1, tail_x - 0.25f * L, by + 0.1f * R + 0.5f * sw,
+                    0.5f * L, 0.6f * R);
+    } else if (species == SPECIES_DOLPHIN) {
+        new_triangle(list, PART_TAIL, -1, tail_x + 0.25f * L, by, tail_x - 0.6f * L,
+                     by - 0.4f * R + sw, tail_x - 0.6f * L, by + 0.5f * R + sw);
+    } else {
+        new_triangle(list, PART_TAIL, -1, tail_x + 0.25f * L, by, tail_x - 0.55f * L,
+                     by - 1.3f * R + sw, tail_x - 0.35f * L, by + 0.9f * R + sw);
+    }
+    Shape *body = new_shape(list, PART_BODY, 0);
+    add_oval(body, bx - 0.75f * L, by + 0.05f * R, 0.65f * L, 0.55f * R);
+    add_oval(body, bx - 0.05f * L, by, 0.9f * L, R);
+    add_oval(body, bx + 0.6f * L, by + 0.05f * R, 0.55f * L, 0.85f * R);
+    if (species == SPECIES_SHARK) {
+        new_triangle(list, PART_EAR, -1, bx - 0.3f * L, by - 0.8f * R, bx + 0.3f * L,
+                     by - 0.8f * R, bx - 0.25f * L, by - 2.0f * R);
+    } else if (species == SPECIES_DOLPHIN) {
+        new_triangle(list, PART_EAR, -1, bx - 0.35f * L, by - 0.8f * R, bx + 0.15f * L,
+                     by - 0.8f * R, bx - 0.4f * L, by - 1.6f * R);
+    }
+    Shape *head = new_shape(list, PART_HEAD, 0);
+    float ry = a->skull * 0.85f < R * 0.9f ? a->skull * 0.85f : R * 0.9f;
+    add_oval(head, b->hx, b->hy, a->skull, ry);
+    add_point(head, b->hx, b->hy + 0.1f * R);
+    add_point(head, b->mx, b->my);
+    head->r0 = ry * 0.8f;
+    head->r1 = a->muzzle_r;
+    new_triangle(list, PART_EAR, 0, bx + 0.5f * L, by + 0.45f * R, bx + 0.15f * L,
+                 by + 0.55f * R, bx + 0.05f * L + 0.3f * sw, by + 1.4f * R);
+}
+
+/* The sea turtle: far flippers, belly plate, shell, neck and head, near
+ * flippers. The shell uses the land shell's banded ink. */
+static void build_turtle(ShapeList *list, Body *b)
+{
+    SeaBody sb = lay_out_sea(b, true);
+    float L = sb.len, R = sb.depth, sw = sb.swing, bx = b->bx, by = b->by;
+    const Anatomy *a = b->a;
+    new_triangle(list, PART_EAR_BACK, -2, bx + 0.45f * L, by + 0.2f * R, bx + 0.15f * L,
+                 by + 0.25f * R, bx + 0.25f * L - sw, by + 1.3f * R);
+    new_triangle(list, PART_EAR_BACK, -2, bx - 0.5f * L, by + 0.2f * R, bx - 0.75f * L,
+                 by + 0.25f * R, bx - 0.85f * L + 0.5f * sw, by + 0.9f * R);
+    new_ellipse(list, PART_TAIL, -1, bx - 1.05f * L, by + 0.3f * R, 0.25f * L, 0.2f * R);
+    new_ellipse(list, PART_BODY, 0, bx, by + 0.35f * R, 0.95f * L, 0.45f * R);
+    float grow = a->shell_scale;
+    Shape *shell = new_ellipse(list, PART_SHELL, 0, bx, by - 0.1f * R, L * grow,
+                               R * 1.05f * grow);
+    shell->flags = SHAPE_CUT;
+    shell->cut_y = by + 0.45f * R;
+    new_cone(list, PART_NECK, 0, bx + 0.7f * L, by + 0.2f * R, b->hx, b->hy,
+             R * 0.35f, a->skull * 0.55f);
+    Shape *head = new_shape(list, PART_HEAD, 0);
+    add_oval(head, b->hx, b->hy, a->skull * 0.7f, a->skull * 0.55f);
+    add_point(head, b->hx, b->hy);
+    add_point(head, b->mx, b->my);
+    head->r0 = a->skull * 0.45f;
+    head->r1 = a->muzzle_r * 0.8f;
+    new_triangle(list, PART_EAR, 0, bx + 0.55f * L, by + 0.25f * R, bx + 0.2f * L,
+                 by + 0.3f * R, bx + 0.05f * L + sw, by + 1.45f * R);
+    new_triangle(list, PART_EAR, 0, bx - 0.45f * L, by + 0.25f * R, bx - 0.7f * L,
+                 by + 0.3f * R, bx - 0.8f * L - 0.5f * sw, by + 0.95f * R);
+}
+
+/* Declared here, defined after build_shapes: C needs a function declared
+ * before its first call, and a prototype is that declaration on its own. */
+static void box_all(ShapeList *list, const Body *b);
+
 /* Every shape in the mockup's order: far legs, tail, body, shell, neck,
  * manes, far ear, horns and antlers, mouth, jaw, beard, head, the rhino's
  * horns, trunk, tusks, near ear, near legs. */
-static void build_shapes(ShapeList *list, const Body *b)
+static void build_shapes(ShapeList *list, Body *b)
 {
     list->count = 0;
     list->wanted = 0;
+    if (b->sp->plan != PLAN_LAND) {
+        if (b->sp->plan == PLAN_TURTLE) {
+            build_turtle(list, b);
+        } else {
+            build_fish(list, b);
+        }
+        box_all(list, b);
+        return;
+    }
     add_leg(list, b, 0);
     add_leg(list, b, 1);
     add_tail(list, b);
@@ -888,6 +1026,12 @@ static void build_shapes(ShapeList *list, const Body *b)
     add_ear(list, b, 0.0f, 0, PART_EAR);
     add_leg(list, b, 2);
     add_leg(list, b, 3);
+    box_all(list, b);
+}
+
+/* Each shape's box, and the box of them all grown by one for the outline. */
+static void box_all(ShapeList *list, const Body *b)
+{
     Box all = {b->w, b->h, -1, -1};
     for (int i = 0; i < list->count; i++) {
         Shape *s = &list->shape[i];

@@ -12,8 +12,13 @@
 #include "canvas.h"
 #include "sprite.h"
 
-/* Species per row: the most any role has. */
-#define LAB_COLUMNS 3
+/* Species per row: the most any row has (the hunters, sea hunters with them). */
+#define LAB_COLUMNS 5
+/* The rows: one per land role (hunters, swimmers, armoured, runners,
+ * watchers, plant-eaters, as the ROLE_ values number them). A sea animal is
+ * shown in its land role's row: a seventh row would not fit a 1280 x 720
+ * window at scale 2. */
+#define LAB_ROWS ROLE_SEA_HUNTER
 /* The number keys 1 to LAB_KEYS choose what the animals do. */
 #define LAB_KEYS 6
 /* A ground strip's bottom: the line and the six rows of ground under it, in
@@ -24,10 +29,13 @@
  * graze, bite, sleep) chooses; -1 for any other number. */
 int lab_action_of_key(int number);
 
-/* The species shown in row `role` (a ROLE_ value; rows run hunters, swimmers,
- * armoured, runners, watchers, plant-eaters) at this column, in table order; -1
- * for an empty cell or a place outside the page. */
-int lab_species_at(int role, int column);
+/* The row a species is shown in: its role, a sea role's land twin at sea
+ * (sea hunters with the hunters, the sea's armoured with the armoured, the
+ * sea's grazer with the plant-eaters). */
+int lab_row_of(int species);
+/* The species shown in row `row` (0 to LAB_ROWS - 1) at this column, in table
+ * order; -1 for an empty cell or a place outside the page. */
+int lab_species_at(int row, int column);
 
 /* Every species in rows by role, each on a strip of ground, from the detailed
  * pictures (SPRITE_BASE_DETAIL, the mockup lab's scale) at scale 2, or scale 1

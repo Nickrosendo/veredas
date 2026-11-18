@@ -20,6 +20,9 @@
 typedef struct {
     float size, speed, sight, plant, meat;
     float armour, weapon, legs, swim;
+    /* 1 for a sea body (the raw swim gene at SEA_FROM or above), else 0. The
+     * rounded swim cannot say it: 0.75 and 0.8 both round to 1. */
+    float sea;
 } BodyTraits;
 
 BodyTraits species_traits(const Genome *g);
@@ -35,14 +38,22 @@ BodyTraits species_traits(const Genome *g);
 BodyTraits species_round(const BodyTraits *t);
 
 enum { ROLE_HUNTER, ROLE_SWIMMER, ROLE_ARMOURED, ROLE_RUNNER, ROLE_WATCHER,
-       ROLE_GRAZER, ROLE_COUNT };
-/* The role of rounded traits: the first rule that matches wins. */
+       ROLE_GRAZER, ROLE_SEA_HUNTER, ROLE_SEA_ARMOURED, ROLE_SEA_GRAZER,
+       ROLE_COUNT };
+/* The role of rounded traits: the first rule that matches wins. A sea body
+ * asks its habitat first: a hunter, an armoured body or anything else (the
+ * sea's grazer: a sea runner or watcher is drawn as one too). */
 int species_role(const BodyTraits *rounded);
 
 enum { SPECIES_WOLF, SPECIES_LION, SPECIES_TIGER, SPECIES_OTTER, SPECIES_BEAVER,
        SPECIES_HIPPO, SPECIES_ELEPHANT, SPECIES_RHINO, SPECIES_ARMADILLO,
        SPECIES_HARE, SPECIES_GAZELLE, SPECIES_FOX, SPECIES_FENNEC, SPECIES_LEMUR,
-       SPECIES_DEER, SPECIES_ZEBRA, SPECIES_GOAT, SPECIES_COUNT };
+       SPECIES_DEER, SPECIES_ZEBRA, SPECIES_GOAT,
+       SPECIES_SHARK, SPECIES_DOLPHIN, SPECIES_SEA_TURTLE, SPECIES_MANATEE,
+       SPECIES_COUNT };
+/* How a species' body is built: four legs, or one of the two legless sea
+ * bodies (a fish-shaped one, and a shell with flippers). */
+enum { PLAN_LAND, PLAN_FISH, PLAN_TURTLE };
 enum { EAR_POINTED, EAR_LEAF, EAR_ROUND, EAR_BIG, EAR_LONG, EAR_FLAP };
 enum { TAIL_BUSHY, TAIL_TUFT, TAIL_PUFF, TAIL_TASSEL, TAIL_RING, TAIL_LONG,
        TAIL_THIN, TAIL_STUB, TAIL_PADDLE };
@@ -65,6 +76,7 @@ typedef struct {
     bool hoof, pillar, hop, feline;
     unsigned features;
     Colour stripe; float stripe_freq;
+    int plan;  /* a PLAN_ value; rows that leave it out are PLAN_LAND (0) */
 } Species;
 extern const Species SPECIES[SPECIES_COUNT];
 

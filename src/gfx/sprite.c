@@ -53,7 +53,8 @@ bool sprite_body_equal(const SpriteBody *a, const SpriteBody *b)
     return a->species == b->species && a->k_level == b->k_level && a->base == b->base &&
            x->size == y->size && x->speed == y->speed && x->sight == y->sight &&
            x->plant == y->plant && x->meat == y->meat && x->armour == y->armour &&
-           x->weapon == y->weapon && x->legs == y->legs && x->swim == y->swim;
+           x->weapon == y->weapon && x->legs == y->legs && x->swim == y->swim &&
+           x->sea == y->sea;
 }
 
 const int SPRITE_FRAMES[ACTION_COUNT] = {24, 24, 16, 30, 39, 54, 6};

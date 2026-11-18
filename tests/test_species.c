@@ -11,7 +11,7 @@ static BodyTraits rounded(float size, float speed, float sight, float plant,
                           float meat, float armour, float weapon, float legs,
                           float swim)
 {
-    BodyTraits raw = {size, speed, sight, plant, meat, armour, weapon, legs, swim};
+    BodyTraits raw = {size, speed, sight, plant, meat, armour, weapon, legs, swim, 0};
     return species_round(&raw);
 }
 
@@ -29,7 +29,7 @@ static int role_of(BodyTraits raw)
 
 static void test_roles_first_match_wins(void)
 {
-    BodyTraits t = {0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0.2f};
+    BodyTraits t = {0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0};
     CHECK(role_of(t) == ROLE_GRAZER);
 
     t = base(); t.meat = 0.8f; t.plant = 0.6f; t.swim = 1.0f;
@@ -66,8 +66,10 @@ static void test_every_species_listed_once_in_its_role(void)
                     SPECIES[s].look.b == SPECIES[o].look.b));
         }
     }
+    /* Two or more to choose from on land; the sea's armoured and grazing
+     * roles have one animal each (the water and air design, 5.6). */
     for (int r = 0; r < ROLE_COUNT; r++) {
-        CHECK(in_role[r] >= 2);
+        CHECK(in_role[r] >= (r == ROLE_SEA_ARMOURED || r == ROLE_SEA_GRAZER ? 1 : 2));
     }
     /* A few values pinned, so a transcription slip fails. */
     CHECK(SPECIES[SPECIES_ELEPHANT].leg_w == 1.9f);
@@ -197,7 +199,7 @@ static void test_family_keeps_species_while_growing(void)
 
 static void test_small_gene_change_same_body(void)
 {
-    BodyTraits a = {0.40f, 0.3f, 0.3f, 0.5f, 0.1f, 0.2f, 0.2f, 0.2f, 0.2f};
+    BodyTraits a = {0.40f, 0.3f, 0.3f, 0.5f, 0.1f, 0.2f, 0.2f, 0.2f, 0.2f, 0};
     BodyTraits b = a;
     b.size = 0.41f;
     BodyTraits ra = species_round(&a), rb = species_round(&b);
@@ -272,8 +274,49 @@ static void test_anatomy_follows_genes(void)
     CHECK(w.species == SPECIES_WOLF && w.k == 1.0f);
 }
 
+/* A sea body asks its habitat first: a hunter is a shark or a dolphin, an
+ * armoured body a sea turtle, anything else a manatee. */
+static void test_sea_roles(void)
+{
+    BodyTraits t = base();
+    t.swim = 1.0f;
+    t.sea = 1.0f;
+    CHECK(role_of(t) == ROLE_SEA_GRAZER);
+    t.speed = 1.0f;
+    t.sight = 1.0f;
+    CHECK(role_of(t) == ROLE_SEA_GRAZER); /* no sea runner or watcher */
+    t.armour = 1.0f;
+    CHECK(role_of(t) == ROLE_SEA_ARMOURED);
+    t.meat = 1.0f;
+    CHECK(role_of(t) == ROLE_SEA_HUNTER);
+    for (uint32_t lineage = 0; lineage < 200; lineage++) {
+        int s = species_pick(lineage, ROLE_SEA_HUNTER, 2.0f);
+        CHECK(s == SPECIES_SHARK || s == SPECIES_DOLPHIN);
+        CHECK(species_pick(lineage, ROLE_SEA_ARMOURED, 2.0f) == SPECIES_SEA_TURTLE);
+        CHECK(species_pick(lineage, ROLE_SEA_GRAZER, 2.0f) == SPECIES_MANATEE);
+    }
+}
+
+/* The line is on the raw gene: a swim of 0.75 rounds like 0.8 but stays a land
+ * swimmer (otter, beaver, hippo), and 0.8 is a sea body. */
+static void test_land_swimmer_keeps_land_species(void)
+{
+    Genome g = {0};
+    g.g[GENE_LEAF] = 0.3f;
+    g.g[GENE_SWIM] = 0.75f;
+    BodyTraits raw = species_traits(&g);
+    CHECK(raw.sea == 0.0f);
+    CHECK(role_of(raw) == ROLE_SWIMMER);
+    g.g[GENE_SWIM] = 0.8f;
+    raw = species_traits(&g);
+    CHECK(raw.sea == 1.0f);
+    CHECK(role_of(raw) == ROLE_SEA_GRAZER);
+}
+
 int main(void)
 {
+    test_sea_roles();
+    test_land_swimmer_keeps_land_species();
     test_roles_first_match_wins();
     test_every_species_listed_once_in_its_role();
     test_species_hash_stable_and_spread();

@@ -24,7 +24,7 @@
 #define NAME_COLUMN (12 * FONT_W)  /* the role names on the left */
 #define ROW_GAP 6             /* under a cell's name, before the next row */
 
-static const char *const ROLE_TITLES[ROLE_COUNT] = {
+static const char *const ROW_TITLES[LAB_ROWS] = {
     [ROLE_HUNTER] = "hunters",   [ROLE_SWIMMER] = "swimmers",
     [ROLE_ARMOURED] = "armoured", [ROLE_RUNNER] = "runners",
     [ROLE_WATCHER] = "watchers", [ROLE_GRAZER] = "plant-eaters",
@@ -45,14 +45,24 @@ int lab_action_of_key(int number)
     return number >= 1 && number <= LAB_KEYS ? KEY_ACTIONS[number - 1] : -1;
 }
 
-int lab_species_at(int role, int column)
+int lab_row_of(int species)
 {
-    if (role < 0 || role >= ROLE_COUNT || column < 0 || column >= LAB_COLUMNS) {
+    switch (SPECIES[species].role) {
+    case ROLE_SEA_HUNTER: return ROLE_HUNTER;
+    case ROLE_SEA_ARMOURED: return ROLE_ARMOURED;
+    case ROLE_SEA_GRAZER: return ROLE_GRAZER;
+    default: return SPECIES[species].role;
+    }
+}
+
+int lab_species_at(int row, int column)
+{
+    if (row < 0 || row >= LAB_ROWS || column < 0 || column >= LAB_COLUMNS) {
         return -1;
     }
     int seen = 0;
     for (int s = 0; s < SPECIES_COUNT; s++) {
-        if (SPECIES[s].role == role) {
+        if (lab_row_of(s) == row) {
             if (seen == column) {
                 return s;
             }
@@ -67,17 +77,23 @@ static BodyTraits role_genes(int role)
 {
     switch (role) {
     case ROLE_HUNTER:
-        return (BodyTraits){0.85f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.5f, 0.0f};
+        return (BodyTraits){0.85f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.5f, 0.0f, 0.0f};
     case ROLE_SWIMMER:
-        return (BodyTraits){0.6f, 0.35f, 0.4f, 0.7f, 0.2f, 0.0f, 0.0f, 0.3f, 1.0f};
+        return (BodyTraits){0.6f, 0.35f, 0.4f, 0.7f, 0.2f, 0.0f, 0.0f, 0.3f, 1.0f, 0.0f};
     case ROLE_ARMOURED:
-        return (BodyTraits){0.8f, 0.2f, 0.3f, 0.8f, 0.1f, 1.0f, 0.0f, 0.3f, 0.0f};
+        return (BodyTraits){0.8f, 0.2f, 0.3f, 0.8f, 0.1f, 1.0f, 0.0f, 0.3f, 0.0f, 0.0f};
     case ROLE_RUNNER:
-        return (BodyTraits){0.25f, 1.0f, 0.5f, 0.5f, 0.2f, 0.0f, 0.0f, 1.0f, 0.0f};
+        return (BodyTraits){0.25f, 1.0f, 0.5f, 0.5f, 0.2f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f};
     case ROLE_WATCHER:
-        return (BodyTraits){0.3f, 0.4f, 1.0f, 0.6f, 0.2f, 0.0f, 0.0f, 0.35f, 0.0f};
+        return (BodyTraits){0.3f, 0.4f, 1.0f, 0.6f, 0.2f, 0.0f, 0.0f, 0.35f, 0.0f, 0.0f};
+    case ROLE_SEA_HUNTER:
+        return (BodyTraits){0.85f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f};
+    case ROLE_SEA_ARMOURED:
+        return (BodyTraits){0.7f, 0.2f, 0.3f, 0.8f, 0.1f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f};
+    case ROLE_SEA_GRAZER:
+        return (BodyTraits){0.8f, 0.3f, 0.35f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f};
     default: /* plant-eaters */
-        return (BodyTraits){0.5f, 0.4f, 0.35f, 1.0f, 0.0f, 0.0f, 0.0f, 0.55f, 0.0f};
+        return (BodyTraits){0.5f, 0.4f, 0.35f, 1.0f, 0.0f, 0.0f, 0.0f, 0.55f, 0.0f, 0.0f};
     }
 }
 
@@ -118,7 +134,7 @@ static SpriteBody lab_body(int species, bool parts)
 typedef struct {
     bool full;          /* false: the area is too small for the page */
     CanvasClip area;
-    int row_y[ROLE_COUNT], strip_h[ROLE_COUNT];
+    int row_y[LAB_ROWS], strip_h[LAB_ROWS];
     int cells_x, cell_w;
     int scale;
     bool parts;         /* every painted part shown (lab_draw's parts) */
@@ -127,21 +143,21 @@ typedef struct {
 /* The tallest picture of each role's row and the widest of all, in art pixels,
  * from the inked bounds of the pictures at this action and frame. */
 static void largest_pictures(SpriteCache *sprites, int action, int frame, bool parts,
-                             int row_h[ROLE_COUNT], int *max_w)
+                             int row_h[LAB_ROWS], int *max_w)
 {
     *max_w = 0;
-    for (int r = 0; r < ROLE_COUNT; r++) {
+    for (int r = 0; r < LAB_ROWS; r++) {
         row_h[r] = 0;
     }
     for (int s = 0; s < SPECIES_COUNT; s++) {
         SpriteBody b = lab_body(s, parts);
         SpritePicture p = sprite_picture(sprites, &b, action, frame);
-        int role = SPECIES[s].role;
+        int row = lab_row_of(s);
         if (p.x1 - p.x0 > *max_w) {
             *max_w = p.x1 - p.x0;
         }
-        if (p.y1 - p.y0 > row_h[role]) {
-            row_h[role] = p.y1 - p.y0;
+        if (p.y1 - p.y0 > row_h[row]) {
+            row_h[row] = p.y1 - p.y0;
         }
     }
 }
@@ -160,21 +176,21 @@ static LabLayout make_layout(SpriteCache *sprites, int action, int frame, bool p
     l.cell_w = (x + w - MARGIN - l.cells_x - (LAB_COLUMNS - 1) * MARGIN) / LAB_COLUMNS;
     int top = y + FONT_H + 4;  /* the title line, then a little air */
     int room = y + h - 4 - top;
-    if (w <= 0 || h <= 0 || l.cell_w < 24 || room < ROLE_COUNT * (FONT_H + ROW_GAP + 24)) {
+    if (w <= 0 || h <= 0 || l.cell_w < 24 || room < LAB_ROWS * (FONT_H + ROW_GAP + 24)) {
         return l;
     }
-    int row_h[ROLE_COUNT], max_w;
+    int row_h[LAB_ROWS], max_w;
     largest_pictures(sprites, action, frame, l.parts, row_h, &max_w);
     /* The largest scale at which every row fits: its animal, the ground under
      * it and two pixels of air, then the caption; and the widest fits a cell. */
     for (int s = MAX_SCALE; s >= 1; s--) {
-        int need = ROLE_COUNT * (FONT_H + ROW_GAP);
-        for (int r = 0; r < ROLE_COUNT; r++) {
+        int need = LAB_ROWS * (FONT_H + ROW_GAP);
+        for (int r = 0; r < LAB_ROWS; r++) {
             need += (row_h[r] + GROUND_ROWS + 2) * s;
         }
         if ((need <= room && (max_w + 2) * s <= l.cell_w) || s == 1) {
             l.scale = s;
-            int spare = (room - need) / ROLE_COUNT;  /* negative at 1 when cramped */
+            int spare = (room - need) / LAB_ROWS;  /* negative at 1 when cramped */
             if (spare < 0) {
                 spare = 0;
             }
@@ -182,7 +198,7 @@ static LabLayout make_layout(SpriteCache *sprites, int action, int frame, bool p
                 spare = MAX_SPARE_PER_SCALE * s;
             }
             int at = top;
-            for (int r = 0; r < ROLE_COUNT; r++) {
+            for (int r = 0; r < LAB_ROWS; r++) {
                 l.strip_h[r] = (row_h[r] + GROUND_ROWS + 2) * s + spare;
                 l.row_y[r] = at;
                 at += l.strip_h[r] + FONT_H + ROW_GAP;
@@ -194,17 +210,17 @@ static LabLayout make_layout(SpriteCache *sprites, int action, int frame, bool p
     return l;
 }
 
-int lab_cell_box(SpriteCache *sprites, int action, int w, int h, int role, int column,
+int lab_cell_box(SpriteCache *sprites, int action, int w, int h, int row, int column,
                  int *bx, int *by, int *bw, int *bh)
 {
     LabLayout l = make_layout(sprites, action, 0, false, 0, 0, w, h);
-    if (!l.full || role < 0 || role >= ROLE_COUNT || column < 0 || column >= LAB_COLUMNS) {
+    if (!l.full || row < 0 || row >= LAB_ROWS || column < 0 || column >= LAB_COLUMNS) {
         return 0;
     }
     *bx = l.cells_x + column * (l.cell_w + MARGIN);
-    *by = l.row_y[role];
+    *by = l.row_y[row];
     *bw = l.cell_w;
-    *bh = l.strip_h[role];
+    *bh = l.strip_h[row];
     return l.scale;
 }
 
@@ -501,7 +517,7 @@ static void draw_animal(SpriteCache *sprites, Canvas *c, const LabLayout *l, int
                         int action, uint64_t body_ms, int sx, int sy)
 {
     int s = l->scale;
-    int strip_h = l->strip_h[SPECIES[species].role];
+    int strip_h = l->strip_h[lab_row_of(species)];
     SpriteBody body = lab_body(species, l->parts);
     /* Each animal at its own pace, the species number in place of an id so
      * the page is not in step. */
@@ -548,7 +564,7 @@ static void draw_attack(SpriteCache *sprites, Canvas *c, const LabLayout *l, int
                         uint64_t body_ms, int sx, int sy)
 {
     int s = l->scale;
-    int strip_h = l->strip_h[SPECIES[species].role];
+    int strip_h = l->strip_h[lab_row_of(species)];
     int line_y = sy + strip_h - GROUND_ROWS * s;
     CanvasClip strip = strip_clip(l, sx, sy, strip_h);
     uint32_t id = (uint32_t)species;
@@ -609,9 +625,9 @@ void lab_draw(SpriteCache *sprites, Canvas *c, int action, bool parts, uint64_t 
         return;
     }
     draw_title(c, &l, action, bg);
-    for (int role = 0; role < ROLE_COUNT; role++) {
+    for (int role = 0; role < LAB_ROWS; role++) {
         int row_y = l.row_y[role];
-        text_in(c, &l, x + MARGIN, row_y + (l.strip_h[role] - FONT_H) / 2, ROLE_TITLES[role],
+        text_in(c, &l, x + MARGIN, row_y + (l.strip_h[role] - FONT_H) / 2, ROW_TITLES[role],
                 pixel_of(PALETTE_TEXT), bg);
         for (int col = 0; col < LAB_COLUMNS; col++) {
             int species = lab_species_at(role, col);
