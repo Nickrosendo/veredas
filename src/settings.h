@@ -484,6 +484,22 @@ typedef struct {
      * event in its story. 6 is where it is drawn three tiles wide. Only the story
      * reads it. */
     float giant_size;
+    /* The sea (the water and air design, 5.2-5.3). Plankton grows on deep
+     * water only, every plankton_every ticks moving plankton_growth of the way
+     * to its cap: plankton_cold of the full cap on the coldest water, the full
+     * cap on the warmest, divided by 1 + its distance from the shore in cells
+     * over plankton_shore, and times plankton_winter in winter. */
+    int plankton_every;
+    float plankton_growth;
+    float plankton_cold;
+    float plankton_shore;
+    float plankton_winter;
+    /* Founders for the sea: this many per deep-water cell, on top of the
+     * land's start_share of soil. */
+    float founders_per_sea_cell;
+    /* The sea's birth brake, as birth_per_plant is the land's: sea births slow
+     * as sea bodies alive near this many per plankton-rich cell. 0: off. */
+    float birth_per_plankton;
 } Settings;
 
 Settings settings_default(void);

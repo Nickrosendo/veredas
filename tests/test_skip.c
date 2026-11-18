@@ -114,6 +114,7 @@ static void test_world_dies_during_skip(void)
     Settings set = settings_default();
     set.min_creatures = 0;
     set.energy_start = 1.0f; /* founders starve within days */
+    set.founders_per_sea_cell = 0.0f; /* a sea founder bites plankton at once */
     Sim s;
     CHECK(sim_init(&s, &set, 6, 32, 16));
     Skip k = {0};

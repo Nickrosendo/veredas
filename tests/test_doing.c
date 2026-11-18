@@ -18,6 +18,7 @@ static void make_sim(Sim *sim)
     Settings set = settings_default();
     snprintf(set.brain_name, sizeof(set.brain_name), "script");
     set.start_share = 0.0f;
+    set.founders_per_sea_cell = 0.0f;
     set.min_creatures = 0;
     /* Kinship is 1 only for identical genomes; two spawned ones differ. */
     set.family_peace = 1.0f;

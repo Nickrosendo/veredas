@@ -215,6 +215,15 @@ for the build that wrote them; a build with a different format refuses them.
    the world's seed; soil holds water and slowly loses it, turning to pale sand
    when dry. Temperature and water together give each cell a region: cold, hot and
    dry, temperate, wet, or shallows. Creatures do not read the regions yet.
+   Deep water holds plankton, which grows towards a cap set by warmth and
+   nearness to the shore, and thins in winter.
+   A creature whose swim gene reaches 0.8 has a sea body: it lives in deep
+   water and the shallows and can never step on soil, and it eats plankton as
+   leaves. Below 0.8 a swimmer keeps its land body and only pays less in the
+   shallows. Every world starts with sea founders, and a land family can cross
+   over: a child of land parents born over the line is born in the water
+   beside them. Sea animals are drawn as sharks, dolphins, sea turtles and
+   manatees.
 2. Every plant is alive: it stores energy, earned where the water and temperature
    suit its genes, and with too little of either it cannot seed, and starves. Its
    seeds inherit its genes with small changes.
@@ -236,9 +245,10 @@ for the build that wrote them; a build with a different format refuses them.
    or the other, with small changes. No fitness function exists: what lives
    long enough to have children spreads. In spring, the mating season, every fed
    adult is willing without choosing to be; outside it, both must choose, which
-   is rarer. Births slow as the world fills: the closer the living come to 0.4
-   for every plant on the map (`birth_per_plant`), the likelier a mating ends
-   with no child.
+   is rarer. Births slow as the world fills: the closer the land's animals come
+   to 0.4 for every plant on the map (`birth_per_plant`), the likelier a mating
+   ends with no child. The sea has its own brake, against its plankton.
+   A child is born on a cell that suits its own body, or not at all.
 8. Any creature can attack whatever stands right ahead of it, and biting only
    eats. Bigger attackers hit more often, and the odds rise for each other
    creature that has just hit the same target. A hit takes health, not energy.

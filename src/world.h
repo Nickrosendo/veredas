@@ -64,6 +64,12 @@ typedef struct {
     float *snow;             /* winter's rain kept on the ground, 0..1; 0 on
                                 anything but soil; melts into water in spring */
     uint64_t rain_seed;      /* the rain's whole future comes from this */
+    /* Plankton on deep water, 0..1; 0 on anything else. Saved and hashed. */
+    float *plankton;
+    /* The most plankton each cell can hold outside winter (plankton.h). Made
+     * from the terrain and the temperature, which are saved, so it is worked
+     * out again after a load instead of being saved itself. */
+    float *plankton_cap;
     int32_t *occupant;       /* creature index, or -1 */
 } World;
 
@@ -78,7 +84,10 @@ void world_clear(World *w);
 /* Frees every layer and sets the pointers to NULL; safe to call twice. */
 void world_free(World *w);
 int world_idx(const World *w, int x, int y); /* wraps both axes */
-/* Whether a body can stand on this ground at all: soil or shallow water. */
+/* Whether a land body can stand on this ground at all: soil or shallow water. */
 bool world_walkable(const World *w, int cell);
+/* The same for either body: a sea body (sea true) stands on deep or shallow
+ * water, a land body on soil or shallow water. Rock is closed to both. */
+bool world_walkable_for(const World *w, int cell, bool sea);
 
 #endif

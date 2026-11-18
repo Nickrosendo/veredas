@@ -22,6 +22,8 @@ void world_free(World *w)
     free(w->temperature);
     free(w->rain);
     free(w->snow);
+    free(w->plankton);
+    free(w->plankton_cap);
     free(w->occupant);
     /* Clear every field, pointers included, so a second world_free (or a
      * use after free) meets NULL instead of a dangling address. A compound
@@ -63,6 +65,8 @@ bool world_init(World *w, int width, int height)
     w->temperature = calloc(n, sizeof(float));
     w->rain = calloc(n, sizeof(float));
     w->snow = calloc(n, sizeof(float));
+    w->plankton = calloc(n, sizeof(float));
+    w->plankton_cap = calloc(n, sizeof(float));
     w->occupant = malloc(n * sizeof(int32_t));
 
     if (w->terrain == NULL || w->fertility == NULL || w->veg == NULL ||
@@ -71,7 +75,7 @@ bool world_init(World *w, int width, int height)
         w->carrion_level == NULL || w->scent == NULL ||
         w->scent_next == NULL || w->water == NULL ||
         w->temperature == NULL || w->rain == NULL || w->snow == NULL ||
-        w->occupant == NULL) {
+        w->plankton == NULL || w->plankton_cap == NULL || w->occupant == NULL) {
         /* Partial failure: some layers exist and some do not. Free the
          * ones that do, and leave the struct empty. */
         world_free(w);
@@ -103,6 +107,8 @@ void world_clear(World *w)
     memset(w->temperature, 0, n * sizeof(float));
     memset(w->rain, 0, n * sizeof(float));
     memset(w->snow, 0, n * sizeof(float));
+    memset(w->plankton, 0, n * sizeof(float));
+    memset(w->plankton_cap, 0, n * sizeof(float));
     w->rain_seed = 0;
     for (size_t i = 0; i < n; i++) {
         w->occupant[i] = -1;
@@ -112,6 +118,15 @@ void world_clear(World *w)
 bool world_walkable(const World *w, int cell)
 {
     return w->terrain[cell] == TERRAIN_SOIL || w->terrain[cell] == TERRAIN_SHALLOW;
+}
+
+bool world_walkable_for(const World *w, int cell, bool sea)
+{
+    uint8_t t = w->terrain[cell];
+    if (t == TERRAIN_SHALLOW) {
+        return true; /* the shore band both bodies share */
+    }
+    return sea ? t == TERRAIN_WATER : t == TERRAIN_SOIL;
 }
 
 int world_idx(const World *w, int x, int y)

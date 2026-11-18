@@ -6,7 +6,8 @@
 
 #include "chronicle.h" /* chronicle_note, LIFE_ kinds */
 #include "climate.h" /* climate_region, climate_region_hue */
-#include "flora.h" /* carrion_add, CARRION_MIN, plant_gives_shade */
+#include "flora.h"
+#include "plankton.h" /* carrion_add, CARRION_MIN, plant_gives_shade */
 #include "tactics.h" /* tactics_note_hit */
 #include "years.h" /* SEASON_SUMMER */
 
@@ -136,8 +137,14 @@ float pool_kinship(const Pool *p, const Creature *a, const Creature *b)
 
 int pool_spawn(Pool *p, World *w, int x, int y)
 {
+    return pool_spawn_body(p, w, x, y, false);
+}
+
+int pool_spawn_body(Pool *p, World *w, int x, int y, bool sea)
+{
     int cell = world_idx(w, x, y);
-    if (p->free_head < 0 || !world_walkable(w, cell) || w->occupant[cell] >= 0) {
+    if (p->free_head < 0 || !world_walkable_for(w, cell, sea) ||
+        w->occupant[cell] >= 0) {
         return -1;
     }
     /* Take the first free slot off the list. */
@@ -204,11 +211,16 @@ static int cell_towards(const World *w, int x, int y, uint8_t heading)
     return world_idx(w, x + STEP_X[heading], y + STEP_Y[heading]);
 }
 
-/* Whether a creature could step onto this cell: ground it can stand on, with
- * nobody on it. */
-static bool cell_is_free(const World *w, int cell)
+bool creature_sea_body(const Creature *c)
 {
-    return world_walkable(w, cell) && w->occupant[cell] < 0;
+    return c->genome.g[GENE_SWIM] >= SEA_FROM;
+}
+
+/* Whether a body could step onto this cell: ground that body can stand on,
+ * with nobody on it. sea says which body (creature_sea_body). */
+static bool cell_is_free(const World *w, int cell, bool sea)
+{
+    return world_walkable_for(w, cell, sea) && w->occupant[cell] < 0;
 }
 
 static float clamp01(float v)
@@ -347,6 +359,10 @@ float creature_heat_cost(const World *w, const Creature *c, const Settings *s,
     if (season != SEASON_SUMMER || creature_in_shade(w, c, s)) {
         return 0.0f;
     }
+    /* Deep water cools a body as shade does, and the sea has no trees. */
+    if (w->terrain[world_idx(w, c->x, c->y)] == TERRAIN_WATER) {
+        return 0.0f;
+    }
     /* A hibernating body makes little heat of its own, and pays the same small
      * share of the sun as of its upkeep. A nap saves nothing here. */
     float share = creature_asleep(c) && c->hibernating ? s->sleep_upkeep : 1.0f;
@@ -359,7 +375,10 @@ float creature_step_extra(const World *w, const Creature *c, int cell,
     float legs = c->genome.g[GENE_LEGS];
     float swim = c->genome.g[GENE_SWIM];
     int region = climate_region(w, cell, s);
-    if (region == REGION_SHALLOW) {
+    /* A sea body pays the shallows' price in deep water too: deep water has no
+     * region of its own, and the land's price there would charge a whale for
+     * swimming. A land body never stands in deep water. */
+    if (region == REGION_SHALLOW || w->terrain[cell] == TERRAIN_WATER) {
         return s->rough_step_cost * (1.0f - swim) + s->legs_step_cost * legs;
     }
     float on_land = s->swim_step_cost * swim;
@@ -670,6 +689,7 @@ static void sense_view(const World *w, const Pool *p, const Creature *c,
      * cells (ahead) or 0.75 reach rounded (to the side). On a map at least that
      * wide either way, wrap_near is enough; on a smaller one world_idx does it. */
     bool small_map = reach >= w->w || reach >= w->h;
+    bool sea = creature_sea_body(c);
     float plants = 0.0f;
     Seen seen = {0.0f, -1};
     for (int d = 1; d <= reach; d++) {
@@ -706,7 +726,11 @@ static void sense_view(const World *w, const Pool *p, const Creature *c,
             if (repeat) {
                 continue; /* counted already, by the line before */
             }
-            bool food = plant_has_food(w, cell, s, p->season);
+            /* A sea body sees plankton as the leaf food it is to it: at least
+             * one bite step of it on a deep cell. */
+            bool food = sea && w->terrain[cell] == TERRAIN_WATER
+                            ? w->plankton[cell] >= PLANKTON_STEP
+                            : plant_has_food(w, cell, s, p->season);
             if (!food && other < 0) {
                 continue; /* nothing here to see: no need for its clarity */
             }
@@ -1005,7 +1029,7 @@ static void sense_all(const World *w, const Pool *p, int idx,
     }
     /* The same test act_move makes, so the sense cannot disagree with walking. */
     int ahead = cell_towards(w, c->x, c->y, c->heading);
-    out->v[SENSE_BLOCKED] = cell_is_free(w, ahead) ? 0.0f : 1.0f;
+    out->v[SENSE_BLOCKED] = cell_is_free(w, ahead, creature_sea_body(c)) ? 0.0f : 1.0f;
     sense_neighbours(w, p, c, s, out);
     hear_calls(w, p, c, s, out);
 
@@ -1032,7 +1056,8 @@ static uint8_t way_around(const World *w, const Creature *c, Rng *r)
     const int tries[3] = {first_side, 4 - first_side, 2};
     for (int k = 0; k < 3; k++) {
         uint8_t heading = turned(c->heading, tries[k]);
-        if (cell_is_free(w, cell_towards(w, c->x, c->y, heading))) {
+        if (cell_is_free(w, cell_towards(w, c->x, c->y, heading),
+                         creature_sea_body(c))) {
             return heading;
         }
     }
@@ -1052,10 +1077,11 @@ static void act_move(World *w, Creature *c, int idx, const Settings *s, Rng *r)
     c->energy -= s->move_cost;
     int from = world_idx(w, c->x, c->y);
     int to = cell_towards(w, c->x, c->y, c->heading);
-    if (!cell_is_free(w, to)) {
+    bool sea = creature_sea_body(c);
+    if (!cell_is_free(w, to, sea)) {
         c->heading = way_around(w, c, r);
         to = cell_towards(w, c->x, c->y, c->heading);
-        if (!cell_is_free(w, to)) {
+        if (!cell_is_free(w, to, sea)) {
             return;
         }
     }
@@ -1189,6 +1215,10 @@ static void act_attack(const World *w, Pool *p, int idx, const Settings *s,
         target->health -= hit_damage(c, target, a, s);
         target->hurt_tick += before - target->health;
         record_hit(p, c, target, before, s); /* reads the ring before the hit */
+        if (before > 0.0f && target->health <= 0.0f && creature_is_hunter(c) &&
+            creature_sea_body(c) && creature_sea_body(target)) {
+            p->sea_kills++; /* a measure for the sea verdict, read by no rule */
+        }
         if (chosen) {
             tactics_note_hit(p->tactics, w, p, c, target, target->health <= 0.0f,
                              s);
@@ -1311,6 +1341,34 @@ static void eat_leaves(World *w, Creature *c, int cell, const Settings *s,
     creature_ate(c, gain, 1.0f); /* plants are level 1 */
 }
 
+/* How many steps of plankton a bite by c would take from deep cell i. */
+static int plankton_take(const World *w, int i, const Creature *c, const Settings *s)
+{
+    int mouth = bite_steps(creature_size(c, s));
+    int there = plankton_steps(w, i);
+    return there < mouth ? there : mouth;
+}
+
+/* What one step of plankton gives c: a leaf step's energy, by its leaf gene. */
+static float plankton_gain(const Creature *c, const Settings *s)
+{
+    return s->bite_veg_energy * leaf_eff(c, s);
+}
+
+/* Eats what its mouth can take of the plankton on this deep cell. Plankton is
+ * a level-1 food, like plants. */
+static void eat_plankton(World *w, Creature *c, int cell, const Settings *s)
+{
+    int take = plankton_take(w, cell, c, s);
+    float left = w->plankton[cell] - (float)take * PLANKTON_STEP;
+    /* Float subtraction may land a hair below 0 (0.75 - 3 * 0.25 is exact, but
+     * plankton that grew to 0.7500001 is not): never keep a negative amount. */
+    w->plankton[cell] = left > 0.0f ? left : 0.0f;
+    float gain = (float)take * plankton_gain(c, s);
+    c->energy += gain;
+    creature_ate(c, gain, 1.0f);
+}
+
 /* Eats whole fruit. The plant paid for it when it was made, so nothing else
  * happens to the plant. A creature already carrying a seed keeps that one: if
  * a newer seed replaced it, a steady fruit-eater would never drop any. */
@@ -1375,7 +1433,9 @@ BiteChoice creature_bite_choice(const World *w, const Pool *p, int idx,
     int food_cell = -1;
     bool food_is_carrion = false;
     bool food_is_fruit = false;
+    bool food_is_plankton = false;
     float best_gain = 0.0f;
+    bool sea = creature_sea_body(c);
 
     /* AROUND_ is clockwise from north, two steps per heading. */
     int start = 2 * c->heading;
@@ -1392,7 +1452,20 @@ BiteChoice creature_bite_choice(const World *w, const Pool *p, int idx,
                 food_cell = cell;
                 food_is_carrion = true;
                 food_is_fruit = false;
+                food_is_plankton = false;
             }
+        }
+        /* Plankton grows only on deep water, where no plant does. */
+        if (sea && w->terrain[cell] == TERRAIN_WATER) {
+            float gain = (float)plankton_take(w, cell, c, s) * plankton_gain(c, s);
+            if (gain > best_gain) {
+                best_gain = gain;
+                food_cell = cell;
+                food_is_carrion = false;
+                food_is_fruit = false;
+                food_is_plankton = true;
+            }
+            continue;
         }
         if (w->veg[cell] > 0) {
             float leaves = (float)plant_take(w, cell, c, s, p->season) *
@@ -1405,13 +1478,15 @@ BiteChoice creature_bite_choice(const World *w, const Pool *p, int idx,
                 food_cell = cell;
                 food_is_carrion = false;
                 food_is_fruit = fruit >= leaves;
+                food_is_plankton = false;
             }
         }
     }
 
-    BiteChoice choice = {BITE_NOTHING, -1, false};
+    BiteChoice choice = {BITE_NOTHING, -1, false, false};
     if (food_cell >= 0) {
         choice.fruit = food_is_fruit;
+        choice.plankton = food_is_plankton;
         choice.kind = food_is_carrion ? BITE_CARRION : BITE_PLANT;
         choice.cell = food_cell;
     }
@@ -1453,7 +1528,9 @@ static void act_bite(World *w, Pool *p, int idx, const Settings *s, Rng *r)
         eat_carrion(w, c, choice.cell, s);
         break;
     case BITE_PLANT:
-        if (choice.fruit) {
+        if (choice.plankton) {
+            eat_plankton(w, c, choice.cell, s);
+        } else if (choice.fruit) {
             eat_fruit(w, c, choice.cell, s, r);
         } else {
             eat_leaves(w, c, choice.cell, s, p->season);
@@ -1515,6 +1592,26 @@ static void ring_cell(int d, int k, int *dx, int *dy)
     case 2: *dx = d - t; *dy = d; break;
     default: *dx = -d; *dy = d - t; break;
     }
+}
+
+int creature_nearest_cell_for(const World *w, int x, int y, bool sea, int radius)
+{
+    int own = world_idx(w, x, y);
+    if (world_walkable_for(w, own, sea)) {
+        return own; /* where it stands already suits that body */
+    }
+    for (int d = 1; d <= radius; d++) {
+        /* A ring of side 2d + 1 has 8d cells. */
+        for (int k = 0; k < 8 * d; k++) {
+            int dx, dy;
+            ring_cell(d, k, &dx, &dy);
+            int cell = world_idx(w, x + dx, y + dy);
+            if (cell_is_free(w, cell, sea)) {
+                return cell;
+            }
+        }
+    }
+    return -1;
 }
 
 /* Weighs the creature in slot other as c's partner: if it is one, and more
@@ -1580,38 +1677,47 @@ static int find_partner(const World *w, const Pool *p, const Creature *c,
     return best;
 }
 
-/* A free cell a body can stand on beside c, looking round from start; -1 for none. */
-static int free_cell_around(const World *w, const Creature *c, int start)
+/* A free cell beside c that a body (sea or land) can stand on, looking round
+ * from start; -1 for none. The body is the child's, not c's: a sea child of
+ * land parents is born in the water beside them. */
+static int free_cell_around(const World *w, const Creature *c, int start, bool sea)
 {
     for (int k = 0; k < 8; k++) {
         int dir = (start + k) % 8;
         int cell = world_idx(w, c->x + AROUND_X[dir], c->y + AROUND_Y[dir]);
-        if (cell_is_free(w, cell)) {
+        if (cell_is_free(w, cell, sea)) {
             return cell;
         }
     }
     return -1;
 }
 
-/* Fills in a newborn from its parents. Both pay here, together, so the energy
- * is only moved: the three of them hold afterwards what the two held before.
- * a and b stay valid across the pool_spawn before this: spawning never moves
- * the array, which was allocated once. Had items been reallocated to grow,
- * they would now point at freed memory. */
+/* Fills in a newborn from its parents, with the heading and genes already
+ * drawn (act_mate draws them first, since the genes decide where the child can
+ * be born). Both parents pay here, together, so the energy is only moved: the
+ * three of them hold afterwards what the two held before. a and b stay valid
+ * across the pool_spawn before this: spawning never moves the array, which
+ * was allocated once. Had items been reallocated to grow, they would now
+ * point at freed memory. */
 static void make_child(Creature *child, Creature *a, Creature *b,
-                       const Settings *s, Rng *r)
+                       const Genome *genes, uint8_t heading, const Settings *s)
 {
     float from_a = a->energy * s->mate_share;
     float from_b = b->energy * s->mate_share;
     a->energy -= from_a;
     b->energy -= from_b;
     child->energy = from_a + from_b;
-    /* Each is a separate statement, so the draws have a fixed order. */
-    child->heading = (uint8_t)rng_below(r, HEADING_COUNT);
+    child->heading = heading;
     child->level = (a->level + b->level) / 2.0f; /* until its first meal */
-    /* Pointers to the three genomes, not copies: the function writes the
-     * child's in place, reading its parents'. */
-    genome_cross(&child->genome, &a->genome, &b->genome, r, s);
+    /* A struct assignment copies every one of the GENOME_LEN floats: the
+     * child gets its own genes, not a pointer to the local they were made in. */
+    child->genome = *genes;
+    bool sea = creature_sea_body(child);
+    child->sea_line = (uint8_t)((a->sea_line || b->sea_line ||
+                                 (sea && !creature_sea_body(a) &&
+                                  !creature_sea_body(b)))
+                                    ? 1
+                                    : 0);
     child->health = creature_max_health(child, s); /* needs the genes above */
     /* It joins the family whose colour it is closer to. Only then is any distance
      * left real drift: naming it at random could give it one parent's colour and
@@ -1684,8 +1790,18 @@ static bool crowd_allows_birth(const World *w, const Pool *p, const Creature *a,
         !room_on_the_land(p->count, (float)s->birth_capacity, r)) {
         return false;
     }
-    if (s->birth_per_plant > 0.0f &&
-        !room_on_the_land(p->count, s->birth_per_plant * (float)p->plants, r)) {
+    /* Each habitat has its own brake: a sea body's pair counts only the sea
+     * bodies against the plankton, a land pair only the land bodies against
+     * the plants. A pair on the shore goes by a's body. */
+    if (creature_sea_body(a)) {
+        if (s->birth_per_plankton > 0.0f &&
+            !room_on_the_land(p->sea_alive,
+                              s->birth_per_plankton * (float)p->plankton_rich, r)) {
+            return false;
+        }
+    } else if (s->birth_per_plant > 0.0f &&
+               !room_on_the_land(p->count - p->sea_alive,
+                                 s->birth_per_plant * (float)p->plants, r)) {
         return false;
     }
     return true;
@@ -1713,21 +1829,31 @@ static int act_mate(World *w, Pool *p, int idx, const Settings *s, Rng *r)
     }
     Creature *b = &p->items[partner];
     int start = (int)rng_below(r, 8);
-    int cell = free_cell_around(w, a, start);
+    /* The child's heading and genes come before its cell, each a statement of
+     * its own so the draws keep a fixed order. The genome is about 3 KB: a
+     * local on the stack, copied into the child only if it is born. */
+    uint8_t heading = (uint8_t)rng_below(r, HEADING_COUNT);
+    Genome genes;
+    genome_cross(&genes, &a->genome, &b->genome, r, s);
+    bool sea = genes.g[GENE_SWIM] >= SEA_FROM;
+    int cell = free_cell_around(w, a, start, sea);
     if (cell < 0) {
-        cell = free_cell_around(w, b, start);
+        cell = free_cell_around(w, b, start, sea);
     }
     if (cell < 0) {
-        return -1; /* no room: nobody pays, and they can try again */
+        return -1; /* no room for this body: nobody pays, they can try again */
     }
-    int child_idx = pool_spawn(p, w, cell % w->w, cell / w->w);
+    int child_idx = pool_spawn_body(p, w, cell % w->w, cell / w->w, sea);
     if (child_idx < 0) {
-        /* The cell is free soil, so only a full pool can have said no. */
+        /* The cell suits the body and is free, so only a full pool said no. */
         p->births_refused++;
         return -1;
     }
     Creature *child = &p->items[child_idx];
-    make_child(child, a, b, s, r);
+    make_child(child, a, b, &genes, heading, s);
+    if (sea) {
+        p->sea_alive++;
+    }
     record_birth(p, child, a, b);
     /* Read after the crossing: a child can differ from both parents. */
     if (creature_counts_as_plant_eater(child, s)) {

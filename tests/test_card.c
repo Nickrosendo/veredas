@@ -36,6 +36,7 @@ static bool setup(World4 *t)
     Settings set = settings_default();
     snprintf(set.brain_name, sizeof(set.brain_name), "script");
     set.start_share = 0.0f;
+    set.founders_per_sea_cell = 0.0f;
     set.min_creatures = 0;
     if (!sim_init(&t->sim, &set, 7, 16, 16)) {
         return false;

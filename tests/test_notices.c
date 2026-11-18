@@ -4,6 +4,7 @@
 
 #include "actions.h"
 #include "genome.h"
+#include "creature.h" /* creature_size */
 #include "notices.h"
 #include "settings.h"
 #include "sim.h"
@@ -162,6 +163,21 @@ static void test_many_unlike_is_quiet(void)
     sim_free(&s);
 }
 
+/* The slot of the largest living body: a giant no other body beats, so the
+ * record notice stays quiet until the test grows one. */
+static int largest_living(const Sim *s)
+{
+    int best = -1;
+    for (int i = 0; i < s->pool.capacity; i++) {
+        if (s->pool.items[i].alive &&
+            (best < 0 || creature_size(&s->pool.items[i], &s->set) >
+                             creature_size(&s->pool.items[best], &s->set))) {
+            best = i;
+        }
+    }
+    return best;
+}
+
 static void test_giant_once(void)
 {
     Settings set = settings_default();
@@ -170,7 +186,7 @@ static void test_giant_once(void)
     Notices n;
     notices_reset(&n);
     notices_check(&n, &s);
-    int slot = first_living(&s);
+    int slot = largest_living(&s);
     s.chronicle.giants++;
     s.chronicle.newest_giant = s.pool.items[slot].id;
     next_sample(&s);
@@ -182,7 +198,7 @@ static void test_giant_once(void)
     notices_check(&n, &s);
     CHECK(n.total == 1);
     /* A second giant no larger than the record: not news. */
-    int other = slot + 1;
+    int other = first_living(&s) == slot ? slot + 1 : first_living(&s);
     while (!s.pool.items[other].alive) {
         other++;
     }

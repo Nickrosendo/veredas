@@ -111,6 +111,11 @@ typedef struct {
     /* The colour its family started with. A child whose own colour has drifted
      * further than family_split from this leaves, and starts a family of its own. */
     float family_hue;
+    /* 1 when its line took to the sea by evolution: it has a sea body and was
+     * born to two land-bodied parents, or descends from one who was (either
+     * parent having it passes it on). Founders and Sandbox gifts start at 0.
+     * No rule reads it; notices and the sea verdict do. Saved. */
+    uint8_t sea_line;
     int x, y;
     uint8_t heading;    /* a HEADING_ value */
     float energy;
@@ -229,6 +234,16 @@ typedef struct {
     /* Cells holding a plant, counted once per tick before anyone acts, and
      * only while birth_per_plant is on (0 otherwise). Read by births. */
     int plants;
+    /* The sea's side of the same (the water and air design, 5.2b): sea bodies
+     * alive, counted before anyone acts and raised by each sea birth, and
+     * deep cells holding PLANKTON_RICH plankton, counted once per tick while
+     * birth_per_plankton is on (0 otherwise). Read by births; neither saved
+     * nor hashed, since both are counted again from the world every tick. */
+    int sea_alive;
+    int plankton_rich;
+    /* Sea animals killed by sea hunters so far: a measure for the sea verdict
+     * (balance_report), read by no rule, neither saved nor hashed. */
+    uint32_t sea_kills;
     /* Births that could not happen because every slot was taken. The pool is
      * a safety limit and not a rule of the world, so this should stay 0: it
      * is counted so that reaching the limit is never quiet. */
@@ -308,6 +323,9 @@ float pool_kinship(const Pool *p, const Creature *a, const Creature *b);
  * the energy and the genome, and then the health, which depends on the body:
  * it starts at 1 only because a living creature must never hold 0. */
 int pool_spawn(Pool *p, World *w, int x, int y);
+/* pool_spawn for either body: with sea true the cell must be deep or shallow
+ * water (world_walkable_for). pool_spawn is this with sea false. */
+int pool_spawn_body(Pool *p, World *w, int x, int y, bool sea);
 /* Removes the creature in slot idx from the world, leaves its body as
  * carrion (body_energy * size plus any energy left, at its level), counts the
  * death under cause and frees the slot. Does nothing to a slot that is already
@@ -335,6 +353,9 @@ typedef struct {
     int kind; /* a BITE_ value */
     int cell;
     bool fruit; /* for BITE_PLANT: its fruit rather than its leaves */
+    /* For BITE_PLANT: the plankton on a deep-water cell, taken as leaves
+     * (plankton.h). Only a sea body's bite reaches it. */
+    bool plankton;
 } BiteChoice;
 BiteChoice creature_bite_choice(const World *w, const Pool *p, int idx,
                                 const Settings *s);
@@ -410,6 +431,13 @@ bool creature_in_shade(const World *w, const Creature *c, const Settings *s);
 /* Whether the creature is asleep, napping or hibernating: its current action
  * is ACT_SLEEP. */
 bool creature_asleep(const Creature *c);
+/* Whether its body is a sea body: the raw swim gene at SEA_FROM or above. */
+bool creature_sea_body(const Creature *c);
+/* The nearest cell to (x, y) a body (sea or land) can use: (x, y)'s own cell if
+ * that body may stand there, else the first free cell it may stand on in the
+ * rings around, nearest ring first, up to radius cells out; -1 for none. For a
+ * Sandbox gift that changes a body on ground it can no longer use. */
+int creature_nearest_cell_for(const World *w, int x, int y, bool sea, int radius);
 /* Whether it has stored enough to begin a hibernation: energy of at least
  * hibernate_energy times what mating needs. */
 bool creature_can_hibernate(const Creature *c, const Settings *s);

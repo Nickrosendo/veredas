@@ -541,3 +541,24 @@ tactic_useful = 1.2
 
 # body size from which a life story counts a giant (0 to 1e+06)
 giant_size = 6
+
+# ticks between updates of the plankton (1 to 65535)
+plankton_every = 10
+
+# share of the way to its cap plankton grows at an update (0 to 1)
+plankton_growth = 0.02
+
+# plankton's cap on the coldest water, as a share of the warmest's (0 to 1)
+plankton_cold = 0.3
+
+# cells from the shore at which plankton's cap is halved (0.01 to 1e+06)
+plankton_shore = 12
+
+# plankton's cap in winter, as a share (0 to 1)
+plankton_winter = 0.4
+
+# sea founders of a new world, per deep-water cell (0 to 1)
+founders_per_sea_cell = 0.05
+
+# sea births slow as sea bodies alive near this many per plankton-rich cell (0: off) (0 to 1e+06)
+birth_per_plankton = 0.2

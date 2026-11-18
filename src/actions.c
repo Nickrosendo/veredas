@@ -80,7 +80,24 @@ static void apply_trait(Sim *s, const PlayerAction *a)
         return;
     }
     Creature *c = &s->pool.items[idx];
+    float old = c->genome.g[a->gene];
     c->genome.g[a->gene] = a->value;
+    /* A swim gift may move the body across the sea line: it goes to the
+     * nearest ground its new body can use. actions_give_trait checked there
+     * was some; should the cells have filled since, the gift does nothing. */
+    int from = world_idx(&s->world, c->x, c->y);
+    int to = creature_nearest_cell_for(&s->world, c->x, c->y, creature_sea_body(c),
+                                       GIFT_MOVE_RADIUS);
+    if (to < 0) {
+        c->genome.g[a->gene] = old;
+        return;
+    }
+    if (to != from) {
+        s->world.occupant[from] = -1;
+        s->world.occupant[to] = idx;
+        c->x = to % s->world.w;
+        c->y = to / s->world.w;
+    }
     /* A smaller or less armoured body has a lower most health: keep the
      * health it has within the new limit, as a newborn's is. */
     float most = creature_max_health(c, &s->set);
@@ -117,12 +134,26 @@ static bool givable(int gene)
     return false;
 }
 
+bool actions_body_fits(const Sim *s, uint32_t creature, int gene, float value)
+{
+    int idx = find_living(&s->pool, creature);
+    if (idx < 0) {
+        return false;
+    }
+    const Creature *c = &s->pool.items[idx];
+    bool sea = gene == GENE_SWIM ? value >= SEA_FROM : creature_sea_body(c);
+    return creature_nearest_cell_for(&s->world, c->x, c->y, sea, GIFT_MOVE_RADIUS) >= 0;
+}
+
 bool actions_give_trait(Sim *s, uint32_t creature, int gene, float value)
 {
     /* Written as "not inside" so that NaN, for which every comparison is
      * false, is refused too. */
-    if (!givable(gene) || !(value >= 0.0f && value <= 1.0f) ||
-        find_living(&s->pool, creature) < 0) {
+    int idx = find_living(&s->pool, creature);
+    if (!givable(gene) || !(value >= 0.0f && value <= 1.0f) || idx < 0) {
+        return false;
+    }
+    if (!actions_body_fits(s, creature, gene, value)) {
         return false;
     }
     PlayerAction a = {.tick = s->tick, .kind = ACTION_TRAIT,

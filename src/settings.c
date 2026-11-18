@@ -306,6 +306,13 @@ Settings settings_default(void)
         .tactic_min = 10,
         .tactic_useful = 1.2f,
         .giant_size = 6.0f,
+        .plankton_every = 10,
+        .plankton_growth = 0.02f,
+        .plankton_cold = 0.3f,
+        .plankton_shore = 12.0f,
+        .plankton_winter = 0.4f,
+        .founders_per_sea_cell = 0.05f,
+        .birth_per_plankton = 0.2f,
     };
     return s;
 }
@@ -544,6 +551,19 @@ static const SettingInfo TABLE[] = {
                                      "of its diet a family with a tactic does"),
     FLOAT_ROW(giant_size, 0, BIG, "body size from which a life story counts a "
                                   "giant"),
+    INT_ROW(plankton_every, 1, 65535, "ticks between updates of the plankton"),
+    FLOAT_ROW(plankton_growth, 0, 1, "share of the way to its cap plankton grows "
+                                     "at an update"),
+    FLOAT_ROW(plankton_cold, 0, 1, "plankton's cap on the coldest water, as a "
+                                   "share of the warmest's"),
+    FLOAT_ROW(plankton_shore, 0.01, BIG, "cells from the shore at which "
+                                         "plankton's cap is halved"),
+    FLOAT_ROW(plankton_winter, 0, 1, "plankton's cap in winter, as a share"),
+    FLOAT_ROW(founders_per_sea_cell, 0, 1, "sea founders of a new world, per "
+                                           "deep-water cell"),
+    FLOAT_ROW(birth_per_plankton, 0, BIG, "sea births slow as sea bodies alive "
+                                          "near this many per plankton-rich cell "
+                                          "(0: off)"),
 };
 
 int settings_count(void)

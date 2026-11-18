@@ -1,8 +1,9 @@
 /*
  * notices: short lines about rare things as they happen, for both modes (the
  * player agency design, section 5): a body unlike its family's, the first
- * giant and each new record size, a tactic seen for the first time, a big family gone, and a trait the player gave
- * spreading past NOTICE_GIFT_SPREAD carriers or dying out.
+ * giant and each new record size, a tactic seen for the first time, a big family gone, a trait the player gave
+ * spreading past NOTICE_GIFT_SPREAD carriers or dying out, and a family taking
+ * to the sea by evolution.
  *
  * Like the chronicle and the tactic watch, it only reads the world: it takes a
  * const Sim *, draws no random number and allocates nothing, so checking can
@@ -54,6 +55,8 @@ enum { NOTICE_GENES = 9 };
 #define NOTICE_GIFT_SPREAD 10
 /* How many of the action log's first entries are followed. */
 #define NOTICE_GIFTS 64
+/* How many families that took to the sea are remembered, so each is told once. */
+#define NOTICE_SEA_FAMILIES 32
 
 /* Notice.creature for a notice about nobody to follow. Not 0: the first
  * creature of a world has id 0. Ids count up from there, one per birth, and
@@ -95,6 +98,10 @@ typedef struct {
     uint64_t unlike_news_from[NOTICE_GENES];
     BigFamily families[NOTICE_FAMILIES];
     uint8_t gifts[NOTICE_GIFTS]; /* GIFT_ bits, by log entry */
+    /* The families told to have taken to the sea, oldest first; once full,
+     * a new one replaces the oldest (sea_told_total % NOTICE_SEA_FAMILIES). */
+    uint32_t sea_told[NOTICE_SEA_FAMILIES];
+    uint32_t sea_told_total;
 } Notices;
 
 /* Empty, as for a new world: the next check tells nothing. */

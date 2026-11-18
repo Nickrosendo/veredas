@@ -356,6 +356,7 @@ static unsigned char *small_save(size_t *size)
     Settings set = settings_default();
     set.pool_capacity = 40;
     set.start_share = 0.0f;
+    set.founders_per_sea_cell = 0.0f;
     set.min_creatures = 20;
     Sim a;
     char err[256] = "";
@@ -612,34 +613,35 @@ enum {
     AT_ID = 1,
     AT_LINEAGE = 5,
     AT_FAMILY_HUE = 9,
-    AT_X = 13,
-    AT_Y = 17,
-    AT_HEADING = 21,
-    AT_ENERGY = 22,
-    AT_HEALTH = 26,
-    AT_GROWN = 30,
-    AT_HITS_TAKEN = 34,
-    AT_RECENT_HITS = 38, /* HITS_KEPT pairs of u32: 64 bytes */
-    AT_AGE = 102,
-    AT_KIND = 106,
-    AT_HOLD = 107,
-    AT_HOLD_LEFT = 109,
-    AT_MOVE_POINTS = 111,
-    AT_MATE_WISH = 115,
-    AT_LEVEL = 117,
-    AT_EATEN = 121,
-    AT_GUT_SEED = 125, /* seven floats: 28 bytes */
-    AT_GUT_TICKS = 153,
-    AT_SINCE_MEAL = 155,
-    AT_MEAL_X = 157,
-    AT_MEAL_Y = 161,
-    AT_MEAL_AT = 165,
-    AT_MEAL_KNOWN = 169,
-    AT_SLEEP_TICKS = 170,
-    AT_HIBERNATING = 172,
-    AT_CALLING = 173,
-    AT_MEMORY = 174,
-    AT_MIND = 186, /* adjust then trace, MIND_LEN floats each */
+    AT_SEA_LINE = 13,
+    AT_X = 14,
+    AT_Y = 18,
+    AT_HEADING = 22,
+    AT_ENERGY = 23,
+    AT_HEALTH = 27,
+    AT_GROWN = 31,
+    AT_HITS_TAKEN = 35,
+    AT_RECENT_HITS = 39, /* HITS_KEPT pairs of u32: 64 bytes */
+    AT_AGE = 103,
+    AT_KIND = 107,
+    AT_HOLD = 108,
+    AT_HOLD_LEFT = 110,
+    AT_MOVE_POINTS = 112,
+    AT_MATE_WISH = 116,
+    AT_LEVEL = 118,
+    AT_EATEN = 122,
+    AT_GUT_SEED = 126, /* seven floats: 28 bytes */
+    AT_GUT_TICKS = 154,
+    AT_SINCE_MEAL = 156,
+    AT_MEAL_X = 158,
+    AT_MEAL_Y = 162,
+    AT_MEAL_AT = 166,
+    AT_MEAL_KNOWN = 170,
+    AT_SLEEP_TICKS = 171,
+    AT_HIBERNATING = 173,
+    AT_CALLING = 174,
+    AT_MEMORY = 175,
+    AT_MIND = 187, /* adjust then trace, MIND_LEN floats each */
     AT_GENOME = AT_MIND + 2 * 4 * MIND_LEN,
     /* The life story: ten u32 counts, max_size, flags, two region bytes and
      * region_ticks (49 bytes); then events_noted and 8 events of 13 bytes each
@@ -699,6 +701,7 @@ static Tiny tiny_save(void)
     Settings set = settings_default();
     set.pool_capacity = 2;
     set.start_share = 0.0f;
+    set.founders_per_sea_cell = 0.0f;
     set.min_creatures = 1;
     Sim a;
     char err[256] = "";
@@ -719,10 +722,10 @@ static Tiny tiny_save(void)
     }
     t.layers = OFF_SETTINGS + settings_bytes;
     /* terrain, fertility, veg, veg_age, veg_wither, plant, carrion,
-     * carrion_level, scent, water, temperature, rain, snow, for 64 cells,
-     * and the rain's seed once. */
+     * carrion_level, scent, water, temperature, rain, snow, plankton, for 64
+     * cells, and the rain's seed once. */
     t.histories =
-        t.layers + 64 * (1 + 4 + 1 + 2 + 1 + 28 + 4 + 4 + 4 + 4 + 4 + 4 + 4) + 8;
+        t.layers + 64 * (1 + 4 + 1 + 2 + 1 + 28 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4) + 8;
     t.records = t.histories + 3 * (HISTORY * 4 + 8);
     /* peak, oldest id and age, largest id and size, then the u64 ended_at. */
     t.pool = t.records + 5 * 4 + 8;
@@ -778,7 +781,7 @@ static void test_layout_is_as_documented(void)
         return;
     }
     CHECK(memcmp(t.bytes, "VEREDASV", 8) == 0);
-    CHECK(get_le32(t.bytes + OFF_VERSION) == 31);
+    CHECK(get_le32(t.bytes + OFF_VERSION) == 32);
     CHECK(get_le32(t.bytes + OFF_CONTENT) == 0);
     CHECK(get_le32(t.bytes + OFF_WIDTH) == 8);
     CHECK(get_le32(t.bytes + OFF_HEIGHT) == 8);
@@ -1061,6 +1064,7 @@ static void test_refuses_two_on_one_cell(void)
     Settings set = settings_default();
     set.pool_capacity = 2;
     set.start_share = 0.0f;
+    set.founders_per_sea_cell = 0.0f;
     set.min_creatures = 2;
     Sim a;
     char err[256] = "";
@@ -1245,40 +1249,25 @@ static void test_content_pack_named(void)
     sim_free(&a);
 }
 
-/* A file from version 30, before the content pack's name was saved, is this
- * version's file without the name's four length bytes: it still loads, into
- * the same world, needing no pack. */
-static void test_version_30_still_loads(void)
+/* Files from before the sea (versions 30 and 31) are refused, with the
+ * version in the words (Nicolas, 2026-11-18: refuse old saves). */
+static void test_older_versions_refused(void)
 {
     Settings set = settings_default();
     Sim a;
     CHECK(sim_init(&a, &set, 4, 32, 16));
-    for (int i = 0; i < 50; i++) {
-        sim_step(&a);
-    }
     char err[256] = "";
     unsigned char *mem = NULL;
     size_t len = 0;
     CHECK(save_to_memory(&a, &mem, &len, err, sizeof(err)));
     if (mem != NULL) {
-        CHECK(get_le32(mem + OFF_CONTENT) == 0);
-        /* memmove, not memcpy: the two ranges overlap. */
-        memmove(mem + OFF_CONTENT, mem + OFF_CONTENT + 4, len - OFF_CONTENT - 4);
-        len -= 4;
-        mem[OFF_VERSION] = 30;
-        Sim b;
-        bool ok = save_from_memory(&b, mem, len, err, sizeof(err));
-        CHECK(ok);
-        if (ok) {
-            CHECK(b.content[0] == '\0');
-            CHECK(sim_checksum(&b) == sim_checksum(&a));
-            sim_free(&b);
+        for (unsigned char version = 30; version <= 31; version++) {
+            mem[OFF_VERSION] = version;
+            Sim b;
+            CHECK(!save_from_memory(&b, mem, len, err, sizeof(err)));
+            CHECK(strstr(err, "save version 3") != NULL);
+            CHECK(strstr(err, "reads only version 32") != NULL);
         }
-        /* The same bytes called version 31 read the world's width as the
-         * name's length, and are refused. */
-        mem[OFF_VERSION] = 31;
-        CHECK(!save_from_memory(&b, mem, len, err, sizeof(err)));
-        CHECK(strstr(err, "content pack's name") != NULL);
         free(mem);
     }
     sim_free(&a);
@@ -1315,7 +1304,7 @@ int main(void)
     test_copy_steps_alike();
     test_memory_equals_file();
     test_content_pack_named();
-    test_version_30_still_loads();
+    test_older_versions_refused();
     remove(SAVE_FILE);
     remove(BROKEN_FILE);
     TEST_SUMMARY();

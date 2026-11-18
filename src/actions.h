@@ -82,6 +82,14 @@ const char *actions_gene_name(int gene);
  * recorded, for a gene not in ACTIONS_GIVABLE, a value outside 0..1, no living
  * creature with that id, or no memory. */
 bool actions_give_trait(struct Sim *s, uint32_t creature, int gene, float value);
+/* How far (in rings of cells) a gift may move a body that it puts on the
+ * wrong side of the sea line: a sea body given to a walker inland, or a land
+ * body to a swimmer out at sea. */
+#define GIFT_MOVE_RADIUS 8
+/* Whether creature, given gene at value, would have ground it can use within
+ * GIFT_MOVE_RADIUS (its own cell counts). actions_give_trait refuses a gift
+ * that would leave it nowhere; false too for no living creature. */
+bool actions_body_fits(const struct Sim *s, uint32_t creature, int gene, float value);
 
 /* Records a weather event (a WEATHER_ kind from weather.h, not WEATHER_NONE)
  * to start at the next tick and last one season, replacing any under way.

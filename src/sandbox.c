@@ -49,12 +49,39 @@ static int digit(int key, int count)
     return d >= 0 && d < count ? d : -1;
 }
 
+/* The living creature with this id, or NULL. */
+static const Creature *find_creature(const Sim *s, uint32_t id)
+{
+    for (int i = 0; i < s->pool.capacity; i++) {
+        const Creature *c = &s->pool.items[i];
+        if (c->alive && c->id == id) {
+            return c;
+        }
+    }
+    return NULL;
+}
+
 static void open_trait(Sandbox *b, const Creature *followed)
 {
     b->menu = SANDBOX_MENU_TRAIT;
     b->target = followed->id;
     /* Start from the creature's own value, so Enter alone changes nothing. */
     b->value = followed->genome.g[ACTIONS_GIVABLE[b->trait]];
+}
+
+/* The words for a gift refused: dead, or no ground for the new body. */
+static void refused(const Sim *s, uint32_t target, int gene, float value,
+                    char *notice, size_t size)
+{
+    char name[16];
+    name_from_id(target, name, sizeof(name));
+    if (find_creature(s, target) == NULL) {
+        snprintf(notice, size, "%s is no longer alive", name);
+    } else if (gene == GENE_SWIM && value >= SEA_FROM) {
+        snprintf(notice, size, "no water near enough for %s to have a sea body", name);
+    } else {
+        snprintf(notice, size, "no land near enough for %s to have a land body", name);
+    }
 }
 
 static void give(Sandbox *b, Sim *s, char *notice, size_t size)
@@ -67,7 +94,28 @@ static void give(Sandbox *b, Sim *s, char *notice, size_t size)
         snprintf(notice, size, "gave %s %s %.2f", name,
                  actions_gene_name(gene), (double)b->value);
     } else {
-        snprintf(notice, size, "%s is no longer alive", name);
+        refused(s, b->target, gene, b->value, notice, size);
+    }
+    b->menu = SANDBOX_MENU_NONE;
+}
+
+/* The sea body as one gift (the water and air design, 5.7): a land body gets
+ * swim SANDBOX_SEA_SWIM, over the line; a sea body gets SANDBOX_LAND_SWIM, a
+ * good swimmer's land body. It is a swim gift like the slider's, so it lands
+ * in the action log and the playlog the same way. */
+static void give_sea_body(Sandbox *b, Sim *s, char *notice, size_t size)
+{
+    const Creature *c = find_creature(s, b->target);
+    float value = c != NULL && creature_sea_body(c) ? SANDBOX_LAND_SWIM
+                                                     : SANDBOX_SEA_SWIM;
+    char name[16];
+    name_from_id(b->target, name, sizeof(name));
+    if (c != NULL && actions_give_trait(s, b->target, GENE_SWIM, value)) {
+        b->did = SANDBOX_DID_TRAIT;
+        snprintf(notice, size, "gave %s a %s body", name,
+                 value >= SEA_FROM ? "sea" : "land");
+    } else {
+        refused(s, b->target, GENE_SWIM, value, notice, size);
     }
     b->menu = SANDBOX_MENU_NONE;
 }
@@ -94,6 +142,8 @@ static int trait_key(Sandbox *b, Sim *s, int key, char *notice, size_t size)
         b->value = 1.0f;
     } else if (key == KEY_ENTER) {
         give(b, s, notice, size);
+    } else if (key == 's') {
+        give_sea_body(b, s, notice, size);
     }
     return SANDBOX_TAKEN; /* every key while the menu is open */
 }
@@ -341,7 +391,7 @@ int sandbox_menu_lines(const Sandbox *b, const Sim *s, uint64_t now_ms,
         if (n < max) {
             snprintf(lines[n++], SKIP_COLS,
                      "value %.2f  (, and . change it, 0 and 9 the ends; "
-                     "Enter gives, Esc closes)", (double)b->value);
+                     "Enter gives, s a sea body, Esc closes)", (double)b->value);
         }
         break;
     }

@@ -97,8 +97,9 @@ static int draw_head(Scene *sc, Canvas *c, int x, int y, int w, const Sim *s,
     int band = panel_hue_band(render_display_hue(f->genome.g[GENE_HUE]));
     char age[24], about[96];
     years_format(age, sizeof(age), f->age, s->set.ticks_per_year);
-    snprintf(about, sizeof(about), "%s, %s, %s", SPECIES[body.species].name,
-             panel_band_name(band), age);
+    /* A sea body says so on its card (the water and air design, 5.7). */
+    snprintf(about, sizeof(about), "%s%s, %s, %s", SPECIES[body.species].name,
+             creature_sea_body(f) ? " at sea" : "", panel_band_name(band), age);
     line_cut(c, x + PAD, y, w - 2 * PAD, about, PALETTE_TEXT_DIM);
     return y + LINE_H;
 }

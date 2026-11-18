@@ -57,10 +57,11 @@
  * ends with is not written. */
 _Static_assert(sizeof(SAVE_MAGIC) == SAVE_MAGIC_LEN + 1, "save marker length");
 _Static_assert(sizeof(SAVE_MAGIC_OLD) == SAVE_MAGIC_LEN + 1, "old save marker length");
-#define SAVE_VERSION 31u
-/* Version 30 is version 31 without the content pack's name (it needs none),
- * so its files still load. */
-#define SAVE_VERSION_NO_CONTENT 30u
+/* 32: the sea (plankton layer, sea_line on every creature, the sea's
+ * settings). Older files are refused (Nicolas, 2026-11-18): their worlds grew
+ * under rules without a sea, and a world loaded from one would not be the
+ * world those rules make. */
+#define SAVE_VERSION 32u
 
 /* No value in a healthy world comes near this. Bounding them keeps sums
  * from reaching infinity, and float-to-int conversions defined. */
@@ -238,6 +239,7 @@ static void put_world(Writer *w, const World *world)
     put_floats(w, world->temperature, n);
     put_floats(w, world->rain, n);
     put_floats(w, world->snow, n);
+    put_floats(w, world->plankton, n);
     put_u64(w, world->rain_seed);
 }
 
@@ -321,6 +323,7 @@ static void put_creature(Writer *w, const Creature *c)
     put_u32(w, c->id);
     put_u32(w, c->lineage);
     put_float(w, c->family_hue);
+    put_bytes(w, &c->sea_line, 1);
     put_i32(w, c->x);
     put_i32(w, c->y);
     put_bytes(w, &c->heading, 1);
@@ -751,6 +754,7 @@ static void get_world(Reader *r, World *w)
     get_floats(r, w->temperature, n, 0.0f, 1.0f);
     get_floats(r, w->rain, n, 0.0f, 1.0f);
     get_floats(r, w->snow, n, 0.0f, 1.0f);
+    get_floats(r, w->plankton, n, 0.0f, 1.0f);
     w->rain_seed = get_u64(r);
 }
 
@@ -952,6 +956,7 @@ static void get_creature(Reader *r, Creature *c, const Settings *set,
     c->id = get_u32(r);
     c->lineage = get_u32(r);
     c->family_hue = get_float(r, 0.0f, 1.0f);
+    c->sea_line = get_byte(r) != 0 ? 1 : 0;
     c->x = get_i32(r);
     c->y = get_i32(r);
     c->heading = get_byte(r);
@@ -1063,7 +1068,8 @@ static void get_pool(Reader *r, Pool *p, World *w, const Settings *set)
                 return;
             }
             int cell = world_idx(w, c->x, c->y);
-            if (!world_walkable(w, cell) || w->occupant[cell] >= 0) {
+            if (!world_walkable_for(w, cell, creature_sea_body(c)) ||
+                w->occupant[cell] >= 0) {
                 fail(r, "a creature in the file stands where it cannot");
                 return;
             }
@@ -1117,13 +1123,12 @@ static bool get_header(Reader *r, int *width, int *height, char *content)
         return false;
     }
     uint32_t version = get_u32(r);
-    if (r->problem == NULL && version != SAVE_VERSION &&
-        version != SAVE_VERSION_NO_CONTENT) {
+    if (r->problem == NULL && version != SAVE_VERSION) {
         /* problem points at text that must outlive this function, so the
          * wording goes into the Reader, not into a local array. */
         snprintf(r->version_problem, sizeof(r->version_problem),
-                 "the file is save version %u; this veredas reads only versions %u and %u",
-                 (unsigned)version, SAVE_VERSION_NO_CONTENT, SAVE_VERSION);
+                 "the file is save version %u; this veredas reads only version %u",
+                 (unsigned)version, SAVE_VERSION);
         fail(r, r->version_problem);
         return false;
     }
@@ -1137,9 +1142,7 @@ static bool get_header(Reader *r, int *width, int *height, char *content)
         return false;
     }
     content[0] = '\0';
-    if (version == SAVE_VERSION) {
-        get_content(r, content);
-    }
+    get_content(r, content);
     *width = get_i32(r);
     *height = get_i32(r);
     /* Checked before allocating: the numbers decide how much memory to

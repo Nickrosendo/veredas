@@ -688,6 +688,7 @@ static void make_ready(Creature *c, const Settings *s, Rng *r)
 {
     genome_random(&c->genome, r, s);
     c->genome.g[GENE_SIZE] = 0.5f; /* size 1 */
+    c->genome.g[GENE_SWIM] = 0.0f; /* a land body: its child is born on soil */
     c->age = (uint32_t)s->mate_age;
     c->energy = s->mate_threshold + 10.0f;
 }
@@ -860,8 +861,10 @@ static void test_barrier_stops_different_parents(void)
     CHECK(creature_act(&w, &p, b, mate, &s, &r) == -1);
     CHECK(p.count == 2);
     CHECK(p.items[a].energy == 1000.0f);
-    /* The barrier off: the same two have a child. */
+    /* The barrier off: the same two have a child. Its swim gene may come
+     * from b (1), a sea body: a deep cell beside them lets it be born. */
     s.mate_barrier = 0.0f;
+    w.terrain[world_idx(&w, 3, 2)] = TERRAIN_WATER;
     CHECK(creature_act(&w, &p, a, mate, &s, &r) >= 0);
     pool_free(&p);
     world_free(&w);
@@ -2515,6 +2518,7 @@ static void make_sim(Sim *sim, Settings *set)
     *set = settings_default();
     snprintf(set->brain_name, sizeof(set->brain_name), "script");
     set->start_share = 0.0f;
+    set->founders_per_sea_cell = 0.0f;
     set->min_creatures = 0;
     set->veg_start_chance = 0.0f;
     CHECK(sim_init(sim, set, 7, 16, 16));
@@ -3905,6 +3909,8 @@ static void family_birth(float hue, float mutation, uint64_t seed, Creature *chi
     CHECK(pool_init(&p, 3));
     int a = spawn(&p, &w, 3, 3);
     int t = spawn(&p, &w, 3, 2);
+    /* Large mutations may give the child a sea body: water beside a for it. */
+    w.terrain[world_idx(&w, 2, 3)] = TERRAIN_WATER;
     p.items[a].energy = p.items[t].energy = 100.0f;
     p.items[a].age = p.items[t].age = (uint32_t)s.mate_age;
     p.items[a].genome.g[GENE_HUE] = p.items[t].genome.g[GENE_HUE] = hue;

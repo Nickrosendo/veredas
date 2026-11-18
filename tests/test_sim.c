@@ -83,9 +83,10 @@
  * per decision; then the fading view, three wide views in place of the three
  * rays, and a sense of food within a bite; then the remembered meal place;
  * then ten hidden values, founders with the food-finding instinct, and a
- * starting spread of 0.5.
+ * starting spread of 0.5; then the sea (rules 2): sea bodies, plankton, sea
+ * founders, birth cells that suit the child and a brake for each habitat.
  */
-#define SEED_7_AFTER_500 0x2706eae63000a290ULL
+#define SEED_7_AFTER_500 0x4cb6c3597bd8b546ULL
 
 /* One creature in a bare 16x16 world with the scripted brain, resting for a
  * tick, calling or not. Returns the energy it has left. */
@@ -94,6 +95,7 @@ static float energy_after_rest(bool call, float cost)
     Settings set = settings_default();
     snprintf(set.brain_name, sizeof(set.brain_name), "script");
     set.start_share = 0.0f;
+    set.founders_per_sea_cell = 0.0f;
     set.min_creatures = 0;
     set.veg_start_chance = 0.0f;
     set.call_cost = cost;
@@ -155,7 +157,7 @@ static void test_same_seed_same_checksum(void)
      * value above changes how worlds unfold, so old world codes would replay
      * wrong: raise VEREDAS_RULES (sim.h) in the same commit, and this number with
      * it. Checked on every platform, since it is the rule, not the maths. */
-    CHECK(VEREDAS_RULES == 1);
+    CHECK(VEREDAS_RULES == 2);
     sim_free(&a);
     sim_free(&b);
 }
@@ -259,6 +261,7 @@ static void check_founders(int width, int height)
 {
     Settings set = settings_default();
     set.start_share = 0.05f;
+    set.founders_per_sea_cell = 0.0f; /* the land's share; test_sea counts the sea's */
     Sim s;
     CHECK(sim_init(&s, &set, 11, width, height));
     float wanted = set.start_share * (float)count_soil(&s.world);
@@ -285,6 +288,7 @@ static void test_founders_scale_with_soil(void)
     /* A share of 1 with a pool larger than the soil: as much as can be
      * found, and it comes back too. */
     set.pool_capacity = 40 * 20;
+    set.founders_per_sea_cell = 0.0f; /* the land alone, against its soil */
     CHECK(sim_init(&s, &set, 11, 40, 20));
     CHECK(s.pool.count > 0);
     CHECK(s.pool.count <= count_soil(&s.world));
@@ -292,6 +296,7 @@ static void test_founders_scale_with_soil(void)
 
     /* A share of 0: nobody, which tests that place their own rely on. */
     set.start_share = 0.0f;
+    set.founders_per_sea_cell = 0.0f;
     CHECK(sim_init(&s, &set, 11, 40, 20));
     CHECK(s.pool.count == 0);
     sim_free(&s);
@@ -311,6 +316,9 @@ static void test_all_plants_dead_is_allowed(void)
     int n = s.world.w * s.world.h;
     for (int i = 0; i < n; i++) {
         s.world.veg[i] = 0;
+        /* The sea's food too, for good: with a cap of 0 it never comes back. */
+        s.world.plankton[i] = 0.0f;
+        s.world.plankton_cap[i] = 0.0f;
     }
     int regrown = 0;
     for (int t = 0; t < 60000 && !sim_is_over(&s); t++) {
@@ -329,6 +337,7 @@ static void test_plants_alone_survive(void)
 {
     Settings set = settings_default();
     set.start_share = 0.0f;
+    set.founders_per_sea_cell = 0.0f;
     for (uint64_t seed = 1; seed <= 5; seed++) {
         Sim s;
         CHECK(sim_init(&s, &set, seed, 128, 72));
@@ -394,6 +403,7 @@ static void make_empty_world(Sim *s)
 {
     Settings set = settings_default();
     set.start_share = 0.0f;
+    set.founders_per_sea_cell = 0.0f;
     set.veg_start_chance = 0.0f;
     CHECK(sim_init(s, &set, 7, 64, 32));
     for (int i = 0; i < 64 * 32; i++) {

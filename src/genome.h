@@ -42,6 +42,12 @@ enum {
     GENE_TRAITS
 };
 
+/* A swim gene from here up is a sea body (the water and air design, 5.1):
+ * deep water and the shallows are its ground, soil is closed to it. Below it a
+ * swimmer keeps its land body and only pays less in the shallows. A fixed
+ * line, not a setting, so the drawing code and the simulation share it. */
+#define SEA_FROM 0.8f
+
 /* The sharpness of the choice at the sure gene's two ends: an action's chance
  * is in proportion to exp(output * sharpness). At 20 an output ahead of the
  * next by 0.25 already wins more than 99 times in 100, which is close to

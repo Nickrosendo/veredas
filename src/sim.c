@@ -7,6 +7,7 @@
 #include "chronicle.h"
 #include "climate.h"
 #include "flora.h"
+#include "plankton.h"
 #include "terrain.h"
 #include "years.h"
 
@@ -65,36 +66,39 @@ static uint32_t story_date(const Sim *s)
     return (uint32_t)s->tick;
 }
 
-/* Places one creature on a random free soil cell with the starting
- * energy, a random heading and a random genome, and tells the brain.
- * Returns its slot, or -1 if the pool is full or no free cell turned
- * up. */
-static int place_creature(Sim *s)
+/* Places one creature with genome *g on a random free cell its body can use:
+ * deep water for a sea body, soil or shallows for a land body. It gets the
+ * starting energy and a random heading, and the brain is told. Returns its
+ * slot, or -1 if the pool is full or PLACE_ATTEMPTS random cells in a row
+ * did not suit it. */
+static int place_body(Sim *s, const Genome *g)
 {
     if (s->pool.count >= s->pool.capacity) {
         return -1; /* full: spend no random draws */
     }
+    bool sea = g->g[GENE_SWIM] >= SEA_FROM;
     for (int attempt = 0; attempt < PLACE_ATTEMPTS; attempt++) {
         /* Two statements, so the draws happen in a fixed order (x
          * first). Inside one function call's arguments the order would
          * be up to the compiler. */
         int x = (int)rng_below(&s->rng, (uint32_t)s->world.w);
         int y = (int)rng_below(&s->rng, (uint32_t)s->world.h);
-        int idx = pool_spawn(&s->pool, &s->world, x, y);
+        /* A sea founder starts out at sea, not in the shallows by the shore. */
+        if (sea && s->world.terrain[world_idx(&s->world, x, y)] != TERRAIN_WATER) {
+            continue;
+        }
+        int idx = pool_spawn_body(&s->pool, &s->world, x, y, sea);
         if (idx >= 0) {
             Creature *c = &s->pool.items[idx];
             c->energy = s->set.energy_start;
             c->heading = (uint8_t)rng_below(&s->rng, HEADING_COUNT);
-            /* A placed creature has no parent: a random genome, and the
+            /* A placed creature has no parent: the genome given, and the
              * lineage pool_spawn gave it (its own id) starts a new line. */
-            genome_random(&c->genome, &s->rng, &s->set);
-            if (s->set.instinct) {
-                genome_add_instinct(&c->genome, &s->set); /* draws nothing */
-            }
+            c->genome = *g;
             c->health = creature_max_health(c, &s->set); /* needs the genes */
             creature_start_family(c);
-            chronicle_note(recorder(s), c,
-                           (LifeEvent){.tick = story_date(s), .kind = LIFE_BORN});
+            chronicle_note(recorder(s),
+                           c, (LifeEvent){.tick = story_date(s), .kind = LIFE_BORN});
             s->brain.on_birth(&s->brain, c->id, &c->genome);
             return idx;
         }
@@ -102,18 +106,73 @@ static int place_creature(Sim *s)
     return -1;
 }
 
-/* How many founders this world gets: a share of its soil, at most the pool.
- * + 0.5f before converting to int rounds to the nearest whole creature. */
-static int founder_count(const Sim *s)
+/* A random founder's genome: random genes, and the founder instinct when it is
+ * on. Drawn before its cell, since its body decides where it may live. */
+static void founder_genome(Sim *s, Genome *g)
 {
-    int soil = 0;
-    for (int i = 0; i < s->world.w * s->world.h; i++) {
-        if (s->world.terrain[i] == TERRAIN_SOIL) {
-            soil++;
-        }
+    genome_random(g, &s->rng, &s->set);
+    if (s->set.instinct) {
+        genome_add_instinct(g, &s->set); /* draws nothing */
     }
-    int wanted = (int)(s->set.start_share * (float)soil + 0.5f);
-    return wanted < s->pool.capacity ? wanted : s->pool.capacity;
+}
+
+/* Places one random creature wherever its body can live (the floor's top-up).
+ * Returns its slot, or -1 as place_body does. */
+static int place_creature(Sim *s)
+{
+    if (s->pool.count >= s->pool.capacity) {
+        return -1;
+    }
+    Genome g; /* about 3 KB: fine on the stack for one call */
+    founder_genome(s, &g);
+    return place_body(s, &g);
+}
+
+/* A habitat's founders are given up after this many failed placements in a
+ * row: its free cells are as good as full. */
+#define FOUNDER_MISSES 3
+/* At most this many random genomes per founder wanted: a world whose sea is
+ * tiny still ends its search, with fewer sea founders than asked. */
+#define FOUNDER_DRAWS_PER_SLOT 40
+
+/* The founders (the water and air design, 5.2): random genomes, each placed
+ * where its body can live, until the land holds start_share of its soil and
+ * the sea founders_per_sea_cell of its deep water. A genome whose habitat is
+ * full already is not used. So the land keeps the founder count it had before
+ * the sea, and the sea's founders are random genomes like any other: about
+ * one in five has a swim gene over the line. + 0.5f before converting to int
+ * rounds to the nearest whole creature. */
+static void place_founders(Sim *s)
+{
+    int soil = 0, deep = 0;
+    for (int i = 0; i < s->world.w * s->world.h; i++) {
+        soil += s->world.terrain[i] == TERRAIN_SOIL;
+        deep += s->world.terrain[i] == TERRAIN_WATER;
+    }
+    int want[2] = {(int)(s->set.start_share * (float)soil + 0.5f),
+                   (int)(s->set.founders_per_sea_cell * (float)deep + 0.5f)};
+    int have[2] = {0, 0};
+    int misses[2] = {0, 0};
+    /* long long: the product of two ints could pass INT_MAX on a huge map. */
+    long long draws_left = (long long)FOUNDER_DRAWS_PER_SLOT * (want[0] + want[1]);
+    while ((have[0] < want[0] || have[1] < want[1]) && draws_left > 0 &&
+           s->pool.count < s->pool.capacity) {
+        draws_left--;
+        Genome g;
+        founder_genome(s, &g);
+        int habitat = g.g[GENE_SWIM] >= SEA_FROM ? 1 : 0; /* 0 land, 1 sea */
+        if (have[habitat] >= want[habitat]) {
+            continue; /* that habitat has its share: this genome is not used */
+        }
+        if (place_body(s, &g) < 0) {
+            if (++misses[habitat] >= FOUNDER_MISSES) {
+                want[habitat] = have[habitat]; /* full: stop filling it */
+            }
+            continue;
+        }
+        misses[habitat] = 0;
+        have[habitat]++;
+    }
 }
 
 static void sample(Sim *s)
@@ -254,6 +313,8 @@ bool sim_resume(Sim *s)
                     s->seed ^ BRAIN_SEED_SALT)) {
         return false;
     }
+    /* The plankton's caps are not in the file: made again from what is. */
+    plankton_prepare(&s->world, &s->set);
     for (int i = 0; i < s->pool.capacity; i++) {
         const Creature *c = &s->pool.items[i];
         if (c->alive) {
@@ -292,14 +353,9 @@ bool sim_reseed(Sim *s, uint64_t seed)
     rng_seed(&climate_rng, seed ^ CLIMATE_SEED_SALT);
     climate_generate(&s->world, &climate_rng, &s->set);
     plant_start(&s->world, &s->rng, &s->set);
-    int founders = founder_count(s);
-    for (int i = 0; i < founders; i++) {
-        /* A failure means 64 random cells in a row were taken: the soil is
-         * as good as full, so stop instead of searching further. */
-        if (place_creature(s) < 0) {
-            break;
-        }
-    }
+    plankton_prepare(&s->world, &s->set); /* draws nothing */
+    plankton_start(&s->world);
+    place_founders(s);
     records_start(s);
     list_callers(s);
     /* A first sample at tick 0, so the panel has numbers from the start,
@@ -421,12 +477,18 @@ bool sim_in_season(uint64_t tick, const Settings *set)
 static void creatures_act(Sim *s)
 {
     int n = 0;
+    int sea = 0;
     for (int i = 0; i < s->pool.capacity; i++) {
         if (s->pool.items[i].alive) {
             s->turns[n] = (Turn){i, s->pool.items[i].id};
             n++;
+            sea += creature_sea_body(&s->pool.items[i]); /* a bool counts 0 or 1 */
         }
     }
+    s->pool.sea_alive = sea;
+    s->pool.plankton_rich = s->set.birth_per_plankton > 0.0f
+                                ? plankton_count_rich(&s->world)
+                                : 0;
     shuffle(s->turns, n, &s->rng);
     pool_count_plant_eaters(&s->pool, &s->set);
     /* Counted before anyone acts, so every birth this tick sees the same
@@ -665,12 +727,20 @@ static void accounting(Sim *s)
 }
 
 /* The floor: top the population up to min_creatures, so a long-running
- * world is never empty. Stops early if no free cell turns up. */
+ * world is never empty. Each newcomer is a random genome placed where its
+ * body can live; one that finds no cell (a sea body in a world without deep
+ * water) is not used. Stops after RESTOCK_MISSES failures in a row: the free
+ * cells are as good as full. More than the founders' FOUNDER_MISSES, since
+ * one genome in five is a sea body and a world may have no sea. */
+#define RESTOCK_MISSES 12
 static void restock(Sim *s)
 {
-    while (s->pool.count < s->set.min_creatures) {
+    int misses = 0;
+    while (s->pool.count < s->set.min_creatures && misses < RESTOCK_MISSES) {
         if (place_creature(s) < 0) {
-            break;
+            misses++;
+        } else {
+            misses = 0;
         }
     }
 }
@@ -717,8 +787,11 @@ void sim_step(Sim *s)
         s->weather = (Weather){0}; /* it ended: forget it */
     }
     climate_step(&s->world, &s->set, s->tick);
-    flora_step(&s->world, &s->rng, &s->set,
-               years_season_of(s->tick, s->set.ticks_per_year));
+    int season = years_season_of(s->tick, s->set.ticks_per_year);
+    flora_step(&s->world, &s->rng, &s->set, season);
+    if (s->tick % (uint64_t)s->set.plankton_every == 0) {
+        plankton_step(&s->world, &s->set, season);
+    }
     carrion_step(&s->world, &s->set);
     scent_step(&s->world, &s->set);
     creatures_act(s);
@@ -791,6 +864,7 @@ static uint64_t hash_creature(uint64_t hash, const Creature *c)
      * that test fail for a reason that says nothing about the world. */
     hash = fnv1a(hash, &c->id, sizeof(c->id));
     hash = fnv1a(hash, &c->lineage, sizeof(c->lineage));
+    hash = fnv1a(hash, &c->sea_line, sizeof(c->sea_line));
     hash = fnv1a(hash, &c->family_hue, sizeof(c->family_hue));
     hash = fnv1a(hash, &c->x, sizeof(c->x));
     hash = fnv1a(hash, &c->y, sizeof(c->y));
@@ -872,6 +946,7 @@ uint64_t sim_checksum(const Sim *s)
     hash = fnv1a(hash, w->rain, n * sizeof(float));
     hash = fnv1a(hash, w->snow, n * sizeof(float));
     hash = fnv1a(hash, &w->rain_seed, sizeof(w->rain_seed));
+    hash = fnv1a(hash, w->plankton, n * sizeof(float));
     hash = fnv1a(hash, w->occupant, n * sizeof(int32_t));
     hash = fnv1a(hash, &s->pool.count, sizeof(s->pool.count));
     hash = fnv1a(hash, &s->pool.next_id, sizeof(s->pool.next_id));

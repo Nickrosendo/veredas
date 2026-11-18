@@ -406,6 +406,58 @@ static void check_gifts(Notices *n, const Sim *s)
     }
 }
 
+/* ---- a family taking to the sea ---- */
+
+static bool sea_told(const Notices *n, uint32_t lineage)
+{
+    uint32_t kept = n->sea_told_total < NOTICE_SEA_FAMILIES ? n->sea_told_total
+                                                            : NOTICE_SEA_FAMILIES;
+    for (uint32_t i = 0; i < kept; i++) {
+        if (n->sea_told[i] == lineage) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Whether c's swim gene is one the player gave: within the carrier tolerance
+ * of a swim gift's value. A crossing helped by a gift is not news. */
+static bool swim_given(const Sim *s, const Creature *c)
+{
+    const ActionLog *log = &s->actions;
+    for (int i = 0; i < log->next; i++) {
+        const PlayerAction *a = &log->items[i];
+        float d = c->genome.g[GENE_SWIM] - a->value;
+        if (a->kind == ACTION_TRAIT && a->gene == GENE_SWIM &&
+            d < ACTIONS_CARRIER_TOLERANCE && d > -ACTIONS_CARRIER_TOLERANCE) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* A living sea body of a line that took to the sea (sea_line), whose family is
+ * not told yet: "the X family took to the sea", once per family. */
+static void check_sea(Notices *n, const Sim *s)
+{
+    for (int i = 0; i < s->pool.capacity; i++) {
+        const Creature *c = &s->pool.items[i];
+        if (!c->alive || !c->sea_line || !creature_sea_body(c) ||
+            sea_told(n, c->lineage) || swim_given(s, c)) {
+            continue;
+        }
+        n->sea_told[n->sea_told_total % NOTICE_SEA_FAMILIES] = c->lineage;
+        n->sea_told_total++;
+        if (!n->started) {
+            continue; /* there already: known, not news */
+        }
+        char family[16], text[NOTICE_TEXT];
+        name_from_id(c->lineage, family, sizeof(family));
+        snprintf(text, sizeof(text), "the %s family took to the sea", family);
+        notices_add(n, s->tick, c->id, text);
+    }
+}
+
 void notices_check(Notices *n, const Sim *s)
 {
     if (n->started && s->stats.tick == n->last_sample) {
@@ -418,5 +470,6 @@ void notices_check(Notices *n, const Sim *s)
     check_families(n, s);
     check_unlike(n, s);
     check_gifts(n, s);
+    check_sea(n, s);
     n->started = true;
 }

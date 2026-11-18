@@ -39,6 +39,11 @@ enum { SANDBOX_WILD_STEPS = 6, SANDBOX_JUMP_STEPS = 5 };
 
 /* The step of the trait menu's value: , and . move it by this. */
 #define SANDBOX_VALUE_STEP 0.05f
+/* The swim genes the trait menu's sea-body key gives: a sea body, a little
+ * over the line SEA_FROM so a child's small change keeps most children at
+ * sea; and a land body, a good swimmer's, back under it. */
+#define SANDBOX_SEA_SWIM 0.9f
+#define SANDBOX_LAND_SWIM 0.5f
 
 /* A weather event watched from its start, to say when it ends what changed in
  * its season (sandbox_weather_check). */

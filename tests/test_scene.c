@@ -229,6 +229,7 @@ static void make_empty_sim(Sim *s, int w, int h)
     Settings set = day_settings();
     snprintf(set.brain_name, sizeof(set.brain_name), "script");
     set.start_share = 0.0f;
+    set.founders_per_sea_cell = 0.0f;
     set.min_creatures = 0;
     set.veg_start_chance = 0.0f;
     CHECK(sim_init(s, &set, 7, w, h));
@@ -521,10 +522,11 @@ static void test_known_world_pixels(void)
          * middle level; both pictures written out and compared with the old
          * ones. Re-pinned for medium parts the same day: one animal with a
          * medium gene at the far middle level wears a thinner shell; looked
-         * at. */
+         * at. Re-pinned for the sea (rules 2, 2026-11-18): founders drawn
+         * and placed by body, sea animals on deep water; every level moves. */
         static const uint64_t EXPECTED[CAMERA_LEVELS] = {
-            0xbe5f57fb7c7bdabdu, 0x46c292dd2e0d32ceu,
-            0x78c979b143b36a7bu, 0x98b4ac2b8979d875u,
+            0x246d2f0b8b050069u, 0xec5964d329208b52u,
+            0xfe5b3044bcb39998u, 0x5548508875eb4585u,
         };
         if (hashes[level] != EXPECTED[level]) {
             printf("level %d: 0x%llxu\n", level,
@@ -1015,6 +1017,7 @@ static void test_ground_shows_water_and_rain(void)
 {
     Settings set = day_settings();
     set.start_share = 0.0f;
+    set.founders_per_sea_cell = 0.0f;
     Sim s;
     CHECK(sim_init(&s, &set, 1, 64, 64));
     Scene sc;
@@ -1155,6 +1158,7 @@ static void test_region_tint(void)
 {
     Settings set = day_settings();
     set.start_share = 0.0f;
+    set.founders_per_sea_cell = 0.0f;
     Sim s;
     CHECK(sim_init(&s, &set, 1, 64, 64));
     /* Spawning refuses water and rock, so the cell must be soil first, or the
