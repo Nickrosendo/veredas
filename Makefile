@@ -213,6 +213,13 @@ balance:
 $(OUT)/balance_report$(EXE): tests/balance_report.c $(LIB_OBJ)
 	$(CC) $(CFLAGS) -MMD -MP $< $(LIB_OBJ) -o $@ $(LDLIBS)
 
+# The speed bar's tool: seconds per million creature-ticks on one headless world.
+speed:
+	$(MAKE) MODE=release $(RELEASE_OUT)/speed_report
+
+$(OUT)/speed_report$(EXE): tests/speed_report.c $(LIB_OBJ)
+	$(CC) $(CFLAGS) -MMD -MP $< $(LIB_OBJ) -o $@ $(LDLIBS)
+
 # Where make install puts things: PREFIX is the usual setting, and DESTDIR
 # (empty unless a packager sets it) goes in front of it, to build a package
 # without touching the real system.
@@ -235,5 +242,5 @@ clean:
 # else; a bare .SECONDARY: keeps them, so objects survive between runs.
 .SECONDARY:
 
-.PHONY: all release balance window web test-window run-window-smoke test run-tests test-slow run-slow-tests install uninstall \
+.PHONY: all release balance speed window web test-window run-window-smoke test run-tests test-slow run-slow-tests install uninstall \
 	clean
