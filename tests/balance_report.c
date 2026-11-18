@@ -104,6 +104,12 @@ typedef struct {
     /* The tick from which tactics count for the TACTICS line (--tactics), or -1
      * for no line. */
     long tactics_from;
+    /* The sea verdict (--sea FROM): the tick its watched years start at, or -1
+     * for no SEA line; the sea kills counted by then; and every creature born
+     * of a line that took to the sea (sea_line with a sea body). */
+    long sea_from;
+    uint32_t sea_kills_at_from;
+    uint64_t sea_line_births;
 } Report;
 
 /* The seasons' verdict (the seasons design, section 8) is judged on the whole
@@ -1110,7 +1116,21 @@ static void run(Sim *s, long ticks, Shadow *shadow, Report *rep, Verdict *v)
         if (rep->tactics_from >= 0 && (long)s->tick == rep->tactics_from) {
             tactics_reset_seen(&s->tactics);
         }
+        if (rep->sea_from >= 0 && (long)s->tick == rep->sea_from) {
+            rep->sea_kills_at_from = s->pool.sea_kills;
+        }
+        uint32_t born_from = s->pool.next_id;
         sim_step(s);
+        if (rep->sea_from >= 0 && s->pool.next_id != born_from) {
+            for (int i = 0; i < s->pool.capacity; i++) {
+                const Creature *c = &s->pool.items[i];
+                /* Born this tick: an id handed out since the step began. */
+                if (c->alive && c->id - born_from < s->pool.next_id - born_from &&
+                    c->sea_line && creature_sea_body(c)) {
+                    rep->sea_line_births++;
+                }
+            }
+        }
         watch_slots(s, shadow, rep, v);
         /* Unsigned subtraction: right even if the ids wrapped past 2^32. */
         verdict_tick(s, v, s->pool.next_id - seen_id);
@@ -1138,6 +1158,31 @@ static void run(Sim *s, long ticks, Shadow *shadow, Report *rep, Verdict *v)
             return; /* nothing more can happen in this world */
         }
     }
+}
+
+/* The SEA line (--sea FROM): who is alive at the end on each side of the
+ * line, sea kills of sea animals since FROM and in all, sea-line births in
+ * all, and sea-line animals alive at the end. */
+static void print_sea(const Sim *s, const Report *rep)
+{
+    int sea = 0, land = 0, line = 0, hunters = 0;
+    for (int i = 0; i < s->pool.capacity; i++) {
+        const Creature *c = &s->pool.items[i];
+        if (!c->alive) {
+            continue;
+        }
+        if (creature_sea_body(c)) {
+            sea++;
+            line += c->sea_line;
+            hunters += creature_is_hunter(c);
+        } else {
+            land++;
+        }
+    }
+    printf("SEA land %d sea %d sea_hunters %d kills_watched %u kills_all %u "
+           "line_births %llu line_alive %d\n",
+           land, sea, hunters, s->pool.sea_kills - rep->sea_kills_at_from,
+           s->pool.sea_kills, (unsigned long long)rep->sea_line_births, line);
 }
 
 /* The tactics seen since --tactics' tick: one TACTICS line naming them, then
@@ -1200,7 +1245,8 @@ static void print_tactics(const Sim *s)
 static int usage(void)
 {
     fprintf(stderr, "usage: balance_report --seed N --ticks N [--size WxH] "
-                    "[--config PATH] [--header] [--summary] [--tactics FROM]\n");
+                    "[--config PATH] [--header] [--summary] [--tactics FROM] "
+                    "[--sea FROM]\n");
     return 2;
 }
 
@@ -1213,6 +1259,7 @@ int main(int argc, char **argv)
     const char *config = NULL;
     bool summary = false;
     long tactics_from = -1;
+    long sea_from = -1;
     for (int i = 1; i < argc; i++) {
         /* Every option here takes a value in the next argument, except
          * --header, which prints the column names and nothing else. */
@@ -1240,6 +1287,8 @@ int main(int argc, char **argv)
             config = value;
         } else if (strcmp(argv[i - 1], "--tactics") == 0) {
             tactics_from = strtol(value, NULL, 10);
+        } else if (strcmp(argv[i - 1], "--sea") == 0) {
+            sea_from = strtol(value, NULL, 10);
         } else {
             return usage();
         }
@@ -1264,7 +1313,8 @@ int main(int argc, char **argv)
         sim_free(&sim);
         return 1;
     }
-    Report rep = {.first_born_id = sim.pool.next_id, .tactics_from = tactics_from};
+    Report rep = {.first_born_id = sim.pool.next_id, .tactics_from = tactics_from,
+                  .sea_from = sea_from};
     Verdict verdict = {0};
     run(&sim, ticks, shadow, &rep, &verdict);
     print_row(&sim, shadow, &rep);
@@ -1276,6 +1326,9 @@ int main(int argc, char **argv)
     }
     if (tactics_from >= 0) {
         print_tactics(&sim);
+    }
+    if (sea_from >= 0) {
+        print_sea(&sim, &rep);
     }
     free(shadow);
     sim_free(&sim);
