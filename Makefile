@@ -172,12 +172,15 @@ $(OUT)/content/%.o: $(CONTENT)/src/%.c
 $(OUT)/tests/brain_script.o: tests/brain_script.c | $(OUT)/tests
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
-# More specific than the rule below, so make prefers it for wtest_ programs.
-$(OUT)/tests/wtest_%$(EXE): tests/wtest_%.c $(WTEST_OBJ) | $(OUT)/tests
+# Each rule names the programs it builds ("static pattern rules": targets,
+# then the pattern), so the two can never be confused. Two plain pattern rules
+# that both matched wtest_ programs relied on make preferring the shorter
+# stem, and the CI's make took the general one on 2026-11-18.
+$(WTEST_BIN): $(OUT)/tests/%$(EXE): tests/%.c $(WTEST_OBJ) | $(OUT)/tests
 	$(CC) $(CFLAGS) -MMD -MP $< $(WTEST_OBJ) -o $@ $(LDLIBS)
 
 # One program per test file.
-$(OUT)/tests/%$(EXE): tests/%.c $(LIB_OBJ) $(TEST_SUPPORT_OBJ) | $(OUT)/tests
+$(TEST_BIN) $(SLOW_BIN): $(OUT)/tests/%$(EXE): tests/%.c $(LIB_OBJ) $(TEST_SUPPORT_OBJ) | $(OUT)/tests
 	$(CC) $(CFLAGS) -MMD -MP $< $(LIB_OBJ) $(TEST_SUPPORT_OBJ) \
 		-o $@ $(LDLIBS)
 
