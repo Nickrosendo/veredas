@@ -2,7 +2,9 @@
 
 #include <stdint.h>
 
+#include "art.h"
 #include "canvas.h"
+#include "content.h"
 #include "lab.h"
 #include "palette.h"
 #include "sprite.h"
@@ -275,6 +277,18 @@ static void test_lab_pixels(void)
     canvas_fill(&c, canvas_rgb(255, 0, 255));
     lab_draw(&sprites, &c, ACTION_REST, false, 1234, 0, 0, 1112, 688);
     uint64_t h = hash_canvas(&c);
+    const Content *pack = content_get();
+    if (pack->art_set_count > 0) {
+        /* A pack with frames of its own (make CONTENT=...) draws its species
+         * differently, so the picture pinned below, the public build's, is
+         * not this build's. What can be checked is that every frame set the
+         * pack brings is the one the engine uses for its species. */
+        for (int i = 0; i < pack->art_set_count; i++) {
+            CHECK(art_set(pack->art_sets[i].species) == &pack->art_sets[i]);
+        }
+        canvas_free(&c);
+        return;
+    }
 #ifndef _WIN32
     /* Pinned after Nicolas approved the look on 2026-11-07; a change must be
      * looked at by eye. Linux only: the poses use sinf, whose last bits may

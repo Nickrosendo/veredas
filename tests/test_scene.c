@@ -7,6 +7,7 @@
 #include "app.h"
 #include "brain_script.h"
 #include "climate.h"
+#include "content.h"
 #include "flora.h"
 #include "family.h"
 #include "inspect.h"
@@ -454,6 +455,11 @@ static void test_known_world_pixels(void)
         canvas_fill(&c, magenta);
         scene_draw_world(&sc, &c, &cam, &s, 0.5f, 1000, 1000, 0, 0);
         hashes[level] = hash_canvas(&c);
+        /* The pinned pictures are the public build's: a pack with frames of
+         * its own (make CONTENT=...) draws its species differently, so only
+         * the checks after the pin apply to it (test_lab.c checks that the
+         * pack's frames are the ones used). */
+        bool pinned = content_get()->art_set_count == 0;
 #ifndef _WIN32
         /* Linux only: the water and grass use sinf (see test_lab.c). Re-pinned
          * on 2026-11-07: Far changed because a creature in deep sleep is now
@@ -528,11 +534,13 @@ static void test_known_world_pixels(void)
             0x246d2f0b8b050069u, 0xec5964d329208b52u,
             0xfe5b3044bcb39998u, 0x5548508875eb4585u,
         };
-        if (hashes[level] != EXPECTED[level]) {
+        if (pinned && hashes[level] != EXPECTED[level]) {
             printf("level %d: 0x%llxu\n", level,
                    (unsigned long long)hashes[level]);
         }
-        CHECK(hashes[level] == EXPECTED[level]);
+        CHECK(!pinned || hashes[level] == EXPECTED[level]);
+#else
+        (void)pinned;
 #endif
         int left = 0;
         for (int i = 0; i < VIEW_W * VIEW_H; i++) {

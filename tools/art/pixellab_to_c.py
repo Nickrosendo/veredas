@@ -34,7 +34,9 @@ CANVAS = 128  # larger than any PixelLab canvas (68 to 88 so far): only the marg
 NONE, DEEP, SHADOW, BASE, LIGHT, HIGH, BELLY, OUTLINE, MOUTH = range(9)
 HORN0 = 11  # INK_HORN0: five horn shades, dark to light, fixed colours
 MANE0 = 25  # INK_MANE0: five mane shades, dark to light, from the family's colour
+SHELL1 = 21  # INK_SHELL1: four shell shades, dark to light, fixed colours
 
+SEA_COVERS = "ART_COVERS_ARMOUR | ART_COVERS_WEAPON | ART_COVERS_SWIM"
 # species name -> its SPECIES_ value and the parts its frames already show
 # (art.h's ART_COVERS_ bits): a swimmer's body is its fin, an armoured one's
 # its plates (and the elephant's tusks and the rhino's horn its weapon), so
@@ -57,6 +59,13 @@ SPECIES = {
     "gazelle": ("SPECIES_GAZELLE", "0"),
     "deer": ("SPECIES_DEER", "ART_COVERS_WEAPON"),
     "zebra": ("SPECIES_ZEBRA", "0"),
+    # The sea's bodies (frames in the content pack only): the skeleton draws
+    # no part on a legless body, so their frames count as every part and no
+    # layer is generated or painted over them.
+    "shark": ("SPECIES_SHARK", SEA_COVERS),
+    "dolphin": ("SPECIES_DOLPHIN", SEA_COVERS),
+    "sea_turtle": ("SPECIES_SEA_TURTLE", SEA_COVERS),
+    "manatee": ("SPECIES_MANATEE", SEA_COVERS),
 }
 # the game's actions and the clip each is cut from
 ACTIONS = [
@@ -79,6 +88,18 @@ CLIP_FROM = {"armadillo": {"run": "walk"}, "hippo": {"idle": "graze"},
 # colours), not the inside of a mouth.
 RED_IS_HORN = {"goat"}
 
+# Species whose brown pixels are a shell, drawn in the engine's fixed shell
+# colours as the skeleton's turtle is (the family colour tints only the skin):
+# the sea turtle's shell, brown and tan against green skin.
+BROWN_IS_SHELL = {"sea_turtle"}
+
+# A fixed base lightness for species whose skin spans more than the fur
+# bands do: the turtle's runs from 80 (head) to 150 (flipper scales) and 190
+# (the pale under-shell); its most common lightness, 80, put every flipper
+# in the belly's shade. At 110 the head is shadow, the flippers the high
+# shades, the seams deep and the under-shell belly.
+SKIN_LEVEL = {"sea_turtle": 110}
+
 # Species whose reddish pixels are fur whatever the fur's own colour: the
 # hare's and the fennec's pink inner ears and the hippo's pink muzzle and
 # belly would otherwise be drawn as the inside of a mouth.
@@ -96,10 +117,10 @@ EAR_ROWS = {"fennec": 10}
 NO_EYE = {"rhino", "hippo", "gazelle", "deer", "zebra"}
 
 # Species whose frames come mottled (the gazelle's head-butt, the deer's
-# eating): a lone
+# eating, the manatee's wrinkled skin): a lone
 # shadow or light pixel with the base shade on at least three of its four
 # sides becomes base, so the texture does not turn into specks.
-SMOOTH = {"gazelle", "deer"}
+SMOOTH = {"gazelle", "deer", "manatee"}
 
 # Species with a mane much darker than their fur (the lion's): pixels between
 # the outline and 60 below the fur's lightness are mane, drawn in the
@@ -133,6 +154,18 @@ FRAMES = {
     "gazelle": {"bite": (1, None), "sleep": (5, None)},
     "deer": {"bite": (1, None), "sleep": (6, None)},
     "zebra": {"bite": (1, None), "sleep": (6, None)},
+    # The sea's bodies: every clip a custom one started from the same side
+    # picture, so loops leave out that frame 0; a sleep is a drift, all of it.
+    "manatee": {"walk": (1, None), "run": (1, None), "graze": (1, None),
+                "bite": (1, None), "sleep": (1, None)},
+    # the graze's frames 1 to 3 hold a cyan blob of food at the mouth
+    "shark": {"walk": (1, None), "run": (1, None), "graze": (4, None),
+              "bite": (1, None), "sleep": (1, None)},
+    "dolphin": {"walk": (1, None), "run": (1, None), "graze": (1, None),
+                "bite": (1, None), "sleep": (1, None)},
+    # the attack's last three frames turn the head pale and twisted
+    "sea_turtle": {"walk": (1, None), "run": (1, None), "graze": (1, None),
+                   "bite": (1, None), "attack": (0, 5), "sleep": (1, None)},
 }
 
 
@@ -207,10 +240,14 @@ def pixels(im):
     return [tuple(raw[i:i + 4]) for i in range(0, len(raw), 4)]
 
 
-def body_level(im):
-    """The most common lightness of the fur: the body's base shade."""
+def body_level(im, shell=False):
+    """The most common lightness of the fur: the body's base shade. With
+    shell, brown pixels are left out: the turtle's shell covers more of it
+    than its skin, and the skin is what the family colour tints."""
     counts = {}
     for (r, g, b, a) in pixels(im):
+        if shell and r > g + 8:
+            continue
         if a >= 128 and lum((r, g, b)) >= 40:
             key = int(lum((r, g, b)))
             counts[key] = counts.get(key, 0) + 1
@@ -230,11 +267,15 @@ def red_body(im, m):
     return reddish(*[sum(c[i] for c in near) / len(near) for i in range(3)])
 
 
-def ink_of(px, m, red_is_horn=False, red_fur=False, mane=False):
+def ink_of(px, m, red_is_horn=False, red_fur=False, mane=False, shell=False):
     r, g, b, a = px
     if a < 128:
         return NONE
     v = lum((r, g, b))
+    # brown (red above green) and not outline-dark: four shades by lightness,
+    # 40 to 160 covering the turtle's dark plates to its tan seams
+    if shell and v >= 40 and r > g + 8:
+        return SHELL1 + min(3, int((v - 40) / 30))
     if mane and 40 <= v < m - 60:
         return MANE0 + min(4, int((v - 40) * 5 / (m - 100)))
     if reddish(r, g, b) and not red_fur:
@@ -613,12 +654,12 @@ def main():
         x0, y0, x1, y1 = stand.getbbox()
         anchor_x = (x0 + x1) / 2.0
         anchor_y = y1 - 1
-        m = body_level(stand)
+        m = SKIN_LEVEL.get(name) or body_level(stand, name in BROWN_IS_SHELL)
         sx0, sy0, sx1, sy1 = stand.getbbox()
         sw, sh = sx1 - sx0, sy1 - sy0
         sinks = [ink_of(stand.getpixel((x, y)), m, name in RED_IS_HORN,
                         red_body(stand, m) or name in RED_IS_FUR,
-                        name in DARK_IS_MANE)
+                        name in DARK_IS_MANE, name in BROWN_IS_SHELL)
                  for y in range(sy0, sy1) for x in range(sx0, sx1)]
         eye = None if name in NO_EYE else find_eye(sinks, sw, sh, EAR_ROWS.get(name, 0))
         offset = None
@@ -645,7 +686,7 @@ def main():
             # The fur's shade measured on the clip itself: PixelLab's colours
             # drift a little from clip to clip, and each clip's main fur
             # colour should be the family's base all the same.
-            cm = body_level(frames[0])
+            cm = SKIN_LEVEL.get(name) or body_level(frames[0], name in BROWN_IS_SHELL)
             levels.append(cm)
             horn = name in RED_IS_HORN
             red_fur = red_body(frames[0], cm) or name in RED_IS_FUR
@@ -656,7 +697,8 @@ def main():
             for im in frames:
                 bx0, by0, bx1, by1 = im.getbbox()
                 fw, fh = bx1 - bx0, by1 - by0
-                inks = [ink_of(im.getpixel((x, y)), cm, horn, red_fur, name in DARK_IS_MANE)
+                inks = [ink_of(im.getpixel((x, y)), cm, horn, red_fur, name in DARK_IS_MANE,
+                               name in BROWN_IS_SHELL)
                         for y in range(by0, by1) for x in range(bx0, bx1)]
                 one_mane(inks, fw, fh)
                 if name in SMOOTH:

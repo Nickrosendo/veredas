@@ -9,7 +9,10 @@ idle; any other animation is named after its clip when made (walk, run, idle,
 graze, bite, attack, sleep: animate_character's animation_name). Anything
 else in the ZIP is left out.
 
-Run:  python3 tools/art/fetch_pixellab.py CHARACTER_ID SPECIES
+Run:  python3 tools/art/fetch_pixellab.py CHARACTER_ID SPECIES [ART_DIR]
+      ART_DIR (default tools/art/pixellab) is where <species>/ goes: the
+      content pack's frames go to the pack, not the engine (the content
+      rule of 2026-11-15), e.g. ../veredas-content/art/sea/pixellab.
 """
 import io
 import os
@@ -27,9 +30,13 @@ URL = "https://api.pixellab.ai/mcp/characters/%s/download"
 
 
 def main():
+    if len(sys.argv) not in (3, 4):
+        sys.exit("usage: fetch_pixellab.py CHARACTER_ID SPECIES [ART_DIR]")
     character, species = sys.argv[1], sys.argv[2]
-    if not re.fullmatch(r"[0-9a-f-]{36}", character) or not re.fullmatch(r"[a-z]+", species):
-        sys.exit("usage: fetch_pixellab.py CHARACTER_ID SPECIES")
+    root = sys.argv[3] if len(sys.argv) == 4 else os.path.join(HERE, "pixellab")
+    # an underscore for two-word names (sea_turtle), as the C names use
+    if not re.fullmatch(r"[0-9a-f-]{36}", character) or not re.fullmatch(r"[a-z_]+", species):
+        sys.exit("usage: fetch_pixellab.py CHARACTER_ID SPECIES [ART_DIR]")
     try:
         with urllib.request.urlopen(URL % character) as reply:
             data = zipfile.ZipFile(io.BytesIO(reply.read()))
@@ -43,7 +50,7 @@ def main():
         if m and m.group(1) in CLIPS:
             found.setdefault(CLIPS[m.group(1)], []).append((int(m.group(2)), name))
     for clip, frames in sorted(found.items()):
-        folder = os.path.join(HERE, "pixellab", species, clip)
+        folder = os.path.join(root, species, clip)
         os.makedirs(folder, exist_ok=True)
         for old in os.listdir(folder):
             os.remove(os.path.join(folder, old))

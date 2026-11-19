@@ -8,7 +8,7 @@ scripts that turn them into that file.
 | Path | What it is |
 |---|---|
 | `pixellab/<species>/<clip>/N.png` | PixelLab's east-facing frames, as downloaded: clips `idle`, `walk`, `run`, `graze`, `bite`, `attack`, `sleep` |
-| `fetch_pixellab.py` | Downloads a character's east frames into `pixellab/<species>/` |
+| `fetch_pixellab.py` | Downloads a character's east frames into `pixellab/<species>/`, or into another folder given third (the content pack's) |
 | `pixellab_to_c.py` | Writes `src/gfx/art_data.c`: each frame cut to its inked box, every pixel one of the engine's inks, the anchor and the eye per frame |
 | `preview_art.py` | Draws `art_data.c` back as a picture, the eye in red, layers over their frames, to check a conversion before building (`preview_art.py OUT.png otter` for one species) |
 
@@ -16,6 +16,13 @@ Regenerate after changing frames (Pillow needed):
 
     python3 tools/art/pixellab_to_c.py tools/art/pixellab > src/gfx/art_data.c
     python3 tools/art/preview_art.py /tmp/preview.png
+
+Frames made after the content rule (2026-11-15) live in the private content
+pack, not here: the sea's four species (2026-11-19) are in
+`veredas-content/art/sea/`, whose README records how legless bodies were made
+and the converter rules added for them (`SEA_COVERS`, `BROWN_IS_SHELL`,
+`SKIN_LEVEL`, the manatee in `SMOOTH`). Those rules only act on species whose
+folder is present, so this folder's conversion is unchanged.
 
 ## The wolf (2026-11-11)
 
