@@ -87,6 +87,12 @@
  * founders, birth cells that suit the child and a brake for each habitat.
  */
 #define SEED_7_AFTER_500 0x4cb6c3597bd8b546ULL
+/* The same world on GitHub's Linux runner. Its maths library rounds the last
+ * bit of some tanhf results differently from Debian 12 on Nicolas's machine
+ * (found 2026-11-19: the runner image changed, and the old code's pin failed
+ * there too; every creature's memory values differed after one step, nothing
+ * else). Both are pinned, so a change that moves the world fails on both. */
+#define SEED_7_AFTER_500_CI 0x988ccbc4f1f8b23eULL
 
 /* One creature in a bare 16x16 world with the scripted brain, resting for a
  * tick, calling or not. Returns the energy it has left. */
@@ -151,7 +157,8 @@ static void test_same_seed_same_checksum(void)
      * agreeing with each other, are what must hold everywhere.
      */
 #ifndef _WIN32
-    CHECK(sim_checksum(&a) == SEED_7_AFTER_500);
+    CHECK(sim_checksum(&a) == SEED_7_AFTER_500 ||
+          sim_checksum(&a) == SEED_7_AFTER_500_CI);
 #endif
     /* The rules version the pinned value belongs to. A change that moves the
      * value above changes how worlds unfold, so old world codes would replay
