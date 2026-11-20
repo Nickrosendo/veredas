@@ -110,7 +110,7 @@ static void test_draw_clips(void)
     canvas_fill(&c, black);
     Camera cam;
     camera_init(&cam, 8, 8, 64, 64); /* 8 by 8 cells, 16 pixels each at Normal */
-    cam.level = CAMERA_NORMAL;
+    cam.zoom = CAMERA_NORMAL;
     cam.cx = 2.0f;
     cam.cy = 2.0f; /* world point (2, 2), art pixel (32, 32), at the view's middle */
     particles_init(&pool, 1u);
@@ -136,7 +136,7 @@ static void test_draw_clips(void)
     CHECK(outside == 0);
     /* At the World zoom bodies are squares: no particles at all. */
     canvas_fill(&c, black);
-    cam.level = CAMERA_WORLD;
+    cam.zoom = CAMERA_WORLD;
     particles_draw(&pool, &c, &cam, 0, 0, (CanvasClip){0, 0, 64, 64});
     int any = 0;
     for (int i = 0; i < 64 * 64; i++) {

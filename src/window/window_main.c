@@ -23,6 +23,7 @@
 #include "font.h"
 #include "inspect.h"
 #include "lab.h"
+#include "levels.h"
 #include "lifepage.h"
 #include "lookahead.h"
 #include "menus.h"
@@ -131,6 +132,10 @@ static const char WINDOW_USAGE[] =
 static const char WINDOW_KEYS[] =
     "keys: space pause, +/- speed, r new seed, s save, q quit, arrows move,\n"
     "      [ and ] zoom, Esc lets go of a creature, n new world after game over,\n"
+    "      < and > (or , and ., Page Up and Page Down) go up and down the\n"
+    "      levels: the surface and underwater; at Close, ] or the wheel over\n"
+    "      water dives, and [ or the wheel out comes back up. Following a sea\n"
+    "      animal takes the view under the water with it, until a level key.\n"
     "      l opens the life story of the followed creature (or of the most\n"
     "      notable life) and closes it again, j follows who the newest notice\n"
     "      is about (or, with the story open, the creature it tells of).\n"
@@ -259,6 +264,10 @@ typedef struct {
      * trailer and the pinned pictures never show it. */
     FpsMeter fps;
     bool fps_on;
+    /* The levels (levels.h): the one shown is a->camera.level; this holds
+     * whether a level key won over the followed animal's level, and the fade
+     * of a camera's cut between levels. */
+    LevelFollow levels;
 } App;
 
 static void apply_window_size(App *a, int w, int h)
@@ -283,6 +292,39 @@ static void pan(App *a, int dx, int dy)
 {
     inspect_stop(&a->inspect);
     camera_pan(&a->camera, dx, dy);
+}
+
+/* True when the world under view pixel (sx, sy) is water, deep or shallow:
+ * where a wheel tick in at Close dives. */
+static bool water_under(const App *a, int sx, int sy)
+{
+    if (!camera_on_world(&a->camera, sx, sy)) {
+        return false;
+    }
+    float wx, wy;
+    camera_to_world(&a->camera, sx, sy, &wx, &wy);
+    const World *w = &a->sim.world;
+    /* wx and wy are inside the world, never negative: (int) rounds down. */
+    int terrain = w->terrain[(int)wy * w->w + (int)wx];
+    return terrain == TERRAIN_WATER || terrain == TERRAIN_SHALLOW;
+}
+
+/* The wheel or ] and [, steps closer (negative: further), at view pixel
+ * (sx, sy): past Close over water it dives, and from underwater at Close it
+ * comes up (levels.h); otherwise it zooms. */
+static void zoom_or_dive(App *a, int steps, int sx, int sy)
+{
+    if (levels_dive(&a->camera, steps, water_under(a, sx, sy))) {
+        levels_dived(&a->levels, a->inspect.following);
+        return;
+    }
+    camera_zoom(&a->camera, steps, sx, sy);
+}
+
+/* A level key: one level up (dir -1) or down (+1), stopping at the ends. */
+static void level_key(App *a, int dir)
+{
+    levels_key(&a->levels, &a->camera, dir, a->inspect.following);
 }
 
 static int notice_box(const App *a, int *x, int *y, int *w, int *h);
@@ -366,6 +408,8 @@ static void forget_old_world(App *a)
     /* The copy was of the old world; the new one gets picked for at once. */
     lookahead_free(&a->look);
     a->idle_frames = LOOK_IDLE_FRAMES;
+    /* Nobody followed any more; the level shown stays. */
+    levels_follow_init(&a->levels);
 }
 
 /* Builds a->sim again from seed with its own settings, and starts its
@@ -552,9 +596,10 @@ static bool open_code_text(App *a, const char *text, char *err, size_t len)
         return true; /* the code was fine; the frame loop ends */
     }
     sprite_cache_set_art(&a->scene.sprites, art);
-    int level = a->camera.level;
+    int zoom = a->camera.zoom, level = a->camera.level;
     camera_init(&a->camera, a->sim.world.w, a->sim.world.h, a->layout.view_w,
                 a->layout.view_h);
+    a->camera.zoom = zoom;
     a->camera.level = level;
     lookahead_init(&a->look, (uint64_t)(a->sim.set.ticks_per_year / 4));
     app_prelude_replay(&a->prelude, &a->sim, until);
@@ -616,6 +661,7 @@ static void follow_notice(App *a, const Notice *x)
     int slot = x != NULL && x->creature != NOTICE_NOBODY
                    ? life_find_slot(&a->sim, x->creature) : -1;
     if (slot >= 0) {
+        a->levels.cut_next = true; /* on another level: a cut, with a fade */
         inspect_follow(&a->inspect, &a->sim, slot);
         a->notices_open = false;
     } else {
@@ -632,6 +678,7 @@ static void jump(App *a)
     if (a->page.open) {
         int slot = a->page.alive ? life_find_slot(&a->sim, a->page.id) : -1;
         if (slot >= 0) {
+            a->levels.cut_next = true;
             inspect_follow(&a->inspect, &a->sim, slot);
         } else {
             say(a, "that creature is dead", NOTICE_FRAMES);
@@ -855,10 +902,22 @@ static void handle_key(App *a, int key)
         }
         break;
     case ']':
-        camera_zoom(&a->camera, 1, a->camera.view_w / 2, a->camera.view_h / 2);
+        zoom_or_dive(a, 1, a->camera.view_w / 2, a->camera.view_h / 2);
         break;
     case '[':
-        camera_zoom(&a->camera, -1, a->camera.view_w / 2, a->camera.view_h / 2);
+        zoom_or_dive(a, -1, a->camera.view_w / 2, a->camera.view_h / 2);
+        break;
+    /* The level keys. SDL reports the key, not the character shift makes, so
+     * < and > arrive as , and . on most keyboards; --keys can send < and >. */
+    case ',':
+    case '<':
+    case KEY_PAGE_UP:
+        level_key(a, -1);
+        break;
+    case '.':
+    case '>':
+    case KEY_PAGE_DOWN:
+        level_key(a, 1);
         break;
     case KEY_LEFT: pan(a, -ARROW_PAN, 0); break;
     case KEY_RIGHT: pan(a, ARROW_PAN, 0); break;
@@ -1004,8 +1063,7 @@ static void handle_event(App *a, const Event *e)
          * belongs to the box, as a press does, not to the world behind it. */
         if (over_view(a, e->x, e->y) && ui_key_at(&a->ui, e->x, e->y) == UI_NONE) {
             /* The camera counts from the view's own corner. */
-            camera_zoom(&a->camera, e->delta, e->x - a->layout.view_x,
-                        e->y - a->layout.view_y);
+            zoom_or_dive(a, e->delta, e->x - a->layout.view_x, e->y - a->layout.view_y);
         }
         break;
     case EV_DOWN:
@@ -1084,6 +1142,7 @@ static void draw_title(App *a, const Creature *followed)
     if (followed != NULL) {
         name_from_id(followed->id, st.following, sizeof(st.following));
     }
+    snprintf(st.level, sizeof(st.level), "%s", levels_name(a->camera.level));
     snprintf(st.notice, sizeof(st.notice), "%s", a->notice);
     if (a->fps_on) {
         fps_text(&a->fps, st.fps, sizeof(st.fps));
@@ -1103,6 +1162,8 @@ static void draw_bottom(App *a)
     st.demo = true;
 #endif
     st.following = a->inspect.following;
+    st.level_up = levels_step(a->camera.level, -1) != a->camera.level;
+    st.level_down = levels_step(a->camera.level, 1) != a->camera.level;
     st.look_on = a->look_on;
     st.speed = APP_SPEEDS[a->speed];
     st.world_menu_open = a->world_menu_open;
@@ -1461,6 +1522,9 @@ static void update_look(App *a)
     a->look_last[1] = a->look_last[0];
     a->look_last[0] = reason;
     a->look_now = false;
+    /* Documentary cutting to its new pick: if it lives on another level, the
+     * view fades there (levels.h). */
+    a->levels.cut_next = true;
     inspect_follow(&a->inspect, &a->sim, life_find_slot(&a->sim, id));
     char line[LOOKAHEAD_WHY + 32];
     snprintf(line, sizeof(line), "camera: %s (f: camera off)", why);
@@ -1693,6 +1757,11 @@ static void draw_frame(App *a, float fraction)
      * click is tested against, so a click lands on what was last shown. */
     ui_begin(&a->ui);
     const Creature *followed = update_following(a, fraction);
+    /* The view goes to the followed animal's level (levels.h), now that the
+     * camera is on it. */
+    levels_follow(&a->levels, &a->camera, followed != NULL,
+                  followed != NULL ? followed->id : 0,
+                  followed != NULL ? levels_home(followed) : a->camera.level, a->last_ms);
     if (a->layout.too_small) {
         draw_too_small(a);
         ui_end(&a->ui);
@@ -1719,6 +1788,12 @@ static void draw_frame(App *a, float fraction)
                       fraction, l->view_x, l->view_y);
     scene_draw_names(&a->scene, &a->canvas, &a->camera, &a->sim, followed,
                      fraction, l->view_x, l->view_y);
+    /* A camera's cut to another level: the map darkens, and lightens again. */
+    int fade = levels_fade_keep(&a->levels, a->last_ms);
+    if (fade < 256) {
+        canvas_darken_clip(&a->canvas, fade,
+                           (CanvasClip){l->view_x, l->view_y, l->view_w, l->view_h});
+    }
     if (sim_is_over(&a->sim)) {
         scene_draw_game_over(&a->canvas, &a->sim,
                              PLATFORM_IS_PAGE ? "n new world"
@@ -1800,7 +1875,8 @@ static bool frame_needs_drawing(App *a)
      * Switching between the two clocks can cost one extra frame, no more. */
     int ambient = still ? scene_paused_frame(a->last_ms)
                         : scene_ambient_frame(a->last_ms);
-    bool needed = !still || a->redraw || ambient != a->last_ambient;
+    /* A fade runs on the water's clock: seen to its end even while paused. */
+    bool needed = !still || a->redraw || ambient != a->last_ambient || a->levels.fading;
     if (needed) {
         a->last_ambient = ambient;
         a->redraw = false;
@@ -2076,9 +2152,9 @@ static void app_frame(void *arg)
 /* The zoom step with this name; false when there is none. */
 static bool zoom_from_name(const char *name, int *level)
 {
-    static const char *const NAMES[CAMERA_LEVELS] = {"close", "normal", "far",
+    static const char *const NAMES[CAMERA_ZOOMS] = {"close", "normal", "far",
                                                      "world"};
-    for (int i = 0; i < CAMERA_LEVELS; i++) {
+    for (int i = 0; i < CAMERA_ZOOMS; i++) {
         if (strcmp(name, NAMES[i]) == 0) {
             *level = i;
             return true;
@@ -2301,7 +2377,8 @@ int main(int argc, char **argv)
     scene_layout(&app.layout, window_w, window_h);
     camera_init(&app.camera, app.sim.world.w, app.sim.world.h,
                 app.layout.view_w, app.layout.view_h);
-    app.camera.level = zoom;
+    app.camera.zoom = zoom;
+    levels_follow_init(&app.levels);
     if (opt.code != NULL && !open_code_text(&app, opt.code, err, sizeof(err))) {
 #ifdef __EMSCRIPTEN__
         /* A link that will not open should not leave a dead page: the visitor

@@ -216,6 +216,24 @@ same_file "$TMP/fps1.ppm" "$TMP/fps2.ppm" ||
 same_file "$TMP/fps1.ppm" "$TMP/nofps.ppm" &&
     fail "F3 drew nothing: the picture is the same as without it"
 
+# 8c. The level keys only look too: > goes under the water, a picture of its
+# own and the same world; > then < comes back to the very picture of the
+# surface (the ground kept between frames knows which level it shows). That
+# last check runs paused: running, the one frame drawn underwater kicks up no
+# dust, so a puff can be missing from the picture after.
+under=$("$OUT/veredas-window" --seed 3 --size 64x32 --speed 30 --frames 500 \
+    --keys ">" --screenshot "$TMP/under.ppm" --checksum) || fail "the run underwater failed"
+[ -n "$under" ] && [ "$under" = "$window" ] ||
+    fail "going underwater changed the world: '$under' against '$window'"
+same_file "$TMP/under.ppm" "$TMP/nofps.ppm" &&
+    fail "> drew nothing new: the picture is the surface's"
+"$OUT/veredas-window" --seed 3 --size 64x32 --frames 500 --paused \
+    --screenshot "$TMP/still.ppm" >/dev/null || fail "the paused run failed"
+"$OUT/veredas-window" --seed 3 --size 64x32 --frames 500 --paused \
+    --keys "><" --screenshot "$TMP/back.ppm" >/dev/null || fail "the run down and up failed"
+same_file "$TMP/back.ppm" "$TMP/still.ppm" ||
+    fail "down and back up did not draw the surface as before"
+
 # 9. --paused only looks: the world stays at tick 0, and the terminal program
 # refuses the option.
 paused=$("$OUT/veredas-window" --seed 3 --size 64x32 --frames 50 --paused --checksum) ||

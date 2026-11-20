@@ -419,8 +419,35 @@ static void test_mix_rect(void)
     canvas_free(&c);
 }
 
+/* A mixed ellipse: inside lightened by keep, the corners and the clip kept. */
+static void test_mix_ellipse(void)
+{
+    Canvas c;
+    CHECK(canvas_init(&c, 21, 21));
+    uint32_t white = canvas_rgb(255, 255, 255), black = canvas_rgb(0, 0, 0);
+    canvas_fill(&c, black);
+    CanvasClip all = {0, 0, 21, 21};
+    canvas_mix_ellipse(&c, 10, 10, 6, 3, white, 64, all);
+    uint32_t mid = pixel(&c, 10, 10);
+    CHECK(((mid >> 16) & 0xFFu) == (255u * 64u) >> 8);
+    CHECK(pixel(&c, 16, 10) != black); /* the ellipse's own edge */
+    CHECK(pixel(&c, 16, 13) == black); /* the box's corner: outside */
+    CHECK(pixel(&c, 10, 14) == black);
+    /* keep 0 changes nothing; a clip keeps the rest. */
+    canvas_fill(&c, black);
+    canvas_mix_ellipse(&c, 10, 10, 6, 3, white, 0, all);
+    CHECK(count_colour(&c, black) == 21 * 21);
+    CanvasClip left = {0, 0, 10, 21};
+    canvas_mix_ellipse(&c, 10, 10, 6, 3, white, 256, left);
+    CHECK(pixel(&c, 10, 10) == black);
+    CHECK(pixel(&c, 9, 10) == white);
+    canvas_mix_ellipse(&c, -50, -50, 6, 3, white, 256, all); /* off the canvas */
+    canvas_free(&c);
+}
+
 int main(void)
 {
+    test_mix_ellipse();
     test_rgb();
     test_rect_clips_each_edge();
     test_mask_bits_and_flip();

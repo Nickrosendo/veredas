@@ -42,6 +42,8 @@ enum {
     ICON_DROUGHT,
     ICON_HARD_WINTER,
     ICON_WARM_YEAR,
+    ICON_LEVEL_UP,
+    ICON_LEVEL_DOWN,
     ICON_COUNT
 };
 

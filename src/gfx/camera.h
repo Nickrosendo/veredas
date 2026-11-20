@@ -11,12 +11,15 @@
 #include <stdbool.h>
 
 /* The zoom steps, closest first. */
-enum { CAMERA_CLOSE, CAMERA_NORMAL, CAMERA_FAR, CAMERA_WORLD, CAMERA_LEVELS };
+enum { CAMERA_CLOSE, CAMERA_NORMAL, CAMERA_FAR, CAMERA_WORLD, CAMERA_ZOOMS };
 
 /* cx, cy: the world point at the middle of the view, in cells, kept inside
- * the world. */
+ * the world. level: which of the levels (levels.h) the view shows; the camera's
+ * maths never reads it, it is carried here so everything drawing the view has
+ * it. */
 typedef struct {
-    int level;
+    int zoom; /* a CAMERA_ zoom step */
+    int level; /* a LEVEL_ value, levels.h */
     float cx, cy;
     int view_w, view_h;   /* screen pixels; 0 is allowed */
     int world_w, world_h; /* cells */
@@ -29,17 +32,17 @@ typedef struct {
     int screen_x, screen_y; /* where the first cell's corner lands */
 } CameraCells;
 
-/* At CAMERA_NORMAL, centred on the world. */
+/* At CAMERA_NORMAL on the surface, centred on the world. */
 void camera_init(Camera *c, int world_w, int world_h, int view_w, int view_h);
 void camera_resize(Camera *c, int view_w, int view_h);
 /* Screen pixels per cell: 32, 16, 8, or at CAMERA_WORLD the largest of 4, 2
  * and 1 at which the world fits the view (1 when none does). */
 int camera_ppc(const Camera *c);
-/* The symbol size at this level: 16, 16, 8, or 0 for a coloured square. */
+/* The symbol size at this zoom step: 16, 16, 8, or 0 for a coloured square. */
 int camera_sprite_size(const Camera *c);
 /* How many screen pixels each symbol pixel takes: 2, 1, 1, 1. */
 int camera_sprite_scale(const Camera *c);
-/* Moves steps levels closer (negative: further away), stopping at the ends,
+/* Moves steps zoom steps closer (negative: further away), stopping at the ends,
  * keeping the world point under the mouse where it is on screen. */
 void camera_zoom(Camera *c, int steps, int mouse_x, int mouse_y);
 /* Moves the view by this many screen pixels. */

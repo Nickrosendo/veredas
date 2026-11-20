@@ -311,6 +311,42 @@ void canvas_darken_ellipse(Canvas *c, int cx, int cy, int rx, int ry, int keep,
     }
 }
 
+void canvas_mix_ellipse(Canvas *c, int cx, int cy, int rx, int ry, uint32_t colour,
+                        int keep, CanvasClip clip)
+{
+    keep = keep < 0 ? 0 : (keep > 256 ? 256 : keep);
+    if (rx <= 0 || ry <= 0 || keep == 0) {
+        return;
+    }
+    /* The ellipse's box cut to the clip and the canvas, as darkening does. */
+    int x0 = cx - rx > clip.x ? cx - rx : clip.x;
+    int y0 = cy - ry > clip.y ? cy - ry : clip.y;
+    int x1 = cx + rx + 1 < clip.x + clip.w ? cx + rx + 1 : clip.x + clip.w;
+    int y1 = cy + ry + 1 < clip.y + clip.h ? cy + ry + 1 : clip.y + clip.h;
+    x0 = x0 < 0 ? 0 : x0;
+    y0 = y0 < 0 ? 0 : y0;
+    x1 = x1 > c->w ? c->w : x1;
+    y1 = y1 > c->h ? c->h : y1;
+    uint32_t k = (uint32_t)keep;
+    uint32_t cr = (colour >> 16) & 0xFFu, cg = (colour >> 8) & 0xFFu, cb = colour & 0xFFu;
+    long long rx2 = (long long)rx * rx, ry2 = (long long)ry * ry;
+    for (int py = y0; py < y1; py++) {
+        long long dy = py - cy;
+        for (int px = x0; px < x1; px++) {
+            long long dx = px - cx;
+            if (dx * dx * ry2 + dy * dy * rx2 > rx2 * ry2) {
+                continue;
+            }
+            uint32_t *p = &c->px[py * c->w + px];
+            uint32_t old = *p;
+            uint32_t r = mix_channel(cr, (old >> 16) & 0xFFu, k);
+            uint32_t g = mix_channel(cg, (old >> 8) & 0xFFu, k);
+            uint32_t b = mix_channel(cb, old & 0xFFu, k);
+            *p = (old & 0xFF000000u) | (r << 16) | (g << 8) | b;
+        }
+    }
+}
+
 void canvas_copy(Canvas *c, const Canvas *from, int x, int y)
 {
     /* The part of from that lands on c, worked out once for all rows. */

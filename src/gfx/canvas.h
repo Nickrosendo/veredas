@@ -73,6 +73,10 @@ void canvas_darken_clip(Canvas *c, int keep, CanvasClip clip);
 /* Multiplies every pixel inside the ellipse by keep / 256: a soft shadow. */
 void canvas_darken_ellipse(Canvas *c, int cx, int cy, int rx, int ry, int keep,
                            CanvasClip clip);
+/* Every pixel inside the ellipse becomes keep / 256 of colour and the rest of
+ * what was there, as canvas_mix_rect_clip: a patch of light on the sea floor. */
+void canvas_mix_ellipse(Canvas *c, int cx, int cy, int rx, int ry, uint32_t colour,
+                        int keep, CanvasClip clip);
 void canvas_pixel(Canvas *c, int x, int y, int scale, uint32_t colour,
                   CanvasClip clip);
 /* Copies all of from onto c with from's corner at (x, y), clipped. */

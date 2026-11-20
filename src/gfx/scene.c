@@ -11,9 +11,11 @@
 #include "flora.h"   /* plant_gives_shade, plant_is_bare */
 #include "gfx_hash.h"
 #include "lab.h"     /* lab_draw_ground, LAB_GROUND_ROWS */
+#include "levels.h"  /* LEVEL_UNDERWATER */
 #include "text.h"    /* text_draw, text_width, text_cut */
 #include "pose.h"    /* pose_frame, pose_cycle_seconds, pose_eyes */
 #include "palette.h"
+#include "plankton.h" /* PLANKTON_STEP */
 #include "years.h"   /* years_season_of */
 
 /* No palette has been made for a pool slot yet. */
@@ -183,7 +185,7 @@ bool scene_init(Scene *sc, const Sim *s)
     sc->ground_tiled = false;
     sc->sea_clear = false;
     sc->ground_colours_pending = false;
-    sc->tiles_level = -1;
+    sc->tiles_zoom = -1;
     /* Allocated by the first frame that draws tiles. */
     sc->cell_ramps = NULL;
     sc->cell_pixels = NULL;
@@ -329,14 +331,29 @@ static GroundRamp base_ramp(const Sim *s, int i)
     }
 }
 
+/* The sea floor seen from underwater (the levels design, 5.3): pale sand
+ * under the shallows, a dark blue-green under deep water; and the dark blue
+ * that land fades to, seen from below the surface. Tuned by eye. */
+static const GroundRamp SEA_SAND = {{{120, 136, 116}, {146, 160, 130}, {172, 182, 146}}};
+static const GroundRamp SEA_DEEP = {{{18, 52, 64}, {26, 68, 78}, {36, 84, 90}}};
+static const Colour SHORE_DIM = {10, 20, 34};
+
 /* The colours a cell's tile is drawn in: its ground's, with a little of its
- * region's colour. */
-static GroundRamp cell_ramp(const Sim *s, int i)
+ * region's colour. Underwater, water cells are the sea floor and land is dim. */
+static GroundRamp cell_ramp(const Sim *s, int i, int level)
 {
-    GroundRamp g = base_ramp(s, i);
+    bool under = level == LEVEL_UNDERWATER;
+    int terrain = s->world.terrain[i];
+    bool wet = terrain == TERRAIN_WATER || terrain == TERRAIN_SHALLOW;
+    GroundRamp g = !under || !wet ? base_ramp(s, i)
+                   : terrain == TERRAIN_SHALLOW ? SEA_SAND
+                                                : SEA_DEEP;
     Colour region;
     if (region_colour(s, i, &region)) {
         g = ramp_ground_mix(g, region, REGION_TINT);
+    }
+    if (under && !wet) {
+        g = ramp_ground_mix(g, SHORE_DIM, SCENE_SHORE_DIM);
     }
     return g;
 }
@@ -432,13 +449,24 @@ static Colour edge_colour(Colour c, unsigned edge)
     }
 }
 
+/* edge_colour, on a level: underwater the earthen banks, a fixed brown on the
+ * surface, sink most of the way into the cell's own (dim or sea floor) colour. */
+static Colour edge_colour_on(Colour c, unsigned edge, int level)
+{
+    Colour e = edge_colour(c, edge);
+    if (level == LEVEL_UNDERWATER && (edge == EDGE_BANK || edge == EDGE_BANK_DARK)) {
+        return palette_mix(e, c, SCENE_SHORE_DIM);
+    }
+    return e;
+}
+
 /* A cell's pixel at an edge and step, worked out the first time it is needed. */
 static uint32_t edge_pixel(GroundPixels *gp, const GroundRamp *ramp,
                            unsigned edge, int step)
 {
     if ((gp->done & (1u << edge)) == 0) {
         for (int k = 0; k < 3; k++) {
-            gp->pixel[edge][k] = to_pixel(edge_colour(ramp->c[k], edge));
+            gp->pixel[edge][k] = to_pixel(edge_colour_on(ramp->c[k], edge, gp->level));
         }
         gp->done |= 1u << edge;
     }
@@ -661,7 +689,7 @@ static void mark_with_neighbours(Scene *sc, int at, int ring_w, int ring_h)
  * and sc->cell_pixels; a cell whose colours changed is marked dirty, with its
  * neighbours. False when the blocks could not grow: the caller then draws
  * flat colours. */
-static bool fill_cell_ramps(Scene *sc, const Sim *s, const CameraCells *v)
+static bool fill_cell_ramps(Scene *sc, const Sim *s, const CameraCells *v, int level)
 {
     int ring_w = v->cols + 2, ring_h = v->rows + 2;
     if (!grow_cell_blocks(sc, ring_w * ring_h)) {
@@ -677,18 +705,20 @@ static bool fill_cell_ramps(Scene *sc, const Sim *s, const CameraCells *v)
             GroundPixels *gp = &sc->cell_pixels[at];
             int region = climate_region(w, i, &s->set);
             /* Unchanged since the last redraw: its colours still hold. */
-            if (gp->known && gp->cell == i && gp->terrain == w->terrain[i] &&
+            if (gp->known && gp->level == level && gp->cell == i &&
+                gp->terrain == w->terrain[i] &&
                 gp->region == region && gp->fertility == w->fertility[i] &&
                 gp->water == w->water[i] && gp->snow == w->snow[i]) {
                 continue;
             }
-            GroundRamp ramp = cell_ramp(s, i);
+            GroundRamp ramp = cell_ramp(s, i, level);
             /* The soil's fertility and water drift a little every tick, which
              * mostly leaves its colours the same to the byte: then nothing
              * needs drawing again, and the edges' colours still hold too. */
-            bool same = gp->known && gp->cell == i &&
+            bool same = gp->known && gp->level == level && gp->cell == i &&
                         memcmp(&ramp, &sc->cell_ramps[at], sizeof(ramp)) == 0;
             gp->known = true;
+            gp->level = level;
             gp->cell = i;
             gp->terrain = w->terrain[i];
             gp->region = region;
@@ -781,13 +811,13 @@ static bool draw_terrain(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
     camera_cells(cam, &v);
     int size = camera_sprite_size(cam);
     if (size == 0 || !refresh_keys(sc, w) ||
-        (redraw == REDRAW_ALL && !fill_cell_ramps(sc, s, &v))) {
+        (redraw == REDRAW_ALL && !fill_cell_ramps(sc, s, &v, cam->level))) {
         draw_flat_cells(c, cam, s, &v, view_x, view_y);
         return false;
     }
-    if (sc->tiles_level != cam->level) {
+    if (sc->tiles_zoom != cam->zoom) {
         tiles_cache_reset(&sc->tiles);
-        sc->tiles_level = cam->level;
+        sc->tiles_zoom = cam->zoom;
     }
     int ppc = camera_ppc(cam);
     GroundCell g = {
@@ -881,8 +911,9 @@ static WorldArea world_area(const Camera *cam, int view_x, int view_y)
 static bool ground_same_view(const Scene *sc, const Camera *cam)
 {
     return sc->ground_valid && sc->ground.w == cam->view_w &&
-           sc->ground.h == cam->view_h && sc->ground_level == cam->level &&
-           sc->ground_cx == cam->cx && sc->ground_cy == cam->cy;
+           sc->ground.h == cam->view_h && sc->ground_zoom == cam->zoom &&
+           sc->ground_level == cam->level && sc->ground_cx == cam->cx &&
+           sc->ground_cy == cam->cy;
 }
 
 /* Whether the terrain differs from the one the keys were worked out from. */
@@ -910,7 +941,7 @@ static void mark_changed_cells(Scene *sc, const Camera *cam, const Sim *s,
     }
     if (colours) {
         /* The blocks are already the view's size: this cannot fail here. */
-        fill_cell_ramps(sc, s, &v);
+        fill_cell_ramps(sc, s, &v, cam->level);
     }
     if (!ticked) {
         return;
@@ -1007,6 +1038,7 @@ static void place_ground(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
     sc->ground_drift_step = drift;
     sc->ground_colour_ms = water_ms;
     sc->ground_colours_pending = false;
+    sc->ground_zoom = cam->zoom;
     sc->ground_level = cam->level;
     sc->ground_cx = cam->cx;
     sc->ground_cy = cam->cy;
@@ -1190,6 +1222,100 @@ static void draw_rain(Scene *sc, Canvas *c, const Overlay *o, int x, int y, int 
 
 static WorldArea world_area(const Camera *cam, int view_x, int view_y);
 
+/* The underwater overlays' colours: the light that falls through the surface
+ * and the plankton's specks. */
+static const Colour SEA_LIGHT = {176, 232, 214};
+static const Colour PLANKTON_SPECK = {196, 232, 176};
+
+/*
+ * A patch of light drifting over the sea floor, on a few water cells (picked
+ * by a hash of the cell, so the same cells every time): a wide soft ellipse,
+ * about three cells across, its middle wandering a cell or so in slow sines of
+ * the overlays' clock, its light swelling and fading. Soft at the edge because
+ * it is two ellipses, the inner one adding light over the outer.
+ */
+static void draw_sea_light(const Scene *sc, Canvas *c, const Overlay *o, int x, int y,
+                           int sx, int sy)
+{
+    float h = gfx_hash(x, y, 41);
+    if (h >= SCENE_SEA_LIGHT_SHARE) {
+        return;
+    }
+    float phase = gfx_hash(x, y, 42) * 6.2831853f;
+    float span = (float)(o->size * o->scale); /* the cell's width on the canvas */
+    float wander_x = sine_of(sc, o->t * 0.11f + phase) * 1.2f;
+    float wander_y = sine_of(sc, o->t * 0.08f + phase * 1.7f) * 0.7f;
+    int cx = sx + round_to_int(span * (0.5f + wander_x));
+    int cy = sy + round_to_int(span * (0.5f + wander_y));
+    /* Swells from a quarter of its light to all of it, and back. */
+    float swell = 0.625f + 0.375f * sine_of(sc, o->t * 0.3f + phase * 2.3f);
+    int keep = round_to_int((float)SCENE_SEA_LIGHT_KEEP * swell * 0.5f);
+    uint32_t light = to_pixel(SEA_LIGHT);
+    canvas_mix_ellipse(c, cx, cy, round_to_int(span * 1.5f), round_to_int(span * 0.8f),
+                       light, keep, o->clip);
+    canvas_mix_ellipse(c, cx, cy, round_to_int(span * 0.9f), round_to_int(span * 0.45f),
+                       light, keep, o->clip);
+}
+
+/*
+ * Plankton seen from below (the levels design, 5.3): faint specks on a deep
+ * cell, one for each PLANKTON_STEP it holds (at most four), each at its own
+ * hashed place drifting slowly across the cell and wrapping round it, so the
+ * thick patches of the sea's food can be seen.
+ */
+static void draw_plankton(const Scene *sc, Canvas *c, const Overlay *o, const World *w,
+                          int x, int y, int sx, int sy)
+{
+    int i = y * w->w + x;
+    int count = (int)(w->plankton[i] / PLANKTON_STEP);
+    count = count > 4 ? 4 : count;
+    int size = o->size;
+    uint32_t colour = to_pixel(PLANKTON_SPECK);
+    for (int n = 0; n < count; n++) {
+        float phase = gfx_hash(x, y, 50 + n);
+        /* Half a pixel a second sideways, a slow bob up and down. */
+        float drift = o->t * 0.5f + phase * (float)size;
+        /* Whole turns of the cell taken off: the speck wraps round in it. The
+         * int conversion drops the fraction, rounding down for these positive
+         * numbers. */
+        int lx = (int)drift % size;
+        int ly = (int)(gfx_hash(x, y, 60 + n) * (float)(size - 2)) + 1 +
+                 round_to_int(sine_of(sc, o->t * 0.7f + phase * 6.2831853f));
+        ly = ly < 0 ? 0 : (ly >= size ? size - 1 : ly);
+        overlay_pixel(c, o, sx, sy, lx, ly, colour);
+    }
+}
+
+/* The overlays of the underwater level: light on the floor and plankton, at
+ * the two 16-pixel zooms only (at Far they would cost the most and show the
+ * least). No glints, foam, grass or rain: those are the surface's. */
+static void draw_sea_overlays(Scene *sc, Canvas *c, const Overlay *o, const Camera *cam,
+                              const Sim *s, int view_x, int view_y)
+{
+    if (o->size != 16) {
+        return;
+    }
+    const World *w = &s->world;
+    CameraCells v;
+    camera_cells(cam, &v);
+    int ppc = camera_ppc(cam);
+    for (int r = 0; r < v.rows; r++) {
+        int y = (v.first_y + r) % w->h;
+        int sy = view_y + v.screen_y + r * ppc;
+        for (int k = 0; k < v.cols; k++) {
+            int x = (v.first_x + k) % w->w;
+            int sx = view_x + v.screen_x + k * ppc;
+            int terrain = w->terrain[y * w->w + x];
+            if (terrain == TERRAIN_WATER) {
+                draw_plankton(sc, c, o, w, x, y, sx, sy);
+            }
+            if (terrain == TERRAIN_WATER || terrain == TERRAIN_SHALLOW) {
+                draw_sea_light(sc, c, o, x, y, sx, sy);
+            }
+        }
+    }
+}
+
 /* Everything that moves over the ground layer, cell by visible cell: rain, water
  * glints, foam and grass tufts. Not at the World zoom, whose flat colours have
  * no room for them (its rain is a veil in the colour). */
@@ -1212,6 +1338,10 @@ static void draw_overlays(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
         .foam = to_pixel(RAMP_FOAM),
         .foam_shadow = to_pixel(ramp_shade(RAMP_FOAM, -0.35f)),
     };
+    if (cam->level == LEVEL_UNDERWATER) {
+        draw_sea_overlays(sc, c, &o, cam, s, view_x, view_y);
+        return;
+    }
     const World *w = &s->world;
     CameraCells v;
     camera_cells(cam, &v);
@@ -1277,7 +1407,7 @@ static int copy_offsets(const WorldArea *a, int dx[9], int dy[9])
  * body), Far its own half-size silhouettes. */
 static int zoom_base(const Camera *cam)
 {
-    return cam->level == CAMERA_FAR ? SPRITE_BASE_FAR : SPRITE_BASE_NORMAL;
+    return cam->zoom == CAMERA_FAR ? SPRITE_BASE_FAR : SPRITE_BASE_NORMAL;
 }
 
 /* A creature's body at a picture size; a newborn, while it pops in, at the
@@ -1462,20 +1592,29 @@ static BodyDraw world_body(Scene *sc, const Camera *cam, const Sim *s, int slot,
 static void body_shadow(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
                         const SceneItem *it, const WorldArea *area)
 {
-    /* A shadow says "above the ground you look at": a swimmer seen from the
-     * surface is under it, so it casts none (the levels design, 5.1). */
-    if (creature_sea_body(&s->pool.items[it->index])) {
+    /* A shadow says "above the ground you look at" (the levels design, 5.1):
+     * a swimmer seen from the surface is under it, so it casts none; seen from
+     * underwater it swims over the floor, so it casts a soft one further down;
+     * a land body seen from underwater is on another level and casts none. */
+    bool sea = creature_sea_body(&s->pool.items[it->index]);
+    bool under = cam->level == LEVEL_UNDERWATER;
+    if (sea != under) {
         return;
     }
     BodyDraw d = world_body(sc, cam, s, it->index, it);
     int cx = d.foot_x + d.pic.shadow_dx * (d.flip ? -1 : 1) * d.scale;
+    int cy = under ? d.foot_y + SCENE_FLOOR_SHADOW_DROP * d.scale : d.foot_y;
+    int keep = under ? SCENE_FLOOR_SHADOW_KEEP : BODY_SHADOW_KEEP;
     int dx[9], dy[9];
     int copies = copy_offsets(area, dx, dy);
     for (int k = 0; k < copies; k++) {
-        canvas_darken_ellipse(c, cx + dx[k], d.foot_y + dy[k], d.pic.shadow_rx * d.scale,
-                              d.pic.shadow_ry * d.scale, BODY_SHADOW_KEEP, area->clip);
+        canvas_darken_ellipse(c, cx + dx[k], cy + dy[k], d.pic.shadow_rx * d.scale,
+                              d.pic.shadow_ry * d.scale, keep, area->clip);
     }
 }
+
+/* The colour of a land body seen from underwater, before it is mixed. */
+static const Colour SHORE_SHAPE = {6, 14, 26};
 
 /* How much of its own colour a sea body keeps seen from the surface: little in
  * deep water, more in the shallows. Its cell is the one it stands on in the
@@ -1528,11 +1667,25 @@ static void draw_body(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
         d.palette = &flashed;
     }
     int sway_x = 0, sway_y = 0;
-    if (creature_sea_body(cr) && !sc->sea_clear) {
-        d.keep = sea_keep(s, cr);
-        sea_sway(sc, cr, body_ms, d.scale, &sway_x, &sway_y);
-    }
     int scars = recent_hit_count(cr, s->tick);
+    bool under = cam->level == LEVEL_UNDERWATER;
+    /* A land body seen from underwater: a faint dark shape, every ink the one
+     * colour, mixed with what is under it; no scars, no flash. Declared out
+     * here, not inside the if: d.palette points at it until the end. */
+    SpritePalette shape;
+    if (creature_sea_body(cr) && !sc->sea_clear) {
+        /* Underwater it is clear, on its own level; seen from the surface it
+         * is mixed with the water. It sways on both. */
+        d.keep = under ? 256 : sea_keep(s, cr);
+        sea_sway(sc, cr, body_ms, d.scale, &sway_x, &sway_y);
+    } else if (under && !creature_sea_body(cr)) {
+        for (int k = 0; k < INK_COUNT; k++) {
+            shape.ink[k] = to_pixel(SHORE_SHAPE);
+        }
+        d.palette = &shape;
+        d.keep = SCENE_SHAPE_KEEP;
+        scars = 0;
+    }
     int dx[9], dy[9];
     int copies = copy_offsets(area, dx, dy);
     for (int k = 0; k < copies; k++) {
@@ -1579,10 +1732,22 @@ static TreeDraw tree_draw(const Scene *sc, const Sim *s, int i, int sx, int sy,
     return d;
 }
 
+/* keep / 256 of pixel a and the rest of pixel b, channel by channel; the top
+ * byte is a's. Each product is under 2^16, so 32-bit unsigned maths is safe. */
+static uint32_t mix_pixel(uint32_t a, uint32_t b, uint32_t keep)
+{
+    uint32_t out = a & 0xFF000000u;
+    for (int shift = 0; shift <= 16; shift += 8) {
+        uint32_t x = (a >> shift) & 0xFFu, y = (b >> shift) & 0xFFu;
+        out |= ((x * keep + y * (256u - keep)) >> 8) << shift;
+    }
+    return out;
+}
+
 /* A plant's tree colours: the crown from its colour lit and shaded, all turning
  * to straw as it withers; fruit shows only on a plant that offers it and holds
  * a whole one. */
-static void tree_colours(const Sim *s, int i, uint32_t out[TREE_INKS])
+static void tree_colours(const Sim *s, int i, uint32_t out[TREE_INKS], bool dim)
 {
     const World *w = &s->world;
     const Plant *p = &w->plant[i];
@@ -1606,6 +1771,16 @@ static void tree_colours(const Sim *s, int i, uint32_t out[TREE_INKS])
     out[TREE_CROWN_FLECK] = to_pixel(fleck);
     out[TREE_FRUIT] = fruit ? to_pixel(PALETTE_FRUIT) : to_pixel(crown);
     out[TREE_BRANCH] = to_pixel(TRUNK_DARK);
+    if (dim) {
+        /* From underwater: every colour the shore's way to the dark blue, in
+         * whole numbers, as there are thousands of trees at Far. Ink 0
+         * (TREE_NONE) is never drawn, so it is left as it is. */
+        const uint32_t keep = (uint32_t)(256.0f * (1.0f - SCENE_SHORE_DIM) + 0.5f);
+        const uint32_t shore = to_pixel(SHORE_DIM);
+        for (int k = 1; k < TREE_INKS; k++) {
+            out[k] = mix_pixel(out[k], shore, keep);
+        }
+    }
 }
 
 /* One tree picture with its corner at (x, y), inside clip. Written straight
@@ -1824,11 +1999,17 @@ static void draw_items(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
     float t = ambient_seconds(water_ms);
     int dx[9], dy[9];
     int copies = copy_offsets(&area, dx, dy);
+    /* Seen from underwater, trees are on the shore, a level up: dimmed, and
+     * they cast no shadow. */
+    bool under = cam->level == LEVEL_UNDERWATER;
     if (size > 0) {
         for (int k = 0; k < n; k++) {
             const SceneItem *it = &sc->items[k];
             if (it->kind == SCENE_ITEM_BODY) {
                 body_shadow(sc, c, cam, s, it, &area);
+                continue;
+            }
+            if (under) {
                 continue;
             }
             TreeDraw d = tree_draw(sc, s, it->index, it->foot_x - (size / 2 - 1) * scale,
@@ -1850,7 +2031,7 @@ static void draw_items(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
             TreeDraw d = tree_draw(sc, s, it->index, it->foot_x - (size / 2 - 1) * scale,
                                    it->foot_y - ppc, size, scale, season, t);
             uint32_t colours[TREE_INKS];
-            tree_colours(s, it->index, colours);
+            tree_colours(s, it->index, colours, under);
             for (int j = 0; j < copies; j++) {
                 paint_tree(c, &d, d.x + dx[j], d.y + dy[j], scale, colours, area.clip);
             }
@@ -1990,7 +2171,8 @@ static bool feet_in_view(const SceneItem *it, const Camera *cam, int view_x, int
 
 /* One body's particles for the body time since the last emission, `since`
  * (exclusive), to body_ms. */
-static void emit_for(Scene *sc, const Sim *s, int slot, uint64_t since, uint64_t body_ms)
+static void emit_for(Scene *sc, const Sim *s, int slot, uint64_t since, uint64_t body_ms,
+                     bool under)
 {
     AnimSlot *m = &sc->anim.slots[slot];
     const AnimPose *p = &sc->poses[slot];
@@ -1998,7 +2180,10 @@ static void emit_for(Scene *sc, const Sim *s, int slot, uint64_t since, uint64_t
     float fx = (p->x + 0.5f) * ART_CELL;
     float fy = p->y * ART_CELL + ART_FOOT;
     float face = p->flip ? -1.0f : 1.0f;
-    if (p->action == ACTION_WALK || p->action == ACTION_RUN) {
+    /* Underwater no dust, leaves or z's (the surface's); blood still shows. */
+    if (under) {
+        /* Nothing: skips to the bite below. */
+    } else if (p->action == ACTION_WALK || p->action == ACTION_RUN) {
         if (puff_due(m, body_ms, p->action == ACTION_RUN ? DUST_RUN_MS : DUST_WALK_MS)) {
             emit_dust(sc, s, slot, fx, fy, face);
         }
@@ -2047,7 +2232,8 @@ static void draw_particles(Scene *sc, Canvas *c, const Camera *cam, const Sim *s
         for (int k = 0; k < sc->item_count; k++) {
             const SceneItem *it = &sc->items[k];
             if (it->kind == SCENE_ITEM_BODY && feet_in_view(it, cam, view_x, view_y)) {
-                emit_for(sc, s, it->index, since, body_ms);
+                emit_for(sc, s, it->index, since, body_ms,
+                         cam->level == LEVEL_UNDERWATER);
             }
         }
     }
@@ -2266,7 +2452,11 @@ void scene_draw_names(Scene *sc, Canvas *c, const Camera *cam,
         const Creature *cr = &s->pool.items[i];
         /* & tests one bit of the flags; && would only ask whether both sides
          * are non-zero. */
-        if (cr->alive && i != followed_slot && (cr->tally.flags & TALLY_GIANT)) {
+        /* Underwater, a land giant is a faint shape on the shore, a level
+         * up: its name would float over the dim land, so only sea giants'. */
+        bool other_level = cam->level == LEVEL_UNDERWATER && !creature_sea_body(cr);
+        if (cr->alive && i != followed_slot && (cr->tally.flags & TALLY_GIANT) &&
+            !other_level) {
             draw_name(sc, c, cam, s, i, tick_fraction, view_x, view_y);
         }
     }

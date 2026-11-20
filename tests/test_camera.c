@@ -9,21 +9,21 @@ static void test_ppc_levels(void)
 {
     Camera c;
     camera_init(&c, 256, 144, 1120, 720);
-    c.level = CAMERA_CLOSE;
+    c.zoom = CAMERA_CLOSE;
     CHECK(camera_ppc(&c) == 32);
-    c.level = CAMERA_NORMAL;
+    c.zoom = CAMERA_NORMAL;
     CHECK(camera_ppc(&c) == 16);
-    c.level = CAMERA_FAR;
+    c.zoom = CAMERA_FAR;
     CHECK(camera_ppc(&c) == 8);
-    c.level = CAMERA_WORLD;
+    c.zoom = CAMERA_WORLD;
     CHECK(camera_ppc(&c) == 4);
     Camera big;
     camera_init(&big, 4000, 2000, 1120, 720);
-    big.level = CAMERA_WORLD;
+    big.zoom = CAMERA_WORLD;
     CHECK(camera_ppc(&big) == 1);
     Camera two;
     camera_init(&two, 256, 144, 600, 300);
-    two.level = CAMERA_WORLD;
+    two.zoom = CAMERA_WORLD;
     CHECK(camera_ppc(&two) == 2);
 }
 
@@ -31,10 +31,10 @@ static void test_sprite_sizes(void)
 {
     Camera c;
     camera_init(&c, 256, 144, 1120, 720);
-    const int sizes[CAMERA_LEVELS] = {16, 16, 8, 0};
-    const int scales[CAMERA_LEVELS] = {2, 1, 1, 1};
-    for (int level = 0; level < CAMERA_LEVELS; level++) {
-        c.level = level;
+    const int sizes[CAMERA_ZOOMS] = {16, 16, 8, 0};
+    const int scales[CAMERA_ZOOMS] = {2, 1, 1, 1};
+    for (int level = 0; level < CAMERA_ZOOMS; level++) {
+        c.zoom = level;
         CHECK(camera_sprite_size(&c) == sizes[level]);
         CHECK(camera_sprite_scale(&c) == scales[level]);
     }
@@ -47,8 +47,8 @@ static void test_round_trip_every_level(void)
     Camera c;
     camera_init(&c, 256, 144, 1120, 720);
     const float centres[] = {128.0f, 0.5f, 255.5f};
-    for (int level = 0; level < CAMERA_LEVELS; level++) {
-        c.level = level;
+    for (int level = 0; level < CAMERA_ZOOMS; level++) {
+        c.zoom = level;
         for (int k = 0; k < 3; k++) {
             camera_centre_on(&c, centres[k], 72.0f);
             for (int sx = 0; sx < 1120; sx += 37) {
@@ -77,7 +77,7 @@ static void test_zoom_keeps_mouse_point(void)
      * it is centred on black and the point cannot stay. */
     Camera c;
     camera_init(&c, 256, 144, 1120, 720);
-    c.level = CAMERA_FAR;
+    c.zoom = CAMERA_FAR;
     camera_centre_on(&c, 30.0f, 20.0f);
     const int mx = 300, my = 200;
     for (int step = 0; step < 2; step++) {
@@ -88,7 +88,7 @@ static void test_zoom_keeps_mouse_point(void)
         CHECK(fabsf(after_x - wx) < 1.0f);
         CHECK(fabsf(after_y - wy) < 1.0f);
     }
-    CHECK(c.level == CAMERA_CLOSE);
+    CHECK(c.zoom == CAMERA_CLOSE);
 }
 
 static void test_zoom_stops_at_ends(void)
@@ -96,11 +96,11 @@ static void test_zoom_stops_at_ends(void)
     Camera c;
     camera_init(&c, 256, 144, 1120, 720);
     camera_zoom(&c, 50, 10, 10);
-    CHECK(c.level == CAMERA_CLOSE);
+    CHECK(c.zoom == CAMERA_CLOSE);
     camera_zoom(&c, -50, 10, 10);
-    CHECK(c.level == CAMERA_WORLD);
+    CHECK(c.zoom == CAMERA_WORLD);
     camera_zoom(&c, -1, 10, 10);
-    CHECK(c.level == CAMERA_WORLD);
+    CHECK(c.zoom == CAMERA_WORLD);
 }
 
 static void test_wrap_picks_nearest_image(void)
@@ -145,7 +145,7 @@ static void test_tiny_world_fits(void)
 {
     Camera c;
     camera_init(&c, 4, 3, 1120, 720);
-    c.level = CAMERA_WORLD;
+    c.zoom = CAMERA_WORLD;
     CHECK(camera_world_fits(&c));
     CHECK(camera_ppc(&c) == 4);
     int sx, sy;
@@ -187,7 +187,7 @@ static void test_cells_cover_the_view(void)
         CHECK(sy == v.screen_y);
     }
     /* A fitting world: every cell once, centred. */
-    c.level = CAMERA_WORLD;
+    c.zoom = CAMERA_WORLD;
     CameraCells v;
     camera_cells(&c, &v);
     CHECK(v.first_x == 0 && v.cols == 256);
@@ -200,8 +200,8 @@ static void test_zero_view(void)
     Camera c;
     camera_init(&c, 256, 144, 1120, 720);
     camera_resize(&c, 0, 0);
-    for (int level = 0; level < CAMERA_LEVELS; level++) {
-        c.level = level;
+    for (int level = 0; level < CAMERA_ZOOMS; level++) {
+        c.zoom = level;
         CHECK(camera_ppc(&c) >= 1);
         int sx, sy;
         float wx, wy;
@@ -214,7 +214,7 @@ static void test_zero_view(void)
         CHECK(v.cols == 0 && v.rows == 0);
         (void)camera_world_fits(&c);
     }
-    c.level = CAMERA_NORMAL;
+    c.zoom = CAMERA_NORMAL;
     camera_zoom(&c, 1, 0, 0);
     camera_zoom(&c, -1, 0, 0);
     camera_resize(&c, -3, -3); /* never stored as negative */
@@ -226,14 +226,14 @@ static void test_on_world_says_no_on_the_black(void)
     Camera c;
     /* 4 by 3 cells at 32 pixels each, centred in 320 by 180. */
     camera_init(&c, 4, 3, 320, 180);
-    c.level = CAMERA_CLOSE;
+    c.zoom = CAMERA_CLOSE;
     CHECK(camera_on_world(&c, 160, 90));
     CHECK(!camera_on_world(&c, 0, 90));
     CHECK(!camera_on_world(&c, 160, 0));
     CHECK(!camera_on_world(&c, 319, 179));
     /* A world bigger than the view fills it, so everywhere is world. */
     camera_init(&c, 256, 144, 320, 180);
-    c.level = CAMERA_CLOSE;
+    c.zoom = CAMERA_CLOSE;
     CHECK(camera_on_world(&c, 0, 0));
     CHECK(camera_on_world(&c, 319, 179));
 }

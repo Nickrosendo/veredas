@@ -65,6 +65,13 @@ static void list_items(Items *list, const BottomState *st, char *speed_word)
         (UiButton){ICON_ZOOM_OUT, NULL, "zoom out ([)", '[', false, false, false});
     add(list, GROUP_WATCH, 30,
         (UiButton){ICON_ZOOM_IN, NULL, "zoom in (])", ']', false, false, false});
+    /* The level keys, beside the zoom: dim where there is no level that way. */
+    add(list, GROUP_WATCH, 29,
+        (UiButton){ICON_LEVEL_UP, NULL, "level up (< or Page Up)", ',', !st->level_up,
+                   false, false});
+    add(list, GROUP_WATCH, 29,
+        (UiButton){ICON_LEVEL_DOWN, NULL, "level down, under the water (> or Page Down)",
+                   '.', !st->level_down, false, false});
     add(list, GROUP_WATCH, 58,
         (UiButton){ICON_STORY, "story", "life story (l)", 'l', false, false, false});
     add(list, GROUP_WATCH, 57,
@@ -412,6 +419,11 @@ void bar_top_draw(Ui *u, Canvas *c, int w, const TopState *st)
     }
     x += drawn > 0 ? drawn + BUTTON_GAP : 0;
 
+    if (st->level[0] != '\0') {
+        BoxLook deep = {{0x10, 0x2c, 0x3a}, {0x4a, 0x9a, 0xc0}, {0xd0, 0xec, 0xf8}};
+        drawn = top_box(c, x, ICON_LEVEL_DOWN, st->level, deep, right - x);
+        x += drawn > 0 ? drawn + BUTTON_GAP : 0;
+    }
     if (st->split) {
         snprintf(text, sizeof(text), "branch %c of 2", st->branch);
         drawn = top_box(c, x, ICON_OTHER_BRANCH, text, mode, right - x);

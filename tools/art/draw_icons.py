@@ -49,7 +49,8 @@ NAMES = [
     "notices", "camera", "jump", "trait", "weather", "skip", "branch",
     "other_branch", "compare", "new_start", "mode_watch", "mode_sandbox",
     "world", "help", "close", "let_go", "spring", "summer", "autumn",
-    "winter", "animals", "drought", "hard_winter", "warm_year",
+    "winter", "animals", "drought", "hard_winter", "warm_year", "level_up",
+    "level_down",
 ]
 
 
@@ -419,6 +420,38 @@ def let_go():
     return g
 
 
+def wave(g, y):
+    """The sea's surface: a light blue crest row over a blue row, 14 wide."""
+    put(g, [
+        ".cc..cc..cc..c",
+        "bbbbbbbbbbbbbb",
+    ], 1, y)
+
+
+def arrow(g, y, down):
+    """A white arrow 9 pixels long, its head at the bottom (down) or top."""
+    head = [".wwwwwww.", "..wwwww..", "...www...", "....w...."]
+    shaft = ["...www..."] * 5
+    rows = shaft + head if down else head[::-1] + shaft
+    put(g, rows, 3, y)
+
+
+def level_up():
+    """Up from under the water: the arrow above the surface."""
+    g = blank()
+    arrow(g, 1, False)
+    wave(g, 12)
+    return g
+
+
+def level_down():
+    """Down under the water: the surface, and the arrow going below it."""
+    g = blank()
+    wave(g, 2)
+    arrow(g, 6, True)
+    return g
+
+
 def spring():
     g = blank()
     for cx, cy in ((8, 4.5), (8, 11.5), (4.5, 8), (11.5, 8)):
@@ -541,6 +574,7 @@ DRAW = {
     "help": help_icon, "close": close, "let_go": let_go, "spring": spring,
     "summer": summer, "autumn": autumn, "winter": winter, "animals": animals,
     "drought": drought, "hard_winter": hard_winter, "warm_year": warm_year,
+    "level_up": level_up, "level_down": level_down,
 }
 
 

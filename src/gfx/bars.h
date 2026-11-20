@@ -16,6 +16,8 @@
 
 typedef struct {
     bool paused, sandbox, split, demo, following, look_on;
+    /* Whether a level key would go anywhere: a level above, a level below. */
+    bool level_up, level_down;
     int speed;            /* ticks a second, for the "2/s" label */
     bool world_menu_open; /* the world button drawn pressed */
     bool menu_open;       /* a Sandbox menu or skip open: the bar dim, every
@@ -42,12 +44,14 @@ typedef struct {
     float weather_left;       /* 1 at the event's start, 0 at its end */
     char weather_label[48];   /* "drought, ends in summer" */
     char following[24];       /* the followed animal's name, "" when nobody */
+    char level[24];           /* the level shown, "" on the surface (levels.h) */
     char fps[24];             /* the frames-a-second counter (F3), "" when off */
     char notice[256];         /* the message of the moment, "" for none */
 } TopState;
 
 /* The top line, UI_BAR_H tall across w pixels, as boxes: mode, year and
- * season, animals, speed (or paused, or game over), the branch while split,
+ * season, animals, speed (or paused, or game over), the level when not the
+ * surface, the branch while split,
  * the weather while an event holds, the notice in the room left, and who is
  * followed at the right end, with the frames-a-second counter left of that
  * while it is on. Nothing in it is a button. */

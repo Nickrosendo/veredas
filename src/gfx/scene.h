@@ -46,6 +46,21 @@
 #define SCENE_SWAY_MS 4200u
 #define SCENE_SWAY_X 1.2f
 #define SCENE_SWAY_Y 0.8f
+/* The underwater level (the levels design, 5.3), tuned by eye in the window.
+ * Land seen from under the water is its own colours mixed SCENE_SHORE_DIM of
+ * the way to a dark blue: a dim shore. A land body there is a faint dark
+ * shape, SCENE_SHAPE_KEEP 256ths of a dark colour over what is under it. A sea
+ * body casts a soft shadow on the floor, SCENE_FLOOR_SHADOW_DROP art pixels
+ * below its feet, keeping SCENE_FLOOR_SHADOW_KEEP 256ths of the light. Wide
+ * patches of light drift over the floor from SCENE_SEA_LIGHT_SHARE of the water
+ * cells, adding up to SCENE_SEA_LIGHT_KEEP 256ths of a pale sea light at their
+ * middle (half of it at their edge). */
+#define SCENE_SHORE_DIM 0.6f
+#define SCENE_SHAPE_KEEP 160
+#define SCENE_FLOOR_SHADOW_DROP 5
+#define SCENE_FLOOR_SHADOW_KEEP 196
+#define SCENE_SEA_LIGHT_SHARE 0.045f
+#define SCENE_SEA_LIGHT_KEEP 40
 /* The number of tree pictures: 2 sizes, VEG_MAX densities, big or not, bare or
  * not, TILE_VARIANTS variants and 3 sways. */
 #define SCENE_TREES (2 * VEG_MAX * 2 * 2 * TILE_VARIANTS * 3)
@@ -77,6 +92,7 @@ typedef struct {
     uint32_t pixel[EDGE_KINDS][3];
     uint32_t done;
     bool known; /* false: worked out from nothing yet */
+    int level;  /* the level (levels.h) they were worked out for */
     int cell, terrain, region;
     float fertility, water, snow;
 } GroundPixels;
@@ -102,9 +118,9 @@ typedef struct {
     uint16_t rain[2][TILE_VARIANTS][TILE_RAIN_FRAMES][16];
     uint8_t bones[2][TILE_VARIANTS][TILE_MAX * TILE_MAX];
     /* The ground's autotiles, built as their keys are first seen, and the
-     * zoom level they were built for: a new level starts the cache afresh. */
+     * zoom step they were built for: a new zoom starts the cache afresh. */
     TileCache tiles;
-    int tiles_level;
+    int tiles_zoom;
     /* Each visible cell's colours, plus a ring of one cell around the view,
      * since a tile's ragged edge shows its neighbours' ground. Worked out on a
      * whole redraw, and at most once a SCENE_COLOUR_MS after; the blocks grow
@@ -147,7 +163,8 @@ typedef struct {
     uint64_t ground_drift_step; /* water_ms / SCENE_DRIFT_MS, not wrapped */
     uint64_t ground_colour_ms;  /* water_ms when the cells' colours were worked out */
     bool ground_colours_pending; /* a tick came since, its colours not shown yet */
-    int ground_level;
+    int ground_zoom;
+    int ground_level; /* the level (levels.h) it shows */
     float ground_cx, ground_cy;
 } Scene;
 

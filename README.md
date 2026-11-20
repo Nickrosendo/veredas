@@ -94,6 +94,7 @@ their names under them.
 | space | pause |
 | `+` `-` | faster, slower |
 | wheel, `[` `]` | zoom |
+| `<` `>` (or `,` `.`, Page Up, Page Down) | up and down the levels: the surface and underwater, where the sea floor, its light and plankton show and the sea animals are in full colour; at the closest zoom the wheel or `]` over water dives, and the wheel out or `[` comes back up. Following a sea animal takes the view under the water with it |
 | dragging, arrows | move the view |
 | clicking a creature | follow it: the panel shows it, its body enlarged, and its family's bodies over time |
 | clicking "top hunter", "oldest" or the largest family's body on the panel | follow the highest on the food chain, the oldest, or that family's biggest |

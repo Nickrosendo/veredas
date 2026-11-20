@@ -18,6 +18,9 @@ static int watching(unsigned flags, const char **lines, int max)
     add(lines, max, &n, "  space      pause, and go on");
     add(lines, max, &n, "  + -        faster, slower");
     add(lines, max, &n, "  [ ] wheel  zoom out, in");
+    add(lines, max, &n, "  < >        level up, down: the surface, underwater");
+    add(lines, max, &n, "             (also , . and Page Up, Page Down)");
+    add(lines, max, &n, "             at Close, ] or the wheel over water dives");
     add(lines, max, &n, "  arrows     move the view (or drag it)");
     add(lines, max, &n, "  f          the camera: follows whoever has the most");
     add(lines, max, &n, "             coming this season (on in Documentary)");

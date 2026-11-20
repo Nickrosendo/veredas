@@ -17,7 +17,7 @@ enum {
 };
 
 /* The most lines a column has, and the widest a line is, in characters. */
-#define KEYHELP_MAX_LINES 24
+#define KEYHELP_MAX_LINES 26
 #define KEYHELP_WIDTH 62
 
 /* Puts column 0 (watching and following) or column 1 (modes, codes and the

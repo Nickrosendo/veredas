@@ -2,6 +2,7 @@
 
 #include <math.h>  /* fabsf */
 #include <stdio.h> /* snprintf */
+#include <stdlib.h> /* getenv */
 #include <string.h> /* strlen, strstr */
 
 #include "app.h"
@@ -12,6 +13,7 @@
 #include "family.h"
 #include "inspect.h"
 #include "lab.h"
+#include "levels.h"
 #include "palette.h"
 #include "scene.h"
 #include "settings.h"
@@ -56,7 +58,9 @@ static void test_drawing_changes_nothing(void)
         for (int i = 0; i < sc.anim.capacity; i++) {
             fights += sc.anim.slots[i].fight != FIGHT_NONE;
         }
-        cam.level = t % CAMERA_LEVELS;
+        cam.zoom = t % CAMERA_ZOOMS;
+        /* Both levels, a few frames each: underwater must not touch it either. */
+        cam.level = (t / 7) % 2 == 0 ? LEVEL_SURFACE : LEVEL_UNDERWATER;
         scene_draw_world(&sc, &c, &cam, &drawn, 0.5f, (uint64_t)t * 33u,
                          (uint64_t)t * 33u, 0, 0);
         particles += sc.particles.count;
@@ -97,8 +101,8 @@ static void test_empty_view_draws_nothing(void)
     Camera cam;
     camera_init(&cam, 16, 16, 0, 0);
     scene_update(&sc, &s, 10, 0);
-    for (int level = 0; level < CAMERA_LEVELS; level++) {
-        cam.level = level;
+    for (int level = 0; level < CAMERA_ZOOMS; level++) {
+        cam.zoom = level;
         scene_draw_world(&sc, &c, &cam, &s, 0.0f, 0, 0, 0, 0);
     }
     /* A real view on an empty canvas, and the reverse: clipping copes. */
@@ -122,7 +126,7 @@ static void test_tiny_world_on_black(void)
     canvas_fill(&c, canvas_rgb(255, 0, 255));
     Camera cam;
     camera_init(&cam, 4, 3, VIEW_W, VIEW_H);
-    cam.level = CAMERA_WORLD;
+    cam.zoom = CAMERA_WORLD;
     scene_update(&sc, &s, 10, 0);
     scene_draw_world(&sc, &c, &cam, &s, 0.0f, 0, 0, 0, 0);
     uint32_t black = canvas_rgb(0, 0, 0);
@@ -284,7 +288,7 @@ static void test_follow_centres_on_the_creature(void)
     scene_update(&sc, &s, 10, 0);
     Camera cam;
     camera_init(&cam, 64, 64, 64, 64);
-    cam.level = CAMERA_CLOSE;
+    cam.zoom = CAMERA_CLOSE;
     Inspect in = {0};
     scene_click(&in, &s, 20.5f, 30.5f);
     CHECK(scene_follow(&sc, &cam, &in, &s, 0.0f) == &s.pool.items[slot]);
@@ -303,7 +307,7 @@ static void test_followed_creature_dies_camera_stays(void)
     scene_update(&sc, &s, 10, 0);
     Camera cam;
     camera_init(&cam, 64, 64, 64, 64);
-    cam.level = CAMERA_CLOSE;
+    cam.zoom = CAMERA_CLOSE;
     Inspect in = {0};
     scene_click(&in, &s, 20.5f, 30.5f);
     CHECK(scene_follow(&sc, &cam, &in, &s, 0.0f) != NULL);
@@ -356,7 +360,7 @@ static void test_follow_across_the_edge_takes_the_short_way(void)
     scene_update(&sc, &s, 10, 0);
     Camera cam;
     camera_init(&cam, 64, 64, 64, 64);
-    cam.level = CAMERA_CLOSE;
+    cam.zoom = CAMERA_CLOSE;
     Inspect in = {0};
     scene_click(&in, &s, 63.5f, 10.5f);
     CHECK(scene_follow(&sc, &cam, &in, &s, 0.0f) != NULL);
@@ -449,9 +453,9 @@ static void test_known_world_pixels(void)
     Camera cam;
     camera_init(&cam, 64, 32, VIEW_W, VIEW_H);
     uint32_t magenta = canvas_rgb(255, 0, 255);
-    uint64_t hashes[CAMERA_LEVELS];
-    for (int level = 0; level < CAMERA_LEVELS; level++) {
-        cam.level = level;
+    uint64_t hashes[CAMERA_ZOOMS];
+    for (int level = 0; level < CAMERA_ZOOMS; level++) {
+        cam.zoom = level;
         canvas_fill(&c, magenta);
         scene_draw_world(&sc, &c, &cam, &s, 0.5f, 1000, 1000, 0, 0);
         hashes[level] = hash_canvas(&c);
@@ -534,7 +538,7 @@ static void test_known_world_pixels(void)
          * 2026-11-20): no shadow, no walking bob, a sway, their pixels mixed
          * with the water; the three map levels move, the World zoom does not.
          * Old and new pictures written out and compared side by side. */
-        static const uint64_t EXPECTED[CAMERA_LEVELS] = {
+        static const uint64_t EXPECTED[CAMERA_ZOOMS] = {
             0x965fb1d45bd6978du, 0x52b3c342f0de7c91u,
             0x5e632bc73d8d3a07u, 0x5548508875eb4585u,
         };
@@ -552,8 +556,8 @@ static void test_known_world_pixels(void)
         }
         CHECK(left == 0);
     }
-    for (int a = 0; a < CAMERA_LEVELS; a++) {
-        for (int b = a + 1; b < CAMERA_LEVELS; b++) {
+    for (int a = 0; a < CAMERA_ZOOMS; a++) {
+        for (int b = a + 1; b < CAMERA_ZOOMS; b++) {
             CHECK(hashes[a] != hashes[b]);
         }
     }
@@ -597,10 +601,10 @@ static void test_ground_layer_refreshes_when_it_should(void)
     /* Moving or zooming the camera. */
     scene_draw_world(&sc, &c, &cam, &s, 0.0f, 0, 0, 0, 0);
     CHECK(hash_canvas(&c) == water0);
-    cam.level = CAMERA_FAR;
+    cam.zoom = CAMERA_FAR;
     scene_draw_world(&sc, &c, &cam, &s, 0.0f, 0, 0, 0, 0);
     CHECK(hash_canvas(&c) != water0);
-    cam.level = CAMERA_NORMAL;
+    cam.zoom = CAMERA_NORMAL;
     /* A smaller view, then the frame is whatever size it is. */
     camera_resize(&cam, VIEW_W / 2, VIEW_H / 2);
     scene_draw_world(&sc, &c, &cam, &s, 0.0f, 0, 0, 0, 0);
@@ -639,8 +643,8 @@ static void test_water_only_redraw_matches_whole(void)
     CHECK(canvas_init(&b, VIEW_W, VIEW_H));
     Camera cam;
     camera_init(&cam, 64, 32, VIEW_W, VIEW_H);
-    for (int level = 0; level < CAMERA_LEVELS; level++) {
-        cam.level = level;
+    for (int level = 0; level < CAMERA_ZOOMS; level++) {
+        cam.zoom = level;
         Scene partly, whole_scene;
         CHECK(scene_init(&partly, &s));
         CHECK(scene_init(&whole_scene, &s));
@@ -1016,7 +1020,7 @@ static uint64_t soil_picture(Scene *sc, Sim *s, Canvas *c, Camera *cam, int leve
         s->world.water[i] = water;
         s->world.rain[i] = rain;
     }
-    cam->level = level;
+    cam->zoom = level;
     s->tick++;
     /* The soil's colours follow the world within a second of window time; a
      * reset draws the ground afresh at once. */
@@ -1039,7 +1043,7 @@ static void test_ground_shows_water_and_rain(void)
     Camera cam;
     camera_init(&cam, 64, 64, VIEW_W, VIEW_H);
     /* At every zoom, so no drawing path forgets one of them. */
-    for (int level = 0; level < CAMERA_LEVELS; level++) {
+    for (int level = 0; level < CAMERA_ZOOMS; level++) {
         uint64_t dry = soil_picture(&sc, &s, &c, &cam, level, 0.0f, 0.0f);
         uint64_t wet = soil_picture(&sc, &s, &c, &cam, level, 1.0f, 0.0f);
         uint64_t rainy = soil_picture(&sc, &s, &c, &cam, level, 1.0f, 1.0f);
@@ -1064,7 +1068,7 @@ static void snow_picture(Scene *sc, Sim *s, Canvas *c, Camera *cam, int terrain,
         s->world.rain[i] = 0.0f;
         s->world.snow[i] = snow;
     }
-    cam->level = CAMERA_NORMAL;
+    cam->zoom = CAMERA_NORMAL;
     s->tick++;
     scene_reset(sc); /* the soil's colours at once, not within a second */
     scene_draw_world(sc, c, cam, s, 0.0f, 0, 0, 0, 0);
@@ -1133,7 +1137,7 @@ static uint64_t region_picture(Scene *sc, Sim *s, Canvas *c, Camera *cam,
         s->world.rain[i] = 0.0f;
         s->world.temperature[i] = temperature;
     }
-    cam->level = level;
+    cam->zoom = level;
     s->tick++;
     scene_reset(sc); /* the soil's colours at once, not within a second */
     scene_update(sc, s, 10, 0);
@@ -1190,7 +1194,7 @@ static void test_region_tint(void)
     camera_init(&cam, 64, 64, VIEW_W, VIEW_H);
     /* 0.1 is below region_cold_below; 0.45 with water 0.5 is temperate. The
      * checks after each picture make sure the test asks what it means to. */
-    for (int level = 0; level < CAMERA_LEVELS; level++) {
+    for (int level = 0; level < CAMERA_ZOOMS; level++) {
         int cold_pixels, mild_pixels;
         uint64_t cold = region_picture(&sc, &s, &c, &cam, level, 0.1f, creature,
                                        &cold_pixels);
@@ -1322,16 +1326,17 @@ static void test_large_body_drawn_large(void)
     }
 }
 
-/* One picture of the 64 by 64 world at Close, centred on (32, 32), with the
- * body in slot `slot` alive or not; sea_clear as the scene's switch. */
-static void sea_picture(Sim *s, int slot, bool alive, bool clear, Canvas *c)
+/* One picture of the 64 by 64 world at Close on a level, centred on (32, 32),
+ * with the body in slot `slot` alive or not; sea_clear as the scene's switch. */
+static void level_picture(Sim *s, int slot, bool alive, bool clear, int level, Canvas *c)
 {
     Scene sc;
     CHECK(scene_init(&sc, s));
     sc.sea_clear = clear;
     Camera cam;
     camera_init(&cam, 64, 64, VIEW_W, VIEW_H);
-    cam.level = CAMERA_CLOSE;
+    cam.zoom = CAMERA_CLOSE;
+    cam.level = level;
     camera_centre_on(&cam, 32.5f, 32.5f);
     s->pool.items[slot].alive = alive;
     scene_update(&sc, s, 10, 700);
@@ -1339,6 +1344,12 @@ static void sea_picture(Sim *s, int slot, bool alive, bool clear, Canvas *c)
     scene_draw_world(&sc, c, &cam, s, 0.0f, 0, 700, 0, 0);
     s->pool.items[slot].alive = true;
     scene_free(&sc);
+}
+
+/* The same, on the surface. */
+static void sea_picture(Sim *s, int slot, bool alive, bool clear, Canvas *c)
+{
+    level_picture(s, slot, alive, clear, LEVEL_SURFACE, c);
 }
 
 /* The sum over every pixel of how far a is from b, channel by channel. */
@@ -1353,6 +1364,24 @@ static long picture_distance(const Canvas *a, const Canvas *b)
         }
     }
     return sum;
+}
+
+/* How many pixels of `with` are exactly the old pixel of `without` darkened to
+ * keep / 256. */
+static int darkened_pixels(const Canvas *without, const Canvas *with, uint32_t keep)
+{
+    int n = 0;
+    for (int i = 0; i < with->w * with->h; i++) {
+        uint32_t p = without->px[i], q = with->px[i];
+        if (p == q) {
+            continue;
+        }
+        uint32_t r = (((p >> 16) & 0xFFu) * keep) >> 8;
+        uint32_t g = (((p >> 8) & 0xFFu) * keep) >> 8;
+        uint32_t b = ((p & 0xFFu) * keep) >> 8;
+        n += q == ((p & 0xFF000000u) | (r << 16) | (g << 8) | b);
+    }
+    return n;
 }
 
 /* How many pixels of `with` are exactly a body shadow over `without`: the
@@ -1431,6 +1460,145 @@ static void test_sea_body_under_the_surface(void)
     canvas_free(&tinted);
 }
 
+/* Underwater (the levels design, 5.3): a sea body is clear, on its own level,
+ * with a soft shadow on the floor; a land body is a faint dark shape with no
+ * shadow and none of its own colours. */
+static void test_bodies_underwater(void)
+{
+    Canvas empty, surface, under, empty_under;
+    CHECK(canvas_init(&empty, VIEW_W, VIEW_H));
+    CHECK(canvas_init(&surface, VIEW_W, VIEW_H));
+    CHECK(canvas_init(&under, VIEW_W, VIEW_H));
+    CHECK(canvas_init(&empty_under, VIEW_W, VIEW_H));
+    Sim s;
+    make_empty_sim(&s, 64, 64);
+    for (int i = 0; i < 64 * 64; i++) {
+        s.world.terrain[i] = TERRAIN_WATER;
+    }
+    int slot = pool_spawn_body(&s.pool, &s.world, 32, 32, true);
+    CHECK(slot >= 0);
+    if (slot >= 0) {
+        s.pool.items[slot].age = 1000;
+        s.pool.items[slot].genome.g[GENE_SWIM] = 1.0f;
+        s.tick = 2000;
+        sea_picture(&s, slot, false, false, &empty);
+        sea_picture(&s, slot, true, false, &surface);
+        level_picture(&s, slot, false, false, LEVEL_UNDERWATER, &empty_under);
+        level_picture(&s, slot, true, false, LEVEL_UNDERWATER, &under);
+        CHECK(hash_canvas(&empty) != hash_canvas(&empty_under)); /* the floor */
+        CHECK(darkened_pixels(&empty, &surface, 196) == 0);
+        CHECK(darkened_pixels(&empty_under, &under, 196) > 0); /* its floor shadow */
+        /* Clear: further from the floor under it than the surface look is
+         * from the water, by the share the surface keeps (120 of 256). */
+        long below = picture_distance(&under, &empty_under);
+        long above = picture_distance(&surface, &empty);
+        CHECK(below > above);
+    }
+    sim_free(&s);
+
+    make_empty_sim(&s, 64, 64);
+    int wolf = place_body(&s, 32, 32, 0.0f);
+    level_picture(&s, wolf, false, false, LEVEL_UNDERWATER, &empty_under);
+    level_picture(&s, wolf, true, false, LEVEL_UNDERWATER, &under);
+    int changed = 0, lighter = 0;
+    for (int i = 0; i < VIEW_W * VIEW_H; i++) {
+        uint32_t p = empty_under.px[i], q = under.px[i];
+        if (p == q) {
+            continue;
+        }
+        changed++;
+        int was = (int)((p >> 16) & 0xFFu) + (int)((p >> 8) & 0xFFu) + (int)(p & 0xFFu);
+        int now = (int)((q >> 16) & 0xFFu) + (int)((q >> 8) & 0xFFu) + (int)(q & 0xFFu);
+        lighter += now > was;
+    }
+    CHECK(changed > 0);  /* still seen */
+    CHECK(lighter == 0); /* only ever darker: a dark shape */
+    CHECK(shadow_pixels(&empty_under, &under) == 0);
+    sim_free(&s);
+    canvas_free(&empty);
+    canvas_free(&surface);
+    canvas_free(&under);
+    canvas_free(&empty_under);
+}
+
+/* The real world of test_known_world_pixels, underwater, centred on its first
+ * sea body (found the same way every run). Pinned once, after the pictures
+ * were written out and looked at (the levels design, 6): Close, Normal, Far.
+ * Going down and back up again draws the surface exactly as before: the ground
+ * layer kept between frames remembers which level it shows. */
+static void test_underwater_pixels(void)
+{
+    Settings set = settings_default();
+    Sim s;
+    CHECK(sim_init(&s, &set, 3, 64, 32));
+    Scene sc;
+    CHECK(scene_init(&sc, &s));
+    for (int t = 0; t < 300; t++) {
+        sim_step(&s);
+        scene_update(&sc, &s, 10, 0);
+    }
+    int sea = -1;
+    for (int i = 0; i < s.pool.capacity && sea < 0; i++) {
+        if (s.pool.items[i].alive && creature_sea_body(&s.pool.items[i])) {
+            sea = i;
+        }
+    }
+    CHECK(sea >= 0);
+    Canvas c;
+    CHECK(canvas_init(&c, VIEW_W, VIEW_H));
+    Camera cam;
+    camera_init(&cam, 64, 32, VIEW_W, VIEW_H);
+    if (sea >= 0) {
+        camera_centre_on(&cam, (float)s.pool.items[sea].x + 0.5f,
+                         (float)s.pool.items[sea].y + 0.5f);
+    }
+    const char *out = getenv("VEREDAS_WRITE_PICTURES"); /* a folder, to look at */
+    uint64_t hashes[3];
+    for (int zoom = CAMERA_CLOSE; zoom <= CAMERA_FAR; zoom++) {
+        cam.zoom = zoom;
+        cam.level = LEVEL_SURFACE;
+        scene_draw_world(&sc, &c, &cam, &s, 0.5f, 1000, 1000, 0, 0);
+        uint64_t surface = hash_canvas(&c);
+        if (out != NULL) {
+            char path[512];
+            snprintf(path, sizeof(path), "%s/surface-%d.ppm", out, zoom);
+            CHECK(canvas_write_ppm(&c, path));
+        }
+        cam.level = LEVEL_UNDERWATER;
+        scene_draw_world(&sc, &c, &cam, &s, 0.5f, 1000, 1000, 0, 0);
+        hashes[zoom] = hash_canvas(&c);
+        CHECK(hashes[zoom] != surface);
+        if (out != NULL) {
+            char path[512];
+            snprintf(path, sizeof(path), "%s/underwater-%d.ppm", out, zoom);
+            CHECK(canvas_write_ppm(&c, path));
+        }
+        cam.level = LEVEL_SURFACE;
+        scene_draw_world(&sc, &c, &cam, &s, 0.5f, 1000, 1000, 0, 0);
+        CHECK(hash_canvas(&c) == surface);
+    }
+    bool pinned = content_get()->art_set_count == 0;
+#ifndef _WIN32
+    /* Linux only, as test_known_world_pixels. Pinned 2026-11-20 (levels step
+     * 2), after the three pictures were written out and looked at. */
+    static const uint64_t EXPECTED[3] = {
+        0xc6b0b234c4573763u, 0x6fe92c71cd60fc5cu, 0x1fab5987f11d1298u,
+    };
+    for (int zoom = 0; zoom < 3; zoom++) {
+        if (pinned && hashes[zoom] != EXPECTED[zoom]) {
+            printf("underwater zoom %d: 0x%llxu\n", zoom,
+                   (unsigned long long)hashes[zoom]);
+        }
+        CHECK(!pinned || hashes[zoom] == EXPECTED[zoom]);
+    }
+#else
+    (void)pinned;
+#endif
+    canvas_free(&c);
+    scene_free(&sc);
+    sim_free(&s);
+}
+
 /* A giant at the world's corners, in a world that fits the view and in one
  * that does not, at every zoom: nothing is drawn outside the view. Where the
  * whole world shows, nothing is drawn on the black round it either. */
@@ -1442,14 +1610,14 @@ static void test_giant_over_map_edge(void)
     for (int w = 0; w < 2; w++) {
         int ww = sizes[w][0], wh = sizes[w][1];
         for (int k = 0; k < 4; k++) {
-            for (int level = 0; level < CAMERA_LEVELS; level++) {
+            for (int level = 0; level < CAMERA_ZOOMS; level++) {
                 Sim s;
                 make_empty_sim(&s, ww, wh);
                 int x = corners[k][0] * (ww - 1), y = corners[k][1] * (wh - 1);
                 int slot = place_body(&s, x, y, 1000000.0f);
                 Camera cam;
                 camera_init(&cam, ww, wh, VIEW_W, VIEW_H);
-                cam.level = level;
+                cam.zoom = level;
                 /* In the large world, the giant at a corner of the view. */
                 if (w == 1) {
                     camera_centre_on(&cam, (float)x + 9.0f, (float)y + 5.0f);
@@ -1546,7 +1714,7 @@ static void test_drawing_large_leaves_fingerprint_equal(void)
         sim_step(&plain);
         sim_step(&drawn);
         scene_update(&sc, &drawn, 10, (uint64_t)t * 33u);
-        cam.level = t % CAMERA_LEVELS;
+        cam.zoom = t % CAMERA_ZOOMS;
         scene_draw_world(&sc, &c, &cam, &drawn, 0.5f, (uint64_t)t * 33u,
                          (uint64_t)t * 33u, 0, 0);
         int slot = t % drawn.pool.capacity;
@@ -1597,9 +1765,18 @@ static void test_names_beside_giants(void)
     CHECK(name_pixels(&s, &cam, NULL) == 0); /* not a giant yet */
     s.pool.items[slot].tally.flags |= TALLY_GIANT;
     CHECK(name_pixels(&s, &cam, NULL) > 0);
-    cam.level = CAMERA_FAR;
+    cam.zoom = CAMERA_FAR;
     CHECK(name_pixels(&s, &cam, NULL) == 0);
-    cam.level = CAMERA_NORMAL;
+    cam.zoom = CAMERA_NORMAL;
+    /* Underwater a land giant is on another level: no name, unless followed;
+     * a sea giant keeps its name there. */
+    cam.level = LEVEL_UNDERWATER;
+    CHECK(name_pixels(&s, &cam, NULL) == 0);
+    CHECK(name_pixels(&s, &cam, &s.pool.items[slot]) > 0);
+    s.pool.items[slot].genome.g[GENE_SWIM] = 1.0f;
+    CHECK(name_pixels(&s, &cam, NULL) > 0);
+    s.pool.items[slot].genome.g[GENE_SWIM] = 0.0f;
+    cam.level = LEVEL_SURFACE;
     s.pool.items[slot].tally.flags = 0;
     CHECK(name_pixels(&s, &cam, &s.pool.items[slot]) > 0);
     sim_free(&s);
@@ -1887,7 +2064,7 @@ static void test_ground_follows_within_a_second(void)
     CHECK(canvas_init(&a, VIEW_W, VIEW_H));
     CHECK(canvas_init(&b, VIEW_W, VIEW_H));
     for (int level = 0; level < CAMERA_WORLD; level++) {
-        cam.level = level;
+        cam.zoom = level;
         Scene sc;
         CHECK(scene_init(&sc, &s));
         scene_update(&sc, &s, 10, 0);
@@ -1981,7 +2158,7 @@ static void test_soil_colour_follows_cell_by_cell(void)
                 lake_world(&s, ww, wh);
                 Camera cam;
                 camera_init(&cam, ww, wh, VIEW_W, VIEW_H);
-                cam.level = level;
+                cam.zoom = level;
                 Scene sc;
                 CHECK(scene_init(&sc, &s));
                 scene_update(&sc, &s, 10, 0);
@@ -2033,7 +2210,7 @@ static void test_paused_soil_colour_catches_up(void)
         lake_world(&s, 64, 32);
         Camera cam;
         camera_init(&cam, 64, 32, VIEW_W, VIEW_H);
-        cam.level = level;
+        cam.zoom = level;
         Scene sc;
         CHECK(scene_init(&sc, &s));
         scene_update(&sc, &s, 10, 0);
@@ -2084,7 +2261,7 @@ static void test_second_frame_builds_nothing(void)
         }
     }
     for (int level = 0; level < CAMERA_WORLD; level++) {
-        cam.level = level;
+        cam.zoom = level;
         long before = sc.sprites.builds;
         scene_draw_world(&sc, &c, &cam, &s, 0.5f, 1000, 1000, 0, 0);
         long first = sc.sprites.builds;
@@ -2299,7 +2476,7 @@ static void test_dust_only_in_view(void)
     CHECK(canvas_init(&c, 160, 96));
     Camera cam;
     camera_init(&cam, 64, 64, 160, 96);
-    cam.level = CAMERA_NORMAL;
+    cam.zoom = CAMERA_NORMAL;
     camera_centre_on(&cam, 10.5f, 10.5f);
     int slots[2] = {seen, unseen};
     int sum_near = 0, sum_all = 0;
@@ -2374,6 +2551,8 @@ int main(void)
     test_enlarged_body_moves();
     test_big_body_fits_the_enlarged_box();
     test_known_world_pixels();
+    test_bodies_underwater();
+    test_underwater_pixels();
     test_ground_layer_refreshes_when_it_should();
     test_water_only_redraw_matches_whole();
     test_layout_family_area();

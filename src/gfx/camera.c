@@ -1,8 +1,10 @@
 #include "camera.h"
 
+#include "levels.h" /* LEVEL_SURFACE */
+
 #include <math.h> /* floorf, fmodf */
 
-/* The screen pixels per cell of the three fixed levels. */
+/* The screen pixels per cell of the three fixed zoom steps. */
 static const int FIXED_PPC[] = {32, 16, 8};
 
 /* A value wrapped into 0 .. size. fmodf keeps the sign of its first
@@ -35,8 +37,8 @@ static bool axis_fits(int world, int view, int ppc)
 
 int camera_ppc(const Camera *c)
 {
-    if (c->level != CAMERA_WORLD) {
-        return FIXED_PPC[c->level];
+    if (c->zoom != CAMERA_WORLD) {
+        return FIXED_PPC[c->zoom];
     }
     for (int ppc = 4; ppc > 1; ppc /= 2) {
         if (axis_fits(c->world_w, c->view_w, ppc) &&
@@ -49,7 +51,7 @@ int camera_ppc(const Camera *c)
 
 int camera_sprite_size(const Camera *c)
 {
-    switch (c->level) {
+    switch (c->zoom) {
     case CAMERA_CLOSE:
     case CAMERA_NORMAL:
         return 16;
@@ -62,12 +64,13 @@ int camera_sprite_size(const Camera *c)
 
 int camera_sprite_scale(const Camera *c)
 {
-    return c->level == CAMERA_CLOSE ? 2 : 1;
+    return c->zoom == CAMERA_CLOSE ? 2 : 1;
 }
 
 void camera_init(Camera *c, int world_w, int world_h, int view_w, int view_h)
 {
-    c->level = CAMERA_NORMAL;
+    c->zoom = CAMERA_NORMAL;
+    c->level = LEVEL_SURFACE;
     c->world_w = world_w;
     c->world_h = world_h;
     c->cx = (float)world_w / 2.0f;
@@ -155,9 +158,9 @@ void camera_zoom(Camera *c, int steps, int mouse_x, int mouse_y)
 {
     float wx, wy;
     camera_to_world(c, mouse_x, mouse_y, &wx, &wy);
-    int level = c->level - steps; /* closer is a lower level number */
-    level = level < 0 ? 0 : level;
-    c->level = level > CAMERA_WORLD ? CAMERA_WORLD : level;
+    int zoom = c->zoom - steps; /* closer is a lower zoom number */
+    zoom = zoom < 0 ? 0 : zoom;
+    c->zoom = zoom > CAMERA_WORLD ? CAMERA_WORLD : zoom;
     int ppc = camera_ppc(c);
     camera_centre_on(c, centre_for(wx, mouse_x, c->view_w, ppc),
                      centre_for(wy, mouse_y, c->view_h, ppc));
