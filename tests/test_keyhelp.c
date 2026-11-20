@@ -49,7 +49,7 @@ static void test_desktop_lists_every_key(void)
     int n = both(KEYHELP_SANDBOX, all, 2 * KEYHELP_MAX_LINES);
     const char *keys[] = {"space", "+ -", "[ ] wheel", "arrows", "f", "r", "click",
                           "Esc", "l", "e", "j", "b", "a", "? or h", "s  q", "m",
-                          "c", "o", "w", "g", "k", "x", "Tab", "v", "u"};
+                          "c", "o", "w", "g", "k", "x", "Tab", "v", "u", "F3"};
     for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); i++) {
         if (!lists_key(all, n, keys[i])) {
             fprintf(stderr, "  key list misses \"%s\"\n", keys[i]);

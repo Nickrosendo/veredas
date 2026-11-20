@@ -372,6 +372,17 @@ void bar_top_draw(Ui *u, Canvas *c, int w, const TopState *st)
             right -= BUTTON_GAP;
         }
     }
+    /* The counter next, left of it: it belongs at the edge with the other
+     * thing that is not about the world, and it must not move as notices come
+     * and go, or it would be hard to read. */
+    if (st->fps[0] != '\0') {
+        int pw = box_width(-1, st->fps);
+        if (pw <= right - EDGE) {
+            right -= pw;
+            top_box(c, right, -1, st->fps, plain, pw);
+            right -= BUTTON_GAP;
+        }
+    }
     int x = EDGE;
     int drawn;
     drawn = top_box(c, x, st->sandbox ? ICON_MODE_SANDBOX : ICON_MODE_WATCH,

@@ -24,7 +24,7 @@ typedef struct {
 } Event;
 
 /* Keys without a character of their own. Others use their ASCII code. */
-enum { KEY_UP = 1000, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_ESCAPE };
+enum { KEY_UP = 1000, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_ESCAPE, KEY_F3 };
 
 /* True when this program is a browser page: it has no disk to save to, and
  * leaving means closing the tab. An ordinary constant, so the code that uses it

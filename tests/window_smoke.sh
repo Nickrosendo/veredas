@@ -199,6 +199,23 @@ lab=$("$OUT/veredas-window" --seed 3 --size 64x32 --speed 30 --frames 500 \
 [ "$(head -c 16 "$TMP/lab.ppm" | tr '\n' ' ')" = "P6 1280 720 255 " ] ||
     fail "the screenshot with the lab open has the wrong header"
 
+# 8b. The frames-a-second counter (F3, the character 3 in --keys) is only
+# looking, and in a --frames run it counts on the fixed clock, so two runs draw
+# the very same picture.
+for take in 1 2; do
+    shown=$("$OUT/veredas-window" --seed 3 --size 64x32 --speed 30 --frames 500 \
+        --keys "$(printf '\003')" --screenshot "$TMP/fps$take.ppm" --checksum) ||
+        fail "the run with the counter on failed"
+    [ -n "$shown" ] && [ "$shown" = "$window" ] ||
+        fail "the counter changed the world: '$shown' against '$window'"
+done
+cmp -s "$TMP/fps1.ppm" "$TMP/fps2.ppm" ||
+    fail "two runs with the counter on drew different pictures"
+"$OUT/veredas-window" --seed 3 --size 64x32 --speed 30 --frames 500 \
+    --screenshot "$TMP/nofps.ppm" >/dev/null || fail "the run without the counter failed"
+cmp -s "$TMP/fps1.ppm" "$TMP/nofps.ppm" &&
+    fail "F3 drew nothing: the picture is the same as without it"
+
 # 9. --paused only looks: the world stays at tick 0, and the terminal program
 # refuses the option.
 paused=$("$OUT/veredas-window" --seed 3 --size 64x32 --frames 50 --paused --checksum) ||

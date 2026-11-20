@@ -39,6 +39,7 @@ static int watching(unsigned flags, const char **lines, int max)
     if ((flags & KEYHELP_PAGE) == 0) {
         add(lines, max, &n, "  s  q       save, quit");
     }
+    add(lines, max, &n, "  F3         frames a second, top right");
     return n;
 }
 

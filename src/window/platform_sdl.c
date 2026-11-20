@@ -73,6 +73,7 @@ static int key_code(SDL_Keycode sym)
     case SDLK_LEFT: return KEY_LEFT;
     case SDLK_RIGHT: return KEY_RIGHT;
     case SDLK_ESCAPE: return KEY_ESCAPE;
+    case SDLK_F3: return KEY_F3;
     case SDLK_KP_PLUS: return '+';
     case SDLK_KP_MINUS: return '-';
     default:

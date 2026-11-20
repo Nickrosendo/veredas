@@ -19,6 +19,7 @@
 #include "cells.h"
 #include "cells_canvas.h"
 #include "family.h"
+#include "fps.h"
 #include "font.h"
 #include "inspect.h"
 #include "lab.h"
@@ -253,6 +254,11 @@ typedef struct {
     float weather_fx;
     int weather_fx_kind;
     uint64_t weather_fx_ms;
+    /* The frames-a-second counter (fps.h): always measuring, drawn on the top
+     * line only while fps_on (F3). Off at the start, so screenshots, the
+     * trailer and the pinned pictures never show it. */
+    FpsMeter fps;
+    bool fps_on;
 } App;
 
 static void apply_window_size(App *a, int w, int h)
@@ -724,6 +730,13 @@ static void handle_key(App *a, int key)
     /* While the ancestors evolve, any key but q ends that where it got to,
      * and does nothing else: it was pressed to stop the waiting. */
     bool in_setup = a->sandbox.menu == SANDBOX_MENU_SETUP;
+    /* F3 first: it only shows or hides the counter, so it works on every
+     * screen and must not also end the prelude or reach a menu. */
+    if (key == KEY_F3) {
+        a->fps_on = !a->fps_on;
+        a->redraw = true;
+        return;
+    }
 #ifndef VEREDAS_DEMO
     /* m while the ancestors evolve: Sandbox, and its setup screen, since a new
      * start is cheapest before anything has been watched. */
@@ -1072,6 +1085,9 @@ static void draw_title(App *a, const Creature *followed)
         name_from_id(followed->id, st.following, sizeof(st.following));
     }
     snprintf(st.notice, sizeof(st.notice), "%s", a->notice);
+    if (a->fps_on) {
+        fps_text(&a->fps, st.fps, sizeof(st.fps));
+    }
     bar_top_draw(&a->ui, &a->canvas, a->canvas.w, &st);
 }
 
@@ -1904,7 +1920,8 @@ static void check_stop(App *a)
 /* --keys: in the last strlen(keys) frames of --frames, one key a frame, so the
  * frame the screenshot keeps comes after the last of them. A ~ presses
  * nothing: frames of waiting, say for a skip to end. The Escape character
- * (27, $'\e' in a shell) is the Escape key, which is KEY_ESCAPE here. */
+ * (27, $'\e' in a shell) is the Escape key, which is KEY_ESCAPE here, and
+ * the character 3 ($'\003') is F3, which has no character of its own. */
 static void pretend_keys(App *a)
 {
     const char *keys = a->opt->keys;
@@ -1915,7 +1932,9 @@ static void pretend_keys(App *a)
     long len = (long)strlen(keys);
     long k = a->frames_done - (a->opt->frames - 1 - len);
     if (k >= 0 && k < len && keys[k] != '~') {
-        int key = keys[k] == 27 ? KEY_ESCAPE : keys[k];
+        int key = keys[k] == 27  ? KEY_ESCAPE
+                  : keys[k] == 3 ? KEY_F3
+                                 : keys[k];
         playlog_key(&a->playlog, key);
         handle_key(a, key);
         a->redraw = true;
@@ -1926,6 +1945,8 @@ static void pretend_keys(App *a)
 static void app_frame(void *arg)
 {
     App *a = arg; /* in C, void * converts to any pointer without a cast */
+    /* The frame's work starts here; platform_run's wait comes after it. */
+    uint64_t work_start = platform_now_ms();
     playlog_frame(&a->playlog, platform_now_ms(), a->sandbox.on);
     Event e;
     while (platform_poll(&e)) {
@@ -2026,6 +2047,16 @@ static void app_frame(void *arg)
         float fraction = (float)a->ticks_due / (float)FRAMES_PER_SECOND;
         draw_frame(a, fraction);
         platform_present(&a->canvas);
+        /* Counted when a picture is shown, so a paused window, which draws
+         * five times a second, reads 5. A --frames run counts on its fixed
+         * clock, with no work: the counter, if a test ever turns it on, then
+         * draws the same "30 fps, 0.0 ms" on every computer. */
+        if (a->opt->frames > 0) {
+            fps_frame(&a->fps, a->last_ms, 0);
+        } else {
+            uint64_t now = platform_now_ms();
+            fps_frame(&a->fps, now, now - work_start);
+        }
     }
 
     /* --record: every frame, drawn this time or not, so the video keeps

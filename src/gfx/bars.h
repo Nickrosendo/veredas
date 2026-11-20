@@ -42,13 +42,15 @@ typedef struct {
     float weather_left;       /* 1 at the event's start, 0 at its end */
     char weather_label[48];   /* "drought, ends in summer" */
     char following[24];       /* the followed animal's name, "" when nobody */
+    char fps[24];             /* the frames-a-second counter (F3), "" when off */
     char notice[256];         /* the message of the moment, "" for none */
 } TopState;
 
 /* The top line, UI_BAR_H tall across w pixels, as boxes: mode, year and
  * season, animals, speed (or paused, or game over), the branch while split,
  * the weather while an event holds, the notice in the room left, and who is
- * followed at the right end. Nothing in it is a button. */
+ * followed at the right end, with the frames-a-second counter left of that
+ * while it is on. Nothing in it is a button. */
 void bar_top_draw(Ui *u, Canvas *c, int w, const TopState *st);
 /* "1,234,567 animals"; "1 animal" for one. */
 void bar_animals_text(int animals, char *out, size_t size);

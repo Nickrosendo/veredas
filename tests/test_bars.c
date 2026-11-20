@@ -263,9 +263,46 @@ static void test_top_line(void)
     CHECK(strcmp(text, "1 animal") == 0);
 }
 
+/* The counter (F3) sits left of "following", inside the line, and leaves the
+ * "following" box where it was; with fps "" the line is as without it. */
+static void test_top_line_fps(void)
+{
+    Canvas with, without;
+    CHECK(canvas_init(&with, 840, UI_BAR_H));
+    CHECK(canvas_init(&without, 840, UI_BAR_H));
+    TopState st;
+    top_state(&st);
+    canvas_fill(&without, 0xFF000000u);
+    bar_top_draw(&u, &without, 800, &st);
+    snprintf(st.fps, sizeof(st.fps), "30 fps, 4.0 ms");
+    canvas_fill(&with, 0xFF000000u);
+    bar_top_draw(&u, &with, 800, &st);
+    CHECK(!inked_from(&with, 800));
+    int same_right = 1, differs = 0;
+    for (int y = 0; y < UI_BAR_H; y++) {
+        for (int x = 0; x < 800; x++) {
+            bool eq = with.px[y * with.w + x] == without.px[y * without.w + x];
+            if (x >= 800 - 100) {
+                same_right &= eq;
+            } else if (!eq) {
+                differs = 1;
+            }
+        }
+    }
+    CHECK(same_right);
+    CHECK(differs);
+    /* Too narrow for it: it is left out, and the line still stays inside. */
+    canvas_fill(&with, 0xFF000000u);
+    bar_top_draw(&u, &with, 170, &st);
+    CHECK(!inked_from(&with, 170));
+    canvas_free(&with);
+    canvas_free(&without);
+}
+
 int main(void)
 {
     test_top_line();
+    test_top_line_fps();
     ui_init(&u);
     test_documentary();
     test_sandbox();
