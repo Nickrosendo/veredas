@@ -209,11 +209,11 @@ for take in 1 2; do
     [ -n "$shown" ] && [ "$shown" = "$window" ] ||
         fail "the counter changed the world: '$shown' against '$window'"
 done
-cmp -s "$TMP/fps1.ppm" "$TMP/fps2.ppm" ||
+same_file "$TMP/fps1.ppm" "$TMP/fps2.ppm" ||
     fail "two runs with the counter on drew different pictures"
 "$OUT/veredas-window" --seed 3 --size 64x32 --speed 30 --frames 500 \
     --screenshot "$TMP/nofps.ppm" >/dev/null || fail "the run without the counter failed"
-cmp -s "$TMP/fps1.ppm" "$TMP/nofps.ppm" &&
+same_file "$TMP/fps1.ppm" "$TMP/nofps.ppm" &&
     fail "F3 drew nothing: the picture is the same as without it"
 
 # 9. --paused only looks: the world stays at tick 0, and the terminal program
