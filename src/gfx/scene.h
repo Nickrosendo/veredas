@@ -36,6 +36,16 @@
 /* How long the soil's colours may lag behind the world, in window time: the
  * soil changes so slowly that a second is never seen (controller's call). */
 #define SCENE_COLOUR_MS 1000u
+/* A sea body seen from the surface (the levels design, 5.2): it is painted as
+ * keep / 256 of its own colours and the rest of the water under it, much in
+ * deep water and little in the shallows, where it is half out. And it sways:
+ * a drift of SCENE_SWAY_X art pixels either way and SCENE_SWAY_Y up and down,
+ * once round in SCENE_SWAY_MS of body time. Tuned by eye in the window. */
+#define SCENE_SEA_KEEP_DEEP 120
+#define SCENE_SEA_KEEP_SHALLOW 200
+#define SCENE_SWAY_MS 4200u
+#define SCENE_SWAY_X 1.2f
+#define SCENE_SWAY_Y 0.8f
 /* The number of tree pictures: 2 sizes, VEG_MAX densities, big or not, bare or
  * not, TILE_VARIANTS variants and 3 sways. */
 #define SCENE_TREES (2 * VEG_MAX * 2 * 2 * TILE_VARIANTS * 3)
@@ -130,6 +140,9 @@ typedef struct {
     Canvas ground;
     bool ground_valid;
     bool ground_tiled; /* drawn as tiles: cells can be redrawn one by one */
+    /* Tests only: true draws a sea body clear and still (still without a
+     * shadow), so a test can compare it with the surface look. */
+    bool sea_clear;
     uint64_t ground_tick;
     uint64_t ground_drift_step; /* water_ms / SCENE_DRIFT_MS, not wrapped */
     uint64_t ground_colour_ms;  /* water_ms when the cells' colours were worked out */

@@ -529,10 +529,14 @@ static void test_known_world_pixels(void)
          * ones. Re-pinned for medium parts the same day: one animal with a
          * medium gene at the far middle level wears a thinner shell; looked
          * at. Re-pinned for the sea (rules 2, 2026-11-18): founders drawn
-         * and placed by body, sea animals on deep water; every level moves. */
+         * and placed by body, sea animals on deep water; every level moves.
+         * Re-pinned for the surface look of sea animals (levels step 1,
+         * 2026-11-20): no shadow, no walking bob, a sway, their pixels mixed
+         * with the water; the three map levels move, the World zoom does not.
+         * Old and new pictures written out and compared side by side. */
         static const uint64_t EXPECTED[CAMERA_LEVELS] = {
-            0x246d2f0b8b050069u, 0xec5964d329208b52u,
-            0xfe5b3044bcb39998u, 0x5548508875eb4585u,
+            0x965fb1d45bd6978du, 0x52b3c342f0de7c91u,
+            0x5e632bc73d8d3a07u, 0x5548508875eb4585u,
         };
         if (pinned && hashes[level] != EXPECTED[level]) {
             printf("level %d: 0x%llxu\n", level,
@@ -1316,6 +1320,115 @@ static void test_large_body_drawn_large(void)
         CHECK(box.left < sx + ppc && box.right >= sx);
         sim_free(&s);
     }
+}
+
+/* One picture of the 64 by 64 world at Close, centred on (32, 32), with the
+ * body in slot `slot` alive or not; sea_clear as the scene's switch. */
+static void sea_picture(Sim *s, int slot, bool alive, bool clear, Canvas *c)
+{
+    Scene sc;
+    CHECK(scene_init(&sc, s));
+    sc.sea_clear = clear;
+    Camera cam;
+    camera_init(&cam, 64, 64, VIEW_W, VIEW_H);
+    cam.level = CAMERA_CLOSE;
+    camera_centre_on(&cam, 32.5f, 32.5f);
+    s->pool.items[slot].alive = alive;
+    scene_update(&sc, s, 10, 700);
+    canvas_fill(c, canvas_rgb(255, 0, 255));
+    scene_draw_world(&sc, c, &cam, s, 0.0f, 0, 700, 0, 0);
+    s->pool.items[slot].alive = true;
+    scene_free(&sc);
+}
+
+/* The sum over every pixel of how far a is from b, channel by channel. */
+static long picture_distance(const Canvas *a, const Canvas *b)
+{
+    long sum = 0;
+    for (int i = 0; i < a->w * a->h; i++) {
+        for (int shift = 0; shift <= 16; shift += 8) {
+            int x = (int)((a->px[i] >> shift) & 0xFFu);
+            int y = (int)((b->px[i] >> shift) & 0xFFu);
+            sum += x > y ? x - y : y - x;
+        }
+    }
+    return sum;
+}
+
+/* How many pixels of `with` are exactly a body shadow over `without`: the
+ * old pixel darkened to 141 / 256 (scene.c's BODY_SHADOW_KEEP). */
+static int shadow_pixels(const Canvas *without, const Canvas *with)
+{
+    int n = 0;
+    for (int i = 0; i < with->w * with->h; i++) {
+        uint32_t p = without->px[i], q = with->px[i];
+        if (p == q) {
+            continue;
+        }
+        uint32_t r = (((p >> 16) & 0xFFu) * 141u) >> 8;
+        uint32_t g = (((p >> 8) & 0xFFu) * 141u) >> 8;
+        uint32_t b = ((p & 0xFFu) * 141u) >> 8;
+        n += q == ((p & 0xFF000000u) | (r << 16) | (g << 8) | b);
+    }
+    return n;
+}
+
+/* A sea body seen from the surface (the levels design, 5.2): no shadow, its
+ * pixels mixed with the water, much in deep water and less in the shallows.
+ * A land body is drawn as before, shadow and all. */
+static void test_sea_body_under_the_surface(void)
+{
+    Canvas empty, clear, tinted;
+    CHECK(canvas_init(&empty, VIEW_W, VIEW_H));
+    CHECK(canvas_init(&clear, VIEW_W, VIEW_H));
+    CHECK(canvas_init(&tinted, VIEW_W, VIEW_H));
+    float share[2]; /* how far from the water the tinted body is, of the clear one */
+    const int terrain[2] = {TERRAIN_WATER, TERRAIN_SHALLOW};
+    for (int k = 0; k < 2; k++) {
+        Sim s;
+        make_empty_sim(&s, 64, 64);
+        for (int i = 0; i < 64 * 64; i++) {
+            s.world.terrain[i] = (uint8_t)terrain[k];
+        }
+        int slot = pool_spawn_body(&s.pool, &s.world, 32, 32, true);
+        CHECK(slot >= 0);
+        if (slot < 0) {
+            sim_free(&s);
+            continue;
+        }
+        s.pool.items[slot].age = 1000;
+        s.pool.items[slot].genome.g[GENE_SWIM] = 1.0f; /* its genes make it a sea body */
+        s.tick = 2000;
+        CHECK(creature_sea_body(&s.pool.items[slot]));
+        sea_picture(&s, slot, false, false, &empty);
+        sea_picture(&s, slot, true, true, &clear);
+        sea_picture(&s, slot, true, false, &tinted);
+        CHECK(hash_canvas(&clear) != hash_canvas(&tinted));
+        CHECK(hash_canvas(&empty) != hash_canvas(&tinted)); /* still seen */
+        CHECK(shadow_pixels(&empty, &tinted) == 0);
+        long body = picture_distance(&clear, &empty);
+        CHECK(body > 0);
+        share[k] = (float)picture_distance(&tinted, &empty) / (float)(body > 0 ? body : 1);
+        sim_free(&s);
+    }
+    CHECK(share[0] < 0.7f);       /* deep water: mostly water */
+    CHECK(share[1] > share[0]);   /* the shallows: clearer */
+    CHECK(share[1] < 1.0f);
+
+    /* A wolf on soil: the switch changes nothing, and it has its shadow. */
+    Sim s;
+    make_empty_sim(&s, 64, 64);
+    int wolf = place_body(&s, 32, 32, 0.0f);
+    CHECK(!creature_sea_body(&s.pool.items[wolf]));
+    sea_picture(&s, wolf, false, false, &empty);
+    sea_picture(&s, wolf, true, true, &clear);
+    sea_picture(&s, wolf, true, false, &tinted);
+    CHECK(hash_canvas(&clear) == hash_canvas(&tinted));
+    CHECK(shadow_pixels(&empty, &tinted) > 0);
+    sim_free(&s);
+    canvas_free(&empty);
+    canvas_free(&clear);
+    canvas_free(&tinted);
 }
 
 /* A giant at the world's corners, in a world that fits the view and in one
@@ -2268,6 +2381,7 @@ int main(void)
     test_game_over_text_longest();
     test_scene_game_over();
     test_large_body_drawn_large();
+    test_sea_body_under_the_surface();
     test_giant_over_map_edge();
     test_scars_follow_recent_hits();
     test_drawing_large_leaves_fingerprint_equal();

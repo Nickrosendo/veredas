@@ -181,6 +181,7 @@ bool scene_init(Scene *sc, const Sim *s)
     }
     sc->ground_valid = false;
     sc->ground_tiled = false;
+    sc->sea_clear = false;
     sc->ground_colours_pending = false;
     sc->tiles_level = -1;
     /* Allocated by the first frame that draws tiles. */
@@ -1313,6 +1314,7 @@ typedef struct {
     int scale;
     bool flip;
     float eyes;  /* 1 open, 0.4 half shut, 0 shut */
+    int keep;    /* 256ths of its own colour kept; the rest is what is under it */
 } BodyDraw;
 
 /* The canvas column of picture column gx: flipped about the ground point when
@@ -1342,8 +1344,8 @@ static void body_box(const BodyDraw *d, int *left, int *top, int *right, int *bo
 static void body_pixel(Canvas *c, const BodyDraw *d, int gx, int gy, int dx, int dy,
                        uint32_t colour, CanvasClip clip)
 {
-    canvas_pixel(c, body_column(d, gx) + dx, body_row(d, gy) + dy, d->scale, colour,
-                 clip);
+    canvas_mix_rect_clip(c, body_column(d, gx) + dx, body_row(d, gy) + dy, d->scale,
+                         d->scale, colour, d->keep, clip);
 }
 
 /* The picture's ink, moved by (dx, dy). Written straight into the pixels when
@@ -1364,9 +1366,11 @@ static void paint_body(Canvas *c, const BodyDraw *d, int dx, int dy, CanvasClip 
         top >= clip.y + clip.h) {
         return;
     }
-    bool inside = left >= clip.x && top >= clip.y && right <= clip.x + clip.w &&
-                  bottom <= clip.y + clip.h && left >= 0 && top >= 0 &&
-                  right <= c->w && bottom <= c->h;
+    /* A body seen through water mixes each pixel with the one under it, so
+     * it takes the slower, careful path. */
+    bool inside = d->keep >= 256 && left >= clip.x && top >= clip.y &&
+                  right <= clip.x + clip.w && bottom <= clip.y + clip.h && left >= 0 &&
+                  top >= 0 && right <= c->w && bottom <= c->h;
     int scale = d->scale;
     /* Across the picture, the canvas moves scale pixels a column, or back. */
     int step = d->flip ? -scale : scale;
@@ -1381,7 +1385,7 @@ static void paint_body(Canvas *c, const BodyDraw *d, int dx, int dy, CanvasClip 
                 continue;
             }
             if (!inside) {
-                canvas_pixel(c, px, py, scale, colours[k], clip);
+                canvas_mix_rect_clip(c, px, py, scale, scale, colours[k], d->keep, clip);
                 continue;
             }
             for (int j = 0; j < scale; j++) {
@@ -1449,6 +1453,7 @@ static BodyDraw world_body(Scene *sc, const Camera *cam, const Sim *s, int slot,
     d.scale = camera_sprite_scale(cam);
     d.flip = p->flip;
     d.eyes = p->eyes;
+    d.keep = 256;
     return d;
 }
 
@@ -1457,6 +1462,11 @@ static BodyDraw world_body(Scene *sc, const Camera *cam, const Sim *s, int slot,
 static void body_shadow(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
                         const SceneItem *it, const WorldArea *area)
 {
+    /* A shadow says "above the ground you look at": a swimmer seen from the
+     * surface is under it, so it casts none (the levels design, 5.1). */
+    if (creature_sea_body(&s->pool.items[it->index])) {
+        return;
+    }
     BodyDraw d = world_body(sc, cam, s, it->index, it);
     int cx = d.foot_x + d.pic.shadow_dx * (d.flip ? -1 : 1) * d.scale;
     int dx[9], dy[9];
@@ -1467,10 +1477,38 @@ static void body_shadow(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
     }
 }
 
+/* How much of its own colour a sea body keeps seen from the surface: little in
+ * deep water, more in the shallows. Its cell is the one it stands on in the
+ * world, so the tint changes when it steps, as its sorting row does. */
+static int sea_keep(const Sim *s, const Creature *cr)
+{
+    const World *w = &s->world;
+    int cell = cr->y * w->w + cr->x;
+    return w->terrain[cell] == TERRAIN_SHALLOW ? SCENE_SEA_KEEP_SHALLOW
+                                               : SCENE_SEA_KEEP_DEEP;
+}
+
+/* A sea body's slow sway, in canvas pixels, at body time body_ms: sideways
+ * once round a period, up and down twice, each body starting at its own point
+ * of the period (from its id), so a shoal does not sway in step. The body
+ * clock stops in a pause, and so does the sway. */
+static void sea_sway(const Scene *sc, const Creature *cr, uint64_t body_ms, int scale,
+                     int *dx, int *dy)
+{
+    /* The id times a large odd number spreads neighbouring ids apart; the
+     * uint32_t product wraps, which is defined for unsigned numbers. */
+    uint64_t shift = (uint64_t)(cr->id * 2654435769u) % SCENE_SWAY_MS;
+    float u = (float)((body_ms + shift) % SCENE_SWAY_MS) / (float)SCENE_SWAY_MS;
+    const float two_pi = 6.28318531f;
+    *dx = round_to_int(SCENE_SWAY_X * (float)scale * sine_of(sc, two_pi * u));
+    *dy = round_to_int(SCENE_SWAY_Y * (float)scale * sine_of(sc, 2.0f * two_pi * u + 1.0f));
+}
+
 /* One body over what is behind it, and its copies across a whole world's
- * edges; at the World zoom a coloured square on its cell, as before. */
+ * edges; at the World zoom a coloured square on its cell, as before. A sea
+ * body is seen through the water and sways. */
 static void draw_body(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
-                      const SceneItem *it, const WorldArea *area)
+                      const SceneItem *it, const WorldArea *area, uint64_t body_ms)
 {
     const Creature *cr = &s->pool.items[it->index];
     int ppc = camera_ppc(cam);
@@ -1489,11 +1527,16 @@ static void draw_body(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
         sprite_palette_flash(&flashed, d.palette, flash);
         d.palette = &flashed;
     }
+    int sway_x = 0, sway_y = 0;
+    if (creature_sea_body(cr) && !sc->sea_clear) {
+        d.keep = sea_keep(s, cr);
+        sea_sway(sc, cr, body_ms, d.scale, &sway_x, &sway_y);
+    }
     int scars = recent_hit_count(cr, s->tick);
     int dx[9], dy[9];
     int copies = copy_offsets(area, dx, dy);
     for (int k = 0; k < copies; k++) {
-        paint_creature(c, &d, scars, dx[k], dy[k], area->clip);
+        paint_creature(c, &d, scars, dx[k] + sway_x, dy[k] + sway_y, area->clip);
     }
 }
 
@@ -1813,7 +1856,7 @@ static void draw_items(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
             }
             continue;
         }
-        draw_body(sc, c, cam, s, it, &area);
+        draw_body(sc, c, cam, s, it, &area, body_ms);
     }
 }
 
@@ -2138,6 +2181,7 @@ static void drawn_box(Scene *sc, const Camera *cam, const Sim *s, int slot,
     d.scale = camera_sprite_scale(cam);
     d.flip = p->flip;
     d.eyes = p->eyes;
+    d.keep = 256;
     if (d.pic.x1 > d.pic.x0) {
         body_box(&d, left, top, right, bottom);
     }
@@ -2305,6 +2349,7 @@ void scene_draw_followed(Scene *sc, Canvas *c, const Sim *s,
     d.scale = scale_to_fit(&rest, SCENE_ENLARGED_W, SCENE_ENLARGED_H, 2);
     d.flip = p.flip;
     d.eyes = p.eyes;
+    d.keep = 256; /* the panel draws every body clear */
     SpritePalette flashed;
     if (p.flash > 0.0f) {
         sprite_palette_flash(&flashed, d.palette, p.flash);
@@ -2341,6 +2386,7 @@ void scene_draw_sample(Scene *sc, Canvas *c, const FamilySample *sample,
     d.scale = scale_to_fit(&rest, SCENE_ENLARGED_W, SCENE_ENLARGED_H, 2);
     d.flip = false;
     d.eyes = pose_eyes(now_ms, lineage);
+    d.keep = 256; /* the lab draws every body clear */
     draw_on_ground(c, &d, &rest, 0, b.species, x, y, SCENE_ENLARGED_W, SCENE_ENLARGED_H);
 }
 
@@ -2365,6 +2411,7 @@ void scene_draw_strip(Scene *sc, Canvas *c, const Families *f, uint32_t lineage,
         d.scale = 1;
         d.flip = false;
         d.eyes = 1.0f;
+        d.keep = 256;
         /* draw_on_ground reads rest after d.pic: both are the same picture,
          * so a copy of the description serves. */
         SpritePicture rest = d.pic;

@@ -318,6 +318,32 @@ static void test_hare_hops(void)
     CHECK(deer_most <= 1);
 }
 
+/* A legless sea body swims: no walking bob in any walk or run frame (the
+ * levels design, 5.2), so it never hops on the water. A wolf still bobs. */
+static void test_sea_body_does_not_bob(void)
+{
+    int sea[] = {SPECIES_SHARK, SPECIES_DOLPHIN, SPECIES_SEA_TURTLE, SPECIES_MANATEE};
+    for (int k = 0; k < 4; k++) {
+        SpriteBody b = middling(sea[k]);
+        for (int run = 0; run < 2; run++) {
+            int action = run ? ACTION_RUN : ACTION_WALK;
+            for (int f = 0; f < SPRITE_FRAMES[action]; f++) {
+                SpritePose p;
+                pose_at(&p, &b, action, f);
+                CHECK(p.bob == 0.0f);
+            }
+        }
+    }
+    SpriteBody wolf = middling(SPECIES_WOLF);
+    bool bobs = false;
+    for (int f = 0; f < SPRITE_FRAMES[ACTION_WALK]; f++) {
+        SpritePose p;
+        pose_at(&p, &wolf, ACTION_WALK, f);
+        bobs = bobs || p.bob != 0.0f;
+    }
+    CHECK(bobs);
+}
+
 /* Grazing, the head goes down to the grass and comes back up by the end. */
 static void test_graze_lowers_the_head(void)
 {
@@ -504,6 +530,7 @@ int main(void)
     test_poses_are_continuous();
     test_walk_has_a_planted_and_a_lifted_foot();
     test_hare_hops();
+    test_sea_body_does_not_bob();
     test_graze_lowers_the_head();
     test_blink_in_two_steps();
     test_cadence_keeps_up();

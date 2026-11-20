@@ -395,6 +395,30 @@ static void test_pixel_clips(void)
     canvas_free(&c);
 }
 
+/* Mixing: keep 256 is a plain fill, 0 leaves the pixel, 128 is half way;
+ * only the pixels inside the clip and the canvas change. */
+static void test_mix_rect(void)
+{
+    Canvas c;
+    CHECK(canvas_init(&c, 6, 6));
+    uint32_t white = canvas_rgb(255, 255, 255), black = canvas_rgb(0, 0, 0);
+    CanvasClip clip = {1, 1, 3, 3};
+    canvas_mix_rect_clip(&c, 1, 1, 1, 1, white, 256, clip);
+    CHECK(pixel(&c, 1, 1) == white);
+    canvas_mix_rect_clip(&c, 2, 1, 1, 1, white, 0, clip);
+    CHECK(pixel(&c, 2, 1) == black);
+    canvas_mix_rect_clip(&c, 1, 2, 1, 1, white, 128, clip);
+    uint32_t half = pixel(&c, 1, 2);
+    CHECK(((half >> 16) & 0xFFu) == 127 || ((half >> 16) & 0xFFu) == 128);
+    CHECK((half & 0xFFu) == ((half >> 16) & 0xFFu));
+    /* A 6 by 6 block from (-2, -2): only the 3 by 3 clip changes. */
+    canvas_fill(&c, RED);
+    canvas_mix_rect_clip(&c, -2, -2, 8, 8, white, 256, clip);
+    CHECK(count_colour(&c, white) == 9);
+    CHECK(pixel(&c, 0, 0) == RED && pixel(&c, 4, 4) == RED);
+    canvas_free(&c);
+}
+
 int main(void)
 {
     test_rgb();
@@ -415,5 +439,6 @@ int main(void)
     test_darken_ellipse();
     test_darken_clip_matches_plain();
     test_pixel_clips();
+    test_mix_rect();
     TEST_SUMMARY();
 }

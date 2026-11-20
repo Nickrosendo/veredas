@@ -47,8 +47,10 @@ static float lerp(float a, float b, float u)
 
 /* Walking and running (v9:173-183): the phase goes once round per cycle, and
  * the skeleton places each foot from it. A hopping species bounds on all
- * fours; the others bob twice a step. */
-static void pose_walk(SpritePose *p, bool run, bool hop, float u)
+ * fours; the others bob twice a step. A legless sea body (swim) does not bob
+ * at all: it swims, and a hop on the water reads as walking on it (the levels
+ * design, 5.2). Its tail still beats from the phase. */
+static void pose_walk(SpritePose *p, bool run, bool hop, bool swim, float u)
 {
     float ph = TWO_PI * u;
     p->action = run ? ACTION_RUN : ACTION_WALK;
@@ -60,6 +62,9 @@ static void pose_walk(SpritePose *p, bool run, bool hop, float u)
         p->stretch = sinf(ph) * 0.6f;
     } else {
         p->bob = -(0.5f + 0.5f * cosf(2.0f * ph)) * (run ? 0.8f : 0.4f);
+    }
+    if (swim) {
+        p->bob = 0.0f;
     }
     p->head_dy = sinf(2.0f * ph - 1.1f) * 0.3f;
     p->tail = sinf(ph - 0.9f) * (run ? 0.12f : 0.22f);
@@ -264,10 +269,11 @@ void pose_at(SpritePose *out, const SpriteBody *b, int action, int frame)
     frame = (frame % n + n) % n; /* % keeps a negative sign: see sprite.c */
     float u = (float)frame / (float)n;
     bool hop = SPECIES[b->species].hop;
+    bool swim = SPECIES[b->species].plan != PLAN_LAND;
     switch (action) {
     case ACTION_WALK:
     case ACTION_RUN:
-        pose_walk(out, action == ACTION_RUN, hop, u);
+        pose_walk(out, action == ACTION_RUN, hop, swim, u);
         break;
     case ACTION_REST:
         /* The ear flick takes 0.15 s, under one 0.25 s frame: it is the frame

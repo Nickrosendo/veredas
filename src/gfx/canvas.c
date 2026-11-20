@@ -141,6 +141,44 @@ void canvas_rect_clip(Canvas *c, int x, int y, int w, int h, uint32_t colour,
     }
 }
 
+/* One channel, 0..255, of over mixed with under: keep / 256 of over. The
+ * products stay under 2^16, so unsigned 32-bit arithmetic never overflows. */
+static uint32_t mix_channel(uint32_t over, uint32_t under, uint32_t keep)
+{
+    return (over * keep + under * (256u - keep)) >> 8;
+}
+
+void canvas_mix_rect_clip(Canvas *c, int x, int y, int w, int h, uint32_t colour,
+                          int keep, CanvasClip clip)
+{
+    keep = keep < 0 ? 0 : (keep > 256 ? 256 : keep);
+    if (keep == 256) {
+        canvas_rect_clip(c, x, y, w, h, colour, clip);
+        return;
+    }
+    /* The overlap of the rectangle, the clip and the canvas. */
+    int left = x > clip.x ? x : clip.x;
+    int top = y > clip.y ? y : clip.y;
+    int right = x + w < clip.x + clip.w ? x + w : clip.x + clip.w;
+    int bottom = y + h < clip.y + clip.h ? y + h : clip.y + clip.h;
+    left = left < 0 ? 0 : left;
+    top = top < 0 ? 0 : top;
+    right = right > c->w ? c->w : right;
+    bottom = bottom > c->h ? c->h : bottom;
+    uint32_t k = (uint32_t)keep;
+    uint32_t cr = (colour >> 16) & 0xFFu, cg = (colour >> 8) & 0xFFu, cb = colour & 0xFFu;
+    for (int py = top; py < bottom; py++) {
+        uint32_t *row = &c->px[py * c->w];
+        for (int px = left; px < right; px++) {
+            uint32_t old = row[px];
+            uint32_t r = mix_channel(cr, (old >> 16) & 0xFFu, k);
+            uint32_t g = mix_channel(cg, (old >> 8) & 0xFFu, k);
+            uint32_t b = mix_channel(cb, old & 0xFFu, k);
+            row[px] = (colour & 0xFF000000u) | (r << 16) | (g << 8) | b;
+        }
+    }
+}
+
 void canvas_mask_wide(Canvas *c, const uint64_t *rows, int size, int x, int y,
                       int scale, bool flip, uint32_t colour, CanvasClip clip)
 {

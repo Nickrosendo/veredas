@@ -52,6 +52,12 @@ typedef struct {
 /* canvas_rect, kept inside clip as well as inside the canvas. */
 void canvas_rect_clip(Canvas *c, int x, int y, int w, int h, uint32_t colour,
                       CanvasClip clip);
+/* canvas_rect_clip, but each pixel becomes keep / 256 of colour and the rest
+ * of what was there: (colour * keep + old * (256 - keep)) / 256 per channel.
+ * keep 256 is a plain fill, 0 changes nothing. Draws a body seen through
+ * water (scene.c). */
+void canvas_mix_rect_clip(Canvas *c, int x, int y, int w, int h, uint32_t colour,
+                          int keep, CanvasClip clip);
 /* canvas_mask for rows up to 64 pixels wide, kept inside clip. Each row's set
  * bits are drawn as runs, one rectangle per run of neighbouring pixels. */
 void canvas_mask_wide(Canvas *c, const uint64_t *rows, int size, int x, int y,
