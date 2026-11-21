@@ -108,18 +108,62 @@ static void test_home_level(void)
     CHECK(levels_home(&c) == LEVEL_SKY);
 }
 
-/* Following a flyer: the view rises to the sky when it goes up and comes back
- * down with it when it lands. */
-static void test_follow_flyer_to_the_sky_and_back(void)
+/* Following a flyer: the view rises to the sky once it has stayed up for
+ * LEVELS_SETTLE_MS, and comes back down once it has stayed down as long
+ * (the air half's talk, 2026-11-21). The change itself is at once, no fade. */
+static void test_follow_flyer_waits_to_settle(void)
 {
     LevelFollow f;
     levels_follow_init(&f);
     Camera c = camera_at(CAMERA_NORMAL, LEVEL_SURFACE);
     levels_follow(&f, &c, true, 7, LEVEL_SURFACE, 0);
     CHECK(c.level == LEVEL_SURFACE);
-    levels_follow(&f, &c, true, 7, LEVEL_SKY, 10);
+    levels_follow(&f, &c, true, 7, LEVEL_SKY, 1000); /* it goes up */
+    CHECK(c.level == LEVEL_SURFACE);
+    levels_follow(&f, &c, true, 7, LEVEL_SKY, 1000 + LEVELS_SETTLE_MS - 1);
+    CHECK(c.level == LEVEL_SURFACE);
+    levels_follow(&f, &c, true, 7, LEVEL_SKY, 1000 + LEVELS_SETTLE_MS);
     CHECK(c.level == LEVEL_SKY);
-    levels_follow(&f, &c, true, 7, LEVEL_SURFACE, 20);
+    CHECK(!f.fading);
+    CHECK(levels_fade_keep(&f, 1000 + LEVELS_SETTLE_MS) == 256);
+    levels_follow(&f, &c, true, 7, LEVEL_SURFACE, 5000); /* it lands */
+    CHECK(c.level == LEVEL_SKY);
+    levels_follow(&f, &c, true, 7, LEVEL_SURFACE, 5000 + LEVELS_SETTLE_MS);
+    CHECK(c.level == LEVEL_SURFACE);
+}
+
+/* A bird hopping up and down more often than the settle time never flips the
+ * view; each hop starts the wait again. */
+static void test_hopping_flyer_does_not_flip(void)
+{
+    LevelFollow f;
+    levels_follow_init(&f);
+    Camera c = camera_at(CAMERA_CLOSE, LEVEL_SURFACE);
+    levels_follow(&f, &c, true, 7, LEVEL_SURFACE, 0);
+    for (uint64_t t = 100; t < 20000; t += 100) {
+        int home = (t / 1000) % 2 == 0 ? LEVEL_SURFACE : LEVEL_SKY; /* 1 s each */
+        levels_follow(&f, &c, true, 7, home, t);
+        CHECK(c.level == LEVEL_SURFACE);
+    }
+}
+
+/* A newly followed flyer up takes the view to the sky at once (no wait):
+ * the wait is only for the same animal changing level. A key held while
+ * following still wins over a settled change. */
+static void test_new_flyer_at_once_and_key_wins(void)
+{
+    LevelFollow f;
+    levels_follow_init(&f);
+    Camera c = camera_at(CAMERA_NORMAL, LEVEL_SURFACE);
+    levels_follow(&f, &c, true, 8, LEVEL_SKY, 0);
+    CHECK(c.level == LEVEL_SKY);
+    levels_key(&f, &c, +1, true); /* down to the surface, held */
+    CHECK(c.level == LEVEL_SURFACE);
+    levels_follow(&f, &c, true, 8, LEVEL_SKY, 10000);
+    CHECK(c.level == LEVEL_SURFACE);
+    levels_follow(&f, &c, true, 8, LEVEL_SURFACE, 20000);
+    levels_follow(&f, &c, true, 8, LEVEL_SKY, 30000);
+    levels_follow(&f, &c, true, 8, LEVEL_SKY, 30000 + LEVELS_SETTLE_MS);
     CHECK(c.level == LEVEL_SURFACE);
 }
 
@@ -237,7 +281,9 @@ int main(void)
     test_step_stops_at_the_ends();
     test_dive_only_over_water_at_close();
     test_home_level();
-    test_follow_flyer_to_the_sky_and_back();
+    test_follow_flyer_waits_to_settle();
+    test_hopping_flyer_does_not_flip();
+    test_new_flyer_at_once_and_key_wins();
     test_follow_and_hold();
     test_cut_fades();
     TEST_SUMMARY();

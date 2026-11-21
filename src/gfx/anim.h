@@ -17,6 +17,8 @@
 #define ANIM_GLIDE_MAX_SPEED 15
 /* A move that takes at most this many ticks is shown as a run. */
 #define ANIM_RUN_TICKS 1.5f
+/* A flyer goes up or comes down over this many ticks on screen. */
+#define ANIM_RISE_TICKS 1.0f
 
 /* What a fighter's mouth is doing. The rules have no such bite, so this
  * value belongs to the drawing side, after the rules' own values. */
@@ -54,6 +56,12 @@ typedef struct {
      * Z, which come every so often (scene.c). */
     uint64_t struck_ms;
     uint64_t puff_ms;
+    /* Up in the air (Creature.up > 0) when last looked at, and the tick it
+     * last went up or came down; rise_glide false until it has changed once
+     * while watched, so a flyer first seen up is simply up. */
+    bool up;
+    bool rise_glide;
+    uint64_t up_tick;
 } AnimSlot;
 
 typedef struct {
@@ -79,6 +87,9 @@ typedef struct {
      * pushed from its cell, away from its attacker, in cells: knock_x the
      * push, tremble the shake this moment, both signed (+ east). */
     float flash, knock_x, tremble;
+    /* How far up in the air, 0 on the ground, 1 fully up: a flyer going up or
+     * coming down glides between the two over ANIM_RISE_TICKS (the swoop). */
+    float rise;
 } AnimPose;
 
 /* False when memory runs out; nothing to free then. */

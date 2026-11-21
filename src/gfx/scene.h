@@ -66,14 +66,26 @@
  * a walker there is a faint shape, SCENE_SHAPE_KEEP of a grey-blue. A flyer up
  * is drawn SCENE_AIR_RISE art pixels above its cell, with a small shadow on the
  * ground keeping SCENE_AIR_SHADOW_KEEP 256ths of the light (lighter than a
- * walker's: it is further from the ground). Slow cloud wisps drift over the
- * sky from SCENE_CLOUD_SHARE of the cells, SCENE_CLOUD_KEEP 256ths of white at
- * their middle. */
+ * walker's: it is further from the ground); going up or coming down it glides
+ * between the ground and that height, its shadow shrinking or growing (the
+ * swoop). Clouds of four faint puffs drift over the sky from SCENE_CLOUD_SHARE
+ * of the cells of a cloud field, each puff about SCENE_CLOUD_KEEP / 2 256ths
+ * of white, more where the puffs overlap. */
 #define SCENE_SKY_DIM 0.5f
 #define SCENE_AIR_RISE 10
 #define SCENE_AIR_SHADOW_KEEP 212
 #define SCENE_CLOUD_SHARE 0.02f
-#define SCENE_CLOUD_KEEP 46
+#define SCENE_CLOUD_KEEP 110
+/* The clouds' wind and rain (the air half's talk, 2026-11-21): they drift
+ * SCENE_WIND_CELLS cells a second in one direction per world; where it rains
+ * (rain 0..1) up to SCENE_CLOUD_RAIN_SHARE more of the cells hold one, each up
+ * to SCENE_CLOUD_RAIN_THICK times thicker, fading in over SCENE_CLOUD_FADE of
+ * the share; the loop looks SCENE_CLOUD_REACH cells past the view. */
+#define SCENE_WIND_CELLS 0.12
+#define SCENE_CLOUD_RAIN_SHARE 0.035f
+#define SCENE_CLOUD_RAIN_THICK 0.6f
+#define SCENE_CLOUD_FADE 0.005f
+#define SCENE_CLOUD_REACH 3
 /* The number of tree pictures: 2 sizes, VEG_MAX densities, big or not, bare or
  * not, TILE_VARIANTS variants and 3 sways. */
 #define SCENE_TREES (2 * VEG_MAX * 2 * 2 * TILE_VARIANTS * 3)

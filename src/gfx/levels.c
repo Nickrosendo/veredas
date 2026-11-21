@@ -107,6 +107,7 @@ void levels_follow(LevelFollow *f, Camera *cam, bool following, uint32_t id, int
         f->known = false;
         f->held = false;
         f->cut_next = false;
+        f->settling = false;
         return;
     }
     if (!f->known || f->id != id) {
@@ -115,6 +116,7 @@ void levels_follow(LevelFollow *f, Camera *cam, bool following, uint32_t id, int
         f->id = id;
         f->held = false;
         f->cut_next = false;
+        f->settling = false;
         if (home == cam->level) {
             f->fading = false;
         } else if (cut) {
@@ -129,9 +131,23 @@ void levels_follow(LevelFollow *f, Camera *cam, bool following, uint32_t id, int
         return;
     }
     /* The same creature as before: its level, unless a key holds the view or
-     * a fade is already taking it there. */
-    if (!f->held && !f->fading && home != cam->level) {
+     * a fade is already taking it there, and only once it has stayed there
+     * LEVELS_SETTLE_MS. */
+    if (f->held || f->fading || home == cam->level) {
+        f->settling = false;
+        return;
+    }
+    if (!f->settling || f->settle_home != home) {
+        f->settling = true; /* first seen on this level: the wait starts */
+        f->settle_home = home;
+        f->settle_start = now_ms;
+        return;
+    }
+    /* As in run_fade: a clock that went back counts as the wait being over,
+     * not as a subtraction wrapping round. */
+    if (now_ms < f->settle_start || now_ms - f->settle_start >= LEVELS_SETTLE_MS) {
         cam->level = home;
+        f->settling = false;
     }
 }
 

@@ -2539,6 +2539,130 @@ static void test_paused_scenery_steps_half_as_often(void)
     CHECK(scene_ambient_frame(1000) != scene_ambient_frame(1100));
 }
 
+/* The sum of every pixel's red, green and blue: a brighter picture has more. */
+static uint64_t canvas_brightness(const Canvas *c)
+{
+    uint64_t sum = 0;
+    for (int i = 0; i < c->w * c->h; i++) {
+        sum += (c->px[i] >> 16 & 0xFFu) + (c->px[i] >> 8 & 0xFFu) + (c->px[i] & 0xFFu);
+    }
+    return sum;
+}
+
+/* A world of seed 3 after 300 ticks with the scene watching, and its first
+ * flyer up (or -1), for the sky's tests. */
+static int sky_world(Sim *s, Scene *sc)
+{
+    Settings set = settings_default();
+    CHECK(sim_init(s, &set, 3, 64, 32));
+    CHECK(scene_init(sc, s));
+    for (int t = 0; t < 300; t++) {
+        sim_step(s);
+        scene_update(sc, s, 10, 0);
+    }
+    for (int i = 0; i < s->pool.capacity; i++) {
+        if (s->pool.items[i].alive && s->pool.items[i].up > 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/* The swoop (the air half's talk, 2026-11-21): a flyer half way through going
+ * up is drawn differently from one fully up, on the sky and on the surface;
+ * once the glide is over it is drawn exactly as fully up. Only the drawing's
+ * memory is changed, never the world. */
+static void test_swoop_glides_the_flyer(void)
+{
+    Sim s;
+    Scene sc;
+    int bird = sky_world(&s, &sc);
+    CHECK(bird >= 0);
+    if (bird < 0) {
+        scene_free(&sc);
+        sim_free(&s);
+        return;
+    }
+    Canvas c;
+    CHECK(canvas_init(&c, VIEW_W, VIEW_H));
+    Camera cam;
+    camera_init(&cam, 64, 32, VIEW_W, VIEW_H);
+    camera_centre_on(&cam, (float)s.pool.items[bird].x + 0.5f,
+                     (float)s.pool.items[bird].y + 0.5f);
+    cam.zoom = CAMERA_CLOSE;
+    uint64_t world = sim_checksum(&s);
+    AnimSlot *m = &sc.anim.slots[bird];
+    for (int level = LEVEL_SKY; level <= LEVEL_SURFACE; level++) {
+        cam.level = level;
+        m->rise_glide = false; /* simply up */
+        scene_draw_world(&sc, &c, &cam, &s, 0.5f, 1000, 1000, 0, 0);
+        uint64_t up = hash_canvas(&c);
+        m->rise_glide = true; /* went up this tick: half way at 0.5 */
+        m->up_tick = s.tick;
+        scene_draw_world(&sc, &c, &cam, &s, 0.5f, 1000, 1000, 0, 0);
+        CHECK(sc.poses[bird].rise > 0.49f && sc.poses[bird].rise < 0.51f);
+        CHECK(hash_canvas(&c) != up);
+        m->up_tick = s.tick - 3; /* the glide long over */
+        scene_draw_world(&sc, &c, &cam, &s, 0.5f, 1000, 1000, 0, 0);
+        CHECK(hash_canvas(&c) == up);
+    }
+    CHECK(sim_checksum(&s) == world);
+    canvas_free(&c);
+    scene_free(&sc);
+    sim_free(&s);
+}
+
+/* The clouds: they move with the wind as the window's clock runs (the surface
+ * does not change with them), and where it rains there are more and thicker
+ * ones, so the sky is brighter. */
+static void test_clouds_drift_and_gather_in_rain(void)
+{
+    Sim s;
+    Scene sc;
+    (void)sky_world(&s, &sc);
+    Canvas c;
+    CHECK(canvas_init(&c, VIEW_W, VIEW_H));
+    Camera cam;
+    camera_init(&cam, 64, 32, VIEW_W, VIEW_H);
+    cam.zoom = CAMERA_NORMAL;
+    cam.level = LEVEL_SKY;
+    scene_draw_world(&sc, &c, &cam, &s, 0.0f, 1000, 1000, 0, 0);
+    uint64_t early = hash_canvas(&c);
+    scene_draw_world(&sc, &c, &cam, &s, 0.0f, 61000, 1000, 0, 0);
+    CHECK(hash_canvas(&c) != early);
+    int n = s.world.w * s.world.h;
+    float *saved = malloc((size_t)n * sizeof(float));
+    CHECK(saved != NULL);
+    if (saved != NULL) {
+        memcpy(saved, s.world.rain, (size_t)n * sizeof(float));
+        for (int i = 0; i < n; i++) {
+            s.world.rain[i] = 0.0f;
+        }
+        scene_draw_world(&sc, &c, &cam, &s, 0.0f, 1000, 1000, 0, 0);
+        uint64_t dry = canvas_brightness(&c);
+        const char *out = getenv("VEREDAS_WRITE_PICTURES");
+        char path[512];
+        if (out != NULL) {
+            snprintf(path, sizeof(path), "%s/clouds-dry.ppm", out);
+            CHECK(canvas_write_ppm(&c, path));
+        }
+        for (int i = 0; i < n; i++) {
+            s.world.rain[i] = 1.0f;
+        }
+        scene_draw_world(&sc, &c, &cam, &s, 0.0f, 1000, 1000, 0, 0);
+        CHECK(canvas_brightness(&c) > dry + dry / 50); /* at least 2 % brighter */
+        if (out != NULL) {
+            snprintf(path, sizeof(path), "%s/clouds-rain.ppm", out);
+            CHECK(canvas_write_ppm(&c, path));
+        }
+        memcpy(s.world.rain, saved, (size_t)n * sizeof(float));
+        free(saved);
+    }
+    canvas_free(&c);
+    scene_free(&sc);
+    sim_free(&s);
+}
+
 /* The same world from the sky, centred on its first flyer up in the air: the
  * ground hazed, walkers as faint shapes, flyers clear and raised, clouds at
  * Close and Normal (levels step 3). Going up and back down draws the surface
@@ -2592,9 +2716,11 @@ static void test_sky_pixels(void)
     bool pinned = content_get()->art_set_count == 0;
 #ifndef _WIN32
     /* Pinned 2026-11-21 (levels step 3), after the three pictures were
-     * written out and looked at. */
+     * written out and looked at; re-pinned the same day for the sky's
+     * finish (clouds of four puffs drifting with the wind, a bird gliding
+     * down drawn in the air), old and new pictures compared side by side. */
     static const uint64_t EXPECTED[3] = {
-        0x23fe9d935dc3402cu, 0xa7cc2a8951333a9bu, 0x8f00ec180d1dcde6u,
+        0x0e987c71442f15d4u, 0x79733b2ac51f1af6u, 0xdd1f4a97d733c048u,
     };
     for (int zoom = 0; zoom < 3; zoom++) {
         if (pinned && hashes[zoom] != EXPECTED[zoom]) {
@@ -2637,6 +2763,8 @@ int main(void)
     test_bodies_underwater();
     test_underwater_pixels();
     test_sky_pixels();
+    test_swoop_glides_the_flyer();
+    test_clouds_drift_and_gather_in_rain();
     test_ground_layer_refreshes_when_it_should();
     test_water_only_redraw_matches_whole();
     test_layout_family_area();

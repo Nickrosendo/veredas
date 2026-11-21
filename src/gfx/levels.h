@@ -34,6 +34,11 @@ enum {
  * its darkest the map keeps LEVELS_FADE_KEEP 256ths of its light. */
 #define LEVELS_FADE_MS 600u
 #define LEVELS_FADE_KEEP 24
+/* A followed creature that changes level (a flyer going up or coming down)
+ * takes the view with it only once it has stayed on its new level this long,
+ * in window milliseconds, so a bird hopping up and down does not flip the
+ * view (the air half's talk, 2026-11-21). */
+#define LEVELS_SETTLE_MS 2000u
 
 /* True for a level that can be shown: the sky, the surface and underwater. */
 bool levels_built(int level);
@@ -70,6 +75,9 @@ typedef struct {
     bool switched;  /* during a fade: the level has changed already */
     uint64_t fade_start;
     int fade_to;
+    bool settling;  /* the followed one is on another level than the view */
+    int settle_home;
+    uint64_t settle_start; /* when it was first seen on settle_home */
 } LevelFollow;
 
 /* Nothing held, nobody known, no fade. */
@@ -81,7 +89,8 @@ void levels_dived(LevelFollow *f, bool following);
 /*
  * Once a frame, after the camera has moved to the followed creature. following
  * and id say who is followed now; home is its level (levels_home). Starts or
- * runs a fade, changing the level at its middle.
+ * runs a fade, changing the level at its middle. The same creature on a new
+ * level takes the view there once it has stayed LEVELS_SETTLE_MS.
  */
 void levels_follow(LevelFollow *f, Camera *cam, bool following, uint32_t id, int home,
                    uint64_t now_ms);

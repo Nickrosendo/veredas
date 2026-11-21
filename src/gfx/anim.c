@@ -60,6 +60,9 @@ static void first_sight(AnimSlot *m, const Creature *c, uint64_t tick)
     m->hit_by = -1;
     m->struck_ms = 0;
     m->puff_ms = 0;
+    m->up = c->up > 0;
+    m->rise_glide = false;
+    m->up_tick = tick;
 }
 
 static void update_slot(AnimSlot *m, const Creature *c, const Sim *s)
@@ -80,6 +83,11 @@ static void update_slot(AnimSlot *m, const Creature *c, const Sim *s)
         float speed = creature_speed(c, &s->set);
         float ticks = speed > 0.0f ? 1.0f / speed : 1.0f;
         m->move_ticks = ticks < 1.0f ? 1.0f : ticks;
+    }
+    if ((c->up > 0) != m->up) {
+        m->up = c->up > 0;
+        m->up_tick = s->tick;
+        m->rise_glide = true;
     }
     /* North and south keep the last horizontal facing. */
     if (c->heading == HEADING_EAST) {
@@ -326,6 +334,16 @@ void anim_pose(const Anim *a, const Sim *s, int slot, float tick_fraction,
         float dy = (float)wrapped_step(m->from_y, m->y, w->h);
         out->x = (float)m->from_x + dx * t;
         out->y = (float)m->from_y + dy * t;
+    }
+    /* The swoop: up or down over ANIM_RISE_TICKS, unless jumping. The tick
+     * difference is taken only when s->tick has reached up_tick, so the
+     * unsigned subtraction cannot wrap. */
+    out->rise = m->up ? 1.0f : 0.0f;
+    if (m->rise_glide && !a->jump && s->tick >= m->up_tick) {
+        float r = ((float)(s->tick - m->up_tick) + tick_fraction) / ANIM_RISE_TICKS;
+        if (r < 1.0f) {
+            out->rise = m->up ? r : 1.0f - r;
+        }
     }
 
     /* What its mouth is doing, for the marks and its facing. */

@@ -744,6 +744,68 @@ static void test_fast_speed_shows_pounce_and_hit(void)
     sim_free(&s);
 }
 
+/* A flyer going up rises over one tick, coming down sinks over one tick
+ * (the drawn swoop, the air half's talk 2026-11-21); a walker never rises.
+ * anim reads only Creature.up, so the test sets it by hand. */
+static void test_flyer_rises_and_sinks_over_a_tick(void)
+{
+    Sim s;
+    empty_sim(&s, 64, 32);
+    int slot = pool_spawn(&s.pool, &s.world, 10, 10);
+    Anim a;
+    CHECK(anim_init(&a, s.pool.capacity));
+    anim_update(&a, &s, 2, 0);
+    AnimPose p;
+    anim_pose(&a, &s, slot, 0.5f, 0, &p);
+    CHECK(NEAR(p.rise, 0.0f));
+    s.tick++;
+    s.pool.items[slot].up = 1;
+    anim_update(&a, &s, 2, 0);
+    anim_pose(&a, &s, slot, 0.0f, 0, &p);
+    CHECK(NEAR(p.rise, 0.0f));
+    anim_pose(&a, &s, slot, 0.25f, 0, &p);
+    CHECK(NEAR(p.rise, 0.25f));
+    s.tick++;
+    anim_update(&a, &s, 2, 0);
+    anim_pose(&a, &s, slot, 0.0f, 0, &p);
+    CHECK(NEAR(p.rise, 1.0f));
+    s.tick++;
+    s.pool.items[slot].up = 0; /* it comes down */
+    anim_update(&a, &s, 2, 0);
+    anim_pose(&a, &s, slot, 0.75f, 0, &p);
+    CHECK(NEAR(p.rise, 0.25f));
+    s.tick++;
+    anim_update(&a, &s, 2, 0);
+    anim_pose(&a, &s, slot, 0.5f, 0, &p);
+    CHECK(NEAR(p.rise, 0.0f));
+    anim_free(&a);
+    sim_free(&s);
+}
+
+/* A flyer first seen up (after a load) is up at once; at high speed a rise
+ * jumps as a move does. */
+static void test_flyer_seen_up_or_fast_does_not_glide(void)
+{
+    Sim s;
+    empty_sim(&s, 64, 32);
+    int slot = pool_spawn(&s.pool, &s.world, 10, 10);
+    s.pool.items[slot].up = 1;
+    s.tick = 500;
+    Anim a;
+    CHECK(anim_init(&a, s.pool.capacity));
+    anim_update(&a, &s, 2, 0);
+    AnimPose p;
+    anim_pose(&a, &s, slot, 0.0f, 0, &p);
+    CHECK(NEAR(p.rise, 1.0f));
+    s.tick++;
+    s.pool.items[slot].up = 0;
+    anim_update(&a, &s, 60, 0); /* above ANIM_GLIDE_MAX_SPEED */
+    anim_pose(&a, &s, slot, 0.0f, 0, &p);
+    CHECK(NEAR(p.rise, 0.0f));
+    anim_free(&a);
+    sim_free(&s);
+}
+
 int main(void)
 {
     test_glide_halfway();
@@ -771,5 +833,7 @@ int main(void)
     test_attack_stops_when_the_sim_says();
     test_victim_slot_reused();
     test_fast_speed_shows_pounce_and_hit();
+    test_flyer_rises_and_sinks_over_a_tick();
+    test_flyer_seen_up_or_fast_does_not_glide();
     TEST_SUMMARY();
 }
