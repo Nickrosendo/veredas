@@ -94,10 +94,10 @@
  * (found 2026-11-19: the runner image changed, and the old code's pin failed
  * there too; every creature's memory values differed after one step, nothing
  * else). Both are pinned, so a change that moves the world fails on both.
- * For rules 3 (2026-11-21) the runner's value is not known yet: an Ubuntu
- * 24.04 container gives this machine's value, not the runner's, so it cannot
- * stand in. Until the first GitHub run prints it, this repeats the local one. */
-#define SEED_7_AFTER_500_CI 0xc82e02a4d620ee98ULL
+ * For rules 3 (2026-11-21) it was read from the first GitHub run's log, gcc
+ * and clang alike: an Ubuntu 24.04 container gives this machine's value, not
+ * the runner's, so it cannot stand in. */
+#define SEED_7_AFTER_500_CI 0xb8ef810d840c1f1cULL
 
 /* One creature in a bare 16x16 world with the scripted brain, resting for a
  * tick, calling or not. Returns the energy it has left. */
