@@ -26,15 +26,34 @@ const ArtSet *art_set(int species)
     return found != NULL ? found : art_set_in(ART_SETS, ART_SET_COUNT, species);
 }
 
-const ArtClip *art_clip(int species, int action, const BodyTraits *traits)
+/* The set's air clip for this action when the body is up and one was drawn,
+ * else NULL. action is in range. */
+static const ArtClip *aloft_clip(const ArtSet *set, int action, const BodyTraits *traits)
 {
-    const ArtSet *set = art_set(species);
-    (void)traits;  /* every body uses its species' frames, parts or not */
+    if (traits == NULL || !(traits->aloft > 0.5f) || set->clip_aloft == NULL) {
+        return NULL;
+    }
+    const ArtClip *clip = &set->clip_aloft[action];
+    return clip->frames > 0 ? clip : NULL;
+}
+
+const ArtClip *art_clip_in(const ArtSet *set, int action, const BodyTraits *traits)
+{
     if (set == NULL || action < 0 || action >= ACTION_COUNT) {
         return NULL;
     }
+    /* Parts never change the answer: every body uses its species' frames. */
+    const ArtClip *up = aloft_clip(set, action, traits);
+    if (up != NULL) {
+        return up;
+    }
     const ArtClip *clip = &set->clip[action];
     return clip->frames > 0 ? clip : NULL;
+}
+
+const ArtClip *art_clip(int species, int action, const BodyTraits *traits)
+{
+    return art_clip_in(art_set(species), action, traits);
 }
 
 /* One part's layer clip for this action, or NULL: the size the gene asks
@@ -66,6 +85,10 @@ int art_layers(int species, int action, const BodyTraits *traits,
     }
     const ArtSet *set = art_set(species);
     if (set == NULL || action < 0 || action >= ACTION_COUNT) {
+        return 0;
+    }
+    /* A layer is cut frame for frame from a ground clip: none over an air one. */
+    if (aloft_clip(set, action, traits) != NULL) {
         return 0;
     }
     /* A covered part is in the frames already: no layer over it. */

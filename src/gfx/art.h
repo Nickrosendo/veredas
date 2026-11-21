@@ -63,6 +63,12 @@ typedef struct ArtSet {
     int16_t stand_w, stand_h;
     const ArtClip *clip;  /* ACTION_COUNT of them */
     const ArtClip *layer[ART_PART_COUNT][ART_SIZE_COUNT];
+    /* A flyer's clips for a body up in the air (BodyTraits.aloft): wings
+     * spread instead of folded. ACTION_COUNT of them like clip, or NULL for a
+     * species with none; an action with no frames here falls back to clip's
+     * (a bird comes down to graze, bite and sleep). No layer is painted over
+     * them: a flyer's frames cover every part. */
+    const ArtClip *clip_aloft;
 } ArtSet;
 
 /* In art_data.c, generated. */
@@ -74,15 +80,20 @@ extern const int ART_SET_COUNT;
 const ArtSet *art_set(int species);
 /* The species' set among count sets at sets, or NULL (also for sets NULL). */
 const ArtSet *art_set_in(const ArtSet *sets, int count, int species);
-/* The clip for this species and action, or NULL when it has none. traits
- * (the rounded ones) do not change the answer now: every body is drawn from
- * its species' frames. They stay in the signature for the parts' layers. */
+/* The clip for this species and action, or NULL when it has none. Of the
+ * traits (the rounded ones) only aloft changes the answer: a body up in the
+ * air takes the set's clip_aloft for the action when it has frames there, its
+ * ground clip otherwise. Parts never do: every body is drawn from its
+ * species' frames. */
 const ArtClip *art_clip(int species, int action, const BodyTraits *traits);
+/* The same for one set (NULL gives NULL). */
+const ArtClip *art_clip_in(const ArtSet *set, int action, const BodyTraits *traits);
 /* The layers this body shows for this action, one slot per ART_PART_ value
  * (NULL where it shows none); returns how many slots are filled. A part shows
  * when its rounded gene is at PART_FROM or above, the species' frames do not
  * cover it, and a layer was painted: the full one at a gene of 1, the medium
- * one below, or the full one when no medium layer was painted yet. */
+ * one below, or the full one when no medium layer was painted yet. A body
+ * drawn from an air clip shows none. */
 int art_layers(int species, int action, const BodyTraits *traits,
                const ArtClip *out[ART_PART_COUNT]);
 /* How many grid pixels one art pixel becomes so that the art's standing pose

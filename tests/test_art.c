@@ -83,6 +83,40 @@ static void test_parts_keep_frames(void)
     }
 }
 
+/* A set with an air clip list: a body up in the air takes the air clip for
+ * an action that has one and its ground clip for one that has none; a body
+ * on the ground always takes the ground clip; a set with no air list
+ * (clip_aloft NULL) gives the ground clip up there too. */
+static void test_aloft_clip(void)
+{
+    static const uint8_t ink[1] = {INK_BASE};
+    static const ArtFrame frame[1] = {{1, 1, 0, 0, -1, -1, ink}};
+    static ArtClip ground[ACTION_COUNT], air[ACTION_COUNT];
+    for (int a = 0; a < ACTION_COUNT; a++) {
+        ground[a] = (ArtClip){1, frame};
+        air[a] = (ArtClip){0, NULL};
+    }
+    air[ACTION_WALK] = (ArtClip){1, frame};
+    ArtSet set = {SPECIES_EAGLE, 0, 1, 1, ground, {{NULL, NULL}, {NULL, NULL}, {NULL, NULL}},
+                  air};
+    BodyTraits up = hunter(), down = hunter();
+    up.aloft = 1.0f;
+    down.aloft = 0.0f;
+    CHECK(art_clip_in(&set, ACTION_WALK, &up) == &air[ACTION_WALK]);
+    CHECK(art_clip_in(&set, ACTION_WALK, &down) == &ground[ACTION_WALK]);
+    CHECK(art_clip_in(&set, ACTION_SLEEP, &up) == &ground[ACTION_SLEEP]);
+    CHECK(art_clip_in(&set, ACTION_SLEEP, &down) == &ground[ACTION_SLEEP]);
+    set.clip_aloft = NULL;
+    CHECK(art_clip_in(&set, ACTION_WALK, &up) == &ground[ACTION_WALK]);
+    CHECK(art_clip_in(NULL, ACTION_WALK, &up) == NULL);
+    CHECK(art_clip_in(&set, ACTION_COUNT, &up) == NULL);
+    /* The public build's frames have no air lists: up or down, the same clip. */
+    for (int s = 0; s < ART_SET_COUNT; s++) {
+        CHECK(ART_SETS[s].clip_aloft == NULL);
+    }
+    CHECK(art_clip(SPECIES_WOLF, ACTION_WALK, &up) == art_clip(SPECIES_WOLF, ACTION_WALK, &down));
+}
+
 /* Every frame of the generated data is in range: inks, sizes, eye. */
 static void test_data_in_range(void)
 {
@@ -422,6 +456,7 @@ int main(void)
 {
     test_clips();
     test_parts_keep_frames();
+    test_aloft_clip();
     test_data_in_range();
     test_raster_scale();
     test_raster_outline_and_pure();
