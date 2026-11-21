@@ -2602,6 +2602,12 @@ static void test_swoop_glides_the_flyer(void)
         scene_draw_world(&sc, &c, &cam, &s, 0.5f, 1000, 1000, 0, 0);
         CHECK(sc.poses[bird].rise > 0.49f && sc.poses[bird].rise < 0.51f);
         CHECK(hash_canvas(&c) != up);
+        const char *out = getenv("VEREDAS_WRITE_PICTURES");
+        if (out != NULL) {
+            char path[512];
+            snprintf(path, sizeof(path), "%s/swoop-%d.ppm", out, level);
+            CHECK(canvas_write_ppm(&c, path));
+        }
         m->up_tick = s.tick - 3; /* the glide long over */
         scene_draw_world(&sc, &c, &cam, &s, 0.5f, 1000, 1000, 0, 0);
         CHECK(hash_canvas(&c) == up);
