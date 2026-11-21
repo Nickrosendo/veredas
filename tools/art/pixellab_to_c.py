@@ -66,6 +66,13 @@ SPECIES = {
     "dolphin": ("SPECIES_DOLPHIN", SEA_COVERS),
     "sea_turtle": ("SPECIES_SEA_TURTLE", SEA_COVERS),
     "manatee": ("SPECIES_MANATEE", SEA_COVERS),
+    # The air's bodies (frames in the content pack only), the same: the
+    # skeleton's bird body plan draws no part either. Each has a second set
+    # of clips, <species>_air/, for its body up in the air.
+    "eagle": ("SPECIES_EAGLE", SEA_COVERS),
+    "vulture": ("SPECIES_VULTURE", SEA_COVERS),
+    "parrot": ("SPECIES_PARROT", SEA_COVERS),
+    "owl": ("SPECIES_OWL", SEA_COVERS),
 }
 # the game's actions and the clip each is cut from
 ACTIONS = [
@@ -93,6 +100,9 @@ RED_IS_HORN = {"goat"}
 # the sea turtle's shell, brown and tan against green skin.
 BROWN_IS_SHELL = {"sea_turtle"}
 
+# Species whose green pixels are feathers, not grass to drop: the parrot.
+GREEN_IS_FUR = {"parrot"}
+
 # A fixed base lightness for species whose skin spans more than the fur
 # bands do: the turtle's runs from 80 (head) to 150 (flipper scales) and 190
 # (the pale under-shell); its most common lightness, 80, put every flipper
@@ -103,7 +113,13 @@ SKIN_LEVEL = {"sea_turtle": 110}
 # Species whose reddish pixels are fur whatever the fur's own colour: the
 # hare's and the fennec's pink inner ears and the hippo's pink muzzle and
 # belly would otherwise be drawn as the inside of a mouth.
-RED_IS_FUR = {"hare", "fennec", "hippo"}
+RED_IS_FUR = {"hare", "fennec", "hippo", "eagle", "vulture", "parrot", "owl"}
+
+# Species whose yellow pixels (a beak, legs, an owl's eye) are drawn in the
+# engine's fixed horn colours, as a horn is: the birds. Their other reddish
+# pixels (the eagle's red-brown wings, the vulture's pink neck) are fur
+# (RED_IS_FUR above), so none is drawn as the inside of a mouth.
+YELLOW_IS_HORN = {"eagle", "vulture", "parrot", "owl"}
 
 # Rows at the top of the standing pose that are only ears, skipped when
 # looking for the eye: a gap in the fennec's big ear's outline looked like one.
@@ -114,7 +130,10 @@ EAR_ROWS = {"fennec": 10}
 # the base of the gazelle's ear, the deer's antlers, the zebra's mane (their
 # real eyes touch a fold, the outline or a stripe). PixelLab's own eye stays
 # in the frames; it just does not blink.
-NO_EYE = {"rhino", "hippo", "gazelle", "deer", "zebra"}
+NO_EYE = {"rhino", "hippo", "gazelle", "deer", "zebra", "owl", "vulture"}
+# (The owl's eye is a big ringed disc that turns to face the viewer as the
+# head turns in its rest: a game eye at the side picture's place would sit
+# beside it. The vulture's was found in its pale ruff, not its head.)
 
 # Species whose frames come mottled (the gazelle's head-butt, the deer's
 # eating, the manatee's wrinkled skin): a lone
@@ -166,6 +185,19 @@ FRAMES = {
     # the attack's last three frames turn the head pale and twisted
     "sea_turtle": {"walk": (1, None), "run": (1, None), "graze": (1, None),
                    "bite": (1, None), "attack": (0, 5), "sleep": (1, None)},
+    # The air's bodies. On the ground, loops leave out the side picture's
+    # frame 0 as for the sea, and the sleep is cut to the head tucked in.
+    # Up in the air (<species>_air) every clip starts and, for the beats,
+    # ends on the flying picture (PixelLab's end frame), so a beat leaves out
+    # frame 0, which its last frame repeats; the glide keeps only the first
+    # three frames, wings up: PixelLab beat the wings in every glide it drew.
+    **{bird: {"walk": (1, None), "run": (1, None), "graze": (1, None),
+              "bite": (1, None), "sleep": (4, None)}
+       for bird in ("eagle", "vulture", "parrot", "owl")},
+    **{bird + "_air": {"idle": (0, 2), "walk": (1, None), "run": (1, None)}
+       for bird in ("eagle", "vulture", "parrot", "owl")},
+    # the parrot's glide folds its wings down from frame 2
+    "parrot_air": {"idle": (0, 1), "walk": (1, None), "run": (1, None)},
 }
 
 
@@ -208,7 +240,7 @@ def body_only(im):
 
 def no_green(im):
     """The frame with clearly green pixels made transparent: grass a custom
-    graze drew at the mouth (the fennec's). No species has green fur."""
+    graze drew at the mouth (the fennec's). Not used on GREEN_IS_FUR."""
     out = im.copy()
     w, h = im.size
     for y in range(h):
@@ -227,8 +259,10 @@ def raw_canvas(path):
     return big
 
 
-def on_canvas(path):
-    im = no_green(Image.open(path).convert("RGBA"))
+def on_canvas(path, green=False):
+    im = Image.open(path).convert("RGBA")
+    if not green:  # green is fur on a green species (GREEN_IS_FUR)
+        im = no_green(im)
     big = Image.new("RGBA", (CANVAS, CANVAS), (0, 0, 0, 0))
     big.alpha_composite(im, ((CANVAS - im.width) // 2, (CANVAS - im.height) // 2))
     return body_only(big)
@@ -267,11 +301,16 @@ def red_body(im, m):
     return reddish(*[sum(c[i] for c in near) / len(near) for i in range(3)])
 
 
-def ink_of(px, m, red_is_horn=False, red_fur=False, mane=False, shell=False):
+def ink_of(px, m, red_is_horn=False, red_fur=False, mane=False, shell=False,
+           yellow_horn=False):
     r, g, b, a = px
     if a < 128:
         return NONE
     v = lum((r, g, b))
+    # a bird's yellow beak, legs or eye: strong yellow to orange, well above
+    # blue (the owl's tan feathers are not)
+    if yellow_horn and r > 150 and g > 90 and r > b + 90 and g > b + 50:
+        return HORN0 + min(4, int(v / 40))
     # brown (red above green) and not outline-dark: four shades by lightness,
     # 40 to 160 covering the turtle's dark plates to its tan seams
     if shell and v >= 40 and r > g + 8:
@@ -617,23 +656,110 @@ def layer_table(found):
     return "{%s}" % ", ".join(parts)
 
 
-def frames_of(folder, span):
+def frames_of(folder, span, green=False):
     names = sorted((n for n in os.listdir(folder) if n.endswith(".png")),
                    key=lambda n: int(n.split(".")[0]))
     if span is not None:
         first, last = span
         names = names[first:None if last is None else last + 1]
-    return [on_canvas(os.path.join(folder, n)) for n in names]
+    return [on_canvas(os.path.join(folder, n), green) for n in names]
+
+
+def write_clips(w, folder, name, cname, spans, sources, anchor_x, anchor_y, offset, made,
+                stand):
+    """Writes the frames of every clip found in folder (one folder per clip),
+    named after cname, and returns ([(ACTION_ value, C name or None, frame
+    count)], each clip's fur level). name is the species, for its colour
+    rules; spans and sources its FRAMES and CLIP_FROM entries; the anchor and
+    the eye's offset from the nose come from the standing frame. made, when
+    not empty, collects the generated parts' layers, by (part, size)."""
+    clips = []
+    levels = []
+    for action, clip in ACTIONS:
+        span = spans.get(clip)
+        path = os.path.join(folder, sources.get(clip, clip))
+        if not os.path.isdir(path):
+            clips.append((action, None))
+            levels.append(0)
+            continue
+        frames = frames_of(path, span, name in GREEN_IS_FUR)
+        # The fur's shade measured on the clip itself: PixelLab's colours
+        # drift a little from clip to clip, and each clip's main fur
+        # colour should be the family's base all the same.
+        cm = SKIN_LEVEL.get(name) or body_level(frames[0], name in BROWN_IS_SHELL)
+        levels.append(cm)
+        horn = name in RED_IS_HORN
+        red_fur = red_body(frames[0], cm) or name in RED_IS_FUR
+        fnames = []
+        # The game's eye for every frame of the clip or for none: an eye
+        # that comes and goes would blink on its own.
+        placed = []
+        for im in frames:
+            bx0, by0, bx1, by1 = im.getbbox()
+            fw, fh = bx1 - bx0, by1 - by0
+            inks = [ink_of(im.getpixel((x, y)), cm, horn, red_fur, name in DARK_IS_MANE,
+                           name in BROWN_IS_SHELL, name in YELLOW_IS_HORN)
+                    for y in range(by0, by1) for x in range(bx0, bx1)]
+            one_mane(inks, fw, fh)
+            if name in SMOOTH:
+                smooth(inks, fw, fh)
+            plain = list(inks)
+            ex, ey = place_eye(inks, fw, fh, offset)
+            placed.append((inks, plain, ex, ey))
+        eyes = all(ex >= 0 for _, _, ex, _ in placed)
+        for i, im in enumerate(frames):
+            bx0, by0, bx1, by1 = im.getbbox()
+            fw, fh = bx1 - bx0, by1 - by0
+            inks, plain, ex, ey = placed[i]
+            if not eyes:
+                inks, ex, ey = plain, -1, -1
+            if made:
+                parts = generated_parts(plain, fw, fh, bx0, by0, name, stand)
+                for key, px in parts.items():
+                    if i == 0:
+                        made[key].append((action, clip, []))
+                    made[key][-1][2].append(px)
+            fname = "%s_%s_%d" % (cname, clip, i)
+            w("static const uint8_t %s_ink[%d] = {" % (fname, fw * fh))
+            for row in range(fh):
+                w("    " + ",".join(str(v) for v in inks[row * fw:(row + 1) * fw]) + ",")
+            w("};")
+            # the anchor in the frame's pixels, rounded down: the middle
+            # of an even width falls between two pixels
+            fnames.append((fname, fw, fh, int(anchor_x - bx0), anchor_y - by0, ex, ey))
+        w("static const ArtFrame %s_%s_frames[%d] = {" % (cname, clip, len(fnames)))
+        for fname, fw, fh, ax, ay, ex, ey in fnames:
+            w("    {%d, %d, %d, %d, %d, %d, %s_ink}," % (fw, fh, ax, ay, ex, ey, fname))
+        w("};")
+        clips.append((action, "%s_%s" % (cname, clip), len(fnames)))
+    return clips, levels
+
+
+def write_clip_table(w, cname, clips):
+    w("static const ArtClip %s_clips[ACTION_COUNT] = {" % cname)
+    for c in clips:
+        if c[1] is None:
+            w("    [%s] = {0, NULL}," % c[0])
+        else:
+            w("    [%s] = {%d, %s_frames}," % (c[0], c[2], c[1]))
+    w("};")
 
 
 def main():
     ap = argparse.ArgumentParser(description="PixelLab frames to C art data")
-    ap.add_argument("art_dir", help="a folder per species, a folder per clip inside")
+    ap.add_argument("art_dir", nargs="+",
+                    help="a folder per species, a folder per clip inside; several "
+                         "folders go into one table (the pack's sea and air)")
     ap.add_argument("--out", help="the .c file to write (default: standard output)")
     ap.add_argument("--sets", default="ART_SETS",
                     help="the table's name; NAME_COUNT is its length (default ART_SETS)")
     args = ap.parse_args()
-    root = args.art_dir
+    # species name -> the folder holding it, the first that does
+    roots = {}
+    for top in args.art_dir:
+        for n in SPECIES:
+            if n not in roots and os.path.isdir(os.path.join(top, n)):
+                roots[n] = top
     table = args.sets
     out = []
     w = out.append
@@ -644,13 +770,14 @@ def main():
     w('#include "art.h"')
     w("")
     sets = []
-    for name in sorted(n for n in SPECIES if os.path.isdir(os.path.join(root, n))):
+    for name in sorted(roots):
+        root = roots[name]
         folder = os.path.join(root, name)
         # the standing pose: the first rest frame used, from whichever clip
         # the rest is drawn from
         first = FRAMES.get(name, {}).get("idle", (0, None))[0]
         rest = CLIP_FROM.get(name, {}).get("idle", "idle")
-        stand = on_canvas(os.path.join(folder, rest, "%d.png" % first))
+        stand = on_canvas(os.path.join(folder, rest, "%d.png" % first), name in GREEN_IS_FUR)
         x0, y0, x1, y1 = stand.getbbox()
         anchor_x = (x0 + x1) / 2.0
         anchor_y = y1 - 1
@@ -659,7 +786,8 @@ def main():
         sw, sh = sx1 - sx0, sy1 - sy0
         sinks = [ink_of(stand.getpixel((x, y)), m, name in RED_IS_HORN,
                         red_body(stand, m) or name in RED_IS_FUR,
-                        name in DARK_IS_MANE, name in BROWN_IS_SHELL)
+                        name in DARK_IS_MANE, name in BROWN_IS_SHELL,
+                        name in YELLOW_IS_HORN)
                  for y in range(sy0, sy1) for x in range(sx0, sx1)]
         eye = None if name in NO_EYE else find_eye(sinks, sw, sh, EAR_ROWS.get(name, 0))
         offset = None
@@ -670,85 +798,34 @@ def main():
         place = gen_parts.horn_place(sinks, sw, sh, name)
         template = gen_parts.head_template(sinks, sw, sh, place)
         stand = (place, template, gen_parts.trunk_place(name, sw, template))
-        clips = []
-        levels = []
         # generated layers, by (part, size)
         made = {(part, size): [] for part in GENERATED.get(name, ())
                 for size in gen_parts.SIZES}
-        for action, clip in ACTIONS:
-            span = FRAMES.get(name, {}).get(clip)
-            path = os.path.join(folder, CLIP_FROM.get(name, {}).get(clip, clip))
-            if not os.path.isdir(path):
-                clips.append((action, None))
-                levels.append(0)
-                continue
-            frames = frames_of(path, span)
-            # The fur's shade measured on the clip itself: PixelLab's colours
-            # drift a little from clip to clip, and each clip's main fur
-            # colour should be the family's base all the same.
-            cm = SKIN_LEVEL.get(name) or body_level(frames[0], name in BROWN_IS_SHELL)
-            levels.append(cm)
-            horn = name in RED_IS_HORN
-            red_fur = red_body(frames[0], cm) or name in RED_IS_FUR
-            fnames = []
-            # The game's eye for every frame of the clip or for none: an eye
-            # that comes and goes would blink on its own.
-            placed = []
-            for im in frames:
-                bx0, by0, bx1, by1 = im.getbbox()
-                fw, fh = bx1 - bx0, by1 - by0
-                inks = [ink_of(im.getpixel((x, y)), cm, horn, red_fur, name in DARK_IS_MANE,
-                               name in BROWN_IS_SHELL)
-                        for y in range(by0, by1) for x in range(bx0, bx1)]
-                one_mane(inks, fw, fh)
-                if name in SMOOTH:
-                    smooth(inks, fw, fh)
-                plain = list(inks)
-                ex, ey = place_eye(inks, fw, fh, offset)
-                placed.append((inks, plain, ex, ey))
-            eyes = all(ex >= 0 for _, _, ex, _ in placed)
-            for i, im in enumerate(frames):
-                bx0, by0, bx1, by1 = im.getbbox()
-                fw, fh = bx1 - bx0, by1 - by0
-                inks, plain, ex, ey = placed[i]
-                if not eyes:
-                    inks, ex, ey = plain, -1, -1
-                if made:
-                    parts = generated_parts(plain, fw, fh, bx0, by0, name, stand)
-                    for key, px in parts.items():
-                        if i == 0:
-                            made[key].append((action, clip, []))
-                        made[key][-1][2].append(px)
-                fname = "%s_%s_%d" % (name, clip, i)
-                w("static const uint8_t %s_ink[%d] = {" % (fname, fw * fh))
-                for row in range(fh):
-                    w("    " + ",".join(str(v) for v in inks[row * fw:(row + 1) * fw]) + ",")
-                w("};")
-                # the anchor in the frame's pixels, rounded down: the middle
-                # of an even width falls between two pixels
-                fnames.append((fname, fw, fh, int(anchor_x - bx0), anchor_y - by0, ex, ey))
-            w("static const ArtFrame %s_%s_frames[%d] = {" % (name, clip, len(fnames)))
-            for fname, fw, fh, ax, ay, ex, ey in fnames:
-                w("    {%d, %d, %d, %d, %d, %d, %s_ink}," % (fw, fh, ax, ay, ex, ey, fname))
-            w("};")
-            clips.append((action, "%s_%s" % (name, clip), len(fnames)))
+        clips, levels = write_clips(w, folder, name, name, FRAMES.get(name, {}),
+                                    CLIP_FROM.get(name, {}), anchor_x, anchor_y, offset,
+                                    made, stand)
         found = layer_clips(w, root, name, anchor_x, anchor_y, levels)
         for (part, size), actions in made.items():
             cname = "%s_%s_%s" % (name, part, size)
             write_layer(w, cname, actions, anchor_x, anchor_y)
             found[(part, size)] = "%s_clips" % cname
-        w("static const ArtClip %s_clips[ACTION_COUNT] = {" % name)
-        for c in clips:
-            if c[1] is None:
-                w("    [%s] = {0, NULL}," % c[0])
-            else:
-                w("    [%s] = {%d, %s_frames}," % (c[0], c[2], c[1]))
-        w("};")
+        write_clip_table(w, name, clips)
+        # A flyer's clips up in the air, from <species>_air/: drawn around
+        # the standing frame's anchor, as PixelLab's canvases share a centre;
+        # an action with no folder there falls back to the ground's.
+        aloft = "NULL"
+        air = folder + "_air"
+        if os.path.isdir(air):
+            air_name = name + "_air"
+            air_clips, _ = write_clips(w, air, name, air_name, FRAMES.get(air_name, {}), {},
+                                       anchor_x, anchor_y, offset, {}, stand)
+            write_clip_table(w, air_name, air_clips)
+            aloft = "%s_clips" % air_name
         w("")
         value, covers = SPECIES[name]
         layers = layer_table(found)
-        sets.append("    {%s, %s, %d, %d, %s_clips, %s}," % (value, covers, x1 - x0, y1 - y0,
-                                                          name, layers))
+        sets.append("    {%s, %s, %d, %d, %s_clips, %s, %s}," % (value, covers, x1 - x0, y1 - y0,
+                                                              name, layers, aloft))
     if table != "ART_SETS":
         # The engine declares only the built-in table (art.h); a pack's table
         # is declared here, so the file compiles warning-free on its own.

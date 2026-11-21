@@ -6,7 +6,9 @@ tools/art/pixellab/<species>/<clip>/N.png, the layout pixellab_to_c.py reads.
 The character's ZIP holds <state>/animations/<name>/east/frame_NNN.png. Clip
 names: the templates' "walking", "running" and "idle" become walk, run and
 idle; any other animation is named after its clip when made (walk, run, idle,
-graze, bite, attack, sleep: animate_character's animation_name). Anything
+graze, bite, attack, sleep: animate_character's animation_name). A flyer's
+clips up in the air are named air_idle, air_walk, ... and go to
+<species>_air/<clip>/, the folder pixellab_to_c.py reads them from. Anything
 else in the ZIP is left out.
 
 Run:  python3 tools/art/fetch_pixellab.py CHARACTER_ID SPECIES [ART_DIR]
@@ -47,17 +49,22 @@ def main():
     found = {}
     for name in data.namelist():
         m = re.fullmatch(r"[^/]+/animations/([^/]+)/east/frame_(\d+)\.png", name)
-        if m and m.group(1) in CLIPS:
-            found.setdefault(CLIPS[m.group(1)], []).append((int(m.group(2)), name))
-    for clip, frames in sorted(found.items()):
-        folder = os.path.join(root, species, clip)
+        if not m:
+            continue
+        anim, where = m.group(1), species
+        if anim.startswith("air_"):
+            anim, where = anim[len("air_"):], species + "_air"
+        if anim in CLIPS:
+            found.setdefault((where, CLIPS[anim]), []).append((int(m.group(2)), name))
+    for (where, clip), frames in sorted(found.items()):
+        folder = os.path.join(root, where, clip)
         os.makedirs(folder, exist_ok=True)
         for old in os.listdir(folder):
             os.remove(os.path.join(folder, old))
         for number, name in frames:
             with open(os.path.join(folder, "%d.png" % number), "wb") as out:
                 out.write(data.read(name))
-        print("%-7s %d frames" % (clip, len(frames)))
+        print("%-12s %-7s %d frames" % (where, clip, len(frames)))
 
 
 if __name__ == "__main__":

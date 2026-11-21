@@ -22,7 +22,15 @@ pack, not here: the sea's four species (2026-11-19) are in
 `veredas-content/art/sea/`, whose README records how legless bodies were made
 and the converter rules added for them (`SEA_COVERS`, `BROWN_IS_SHELL`,
 `SKIN_LEVEL`, the manatee in `SMOOTH`). Those rules only act on species whose
-folder is present, so this folder's conversion is unchanged.
+folder is present, so this folder's conversion is unchanged. The air's four
+flyers (2026-11-21) are in `veredas-content/art/air/`: each has a second set of
+clips for its body up in the air, `<species>_air/<clip>/` (fetched from
+animations named `air_<clip>`), which goes into `ArtSet.clip_aloft`. The
+converter takes several folders for one table:
+
+    python3 tools/art/pixellab_to_c.py ../veredas-content/art/sea/pixellab \
+        ../veredas-content/art/air/pixellab \
+        --out ../veredas-content/src/content_art.c --sets CONTENT_ART_SETS
 
 ## The wolf (2026-11-11)
 
