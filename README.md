@@ -94,7 +94,7 @@ their names under them.
 | space | pause |
 | `+` `-` | faster, slower |
 | wheel, `[` `]` | zoom |
-| `<` `>` (or `,` `.`, Page Up, Page Down) | up and down the levels: the surface and underwater, where the sea floor, its light and plankton show and the sea animals are in full colour; at the closest zoom the wheel or `]` over water dives, and the wheel out or `[` comes back up. Following a sea animal takes the view under the water with it |
+| `<` `>` (or `,` `.`, Page Up, Page Down) | up and down the levels: the sky, where the flyers up in the air are in full colour over the land hazed below and clouds drift; the surface; and underwater, where the sea floor, its light and plankton show and the sea animals are in full colour; at the closest zoom the wheel or `]` over water dives, and the wheel out or `[` comes back up. Following a sea animal takes the view under the water with it, and a flyer up in the air takes it to the sky |
 | dragging, arrows | move the view |
 | clicking a creature | follow it: the panel shows it, its body enlarged, and its family's bodies over time |
 | clicking "top hunter", "oldest" or the largest family's body on the panel | follow the highest on the food chain, the oldest, or that family's biggest |
@@ -225,6 +225,15 @@ for the build that wrote them; a build with a different format refuses them.
    over: a child of land parents born over the line is born in the water
    beside them. Sea animals are drawn as sharks, dolphins, sea turtles and
    manatees.
+   A wing gene makes a share of the hits aimed at a body miss, the mirror of
+   armour, and costs upkeep. From 0.8 the body is a flyer: moving takes it up
+   into the air, where it passes over water, rock and animals below, cannot be
+   hit, and pays for every step by its size. It comes down to bite, mate, rest
+   and sleep, onto ground, shallows or rock (only flyers can stand on rock), and
+   a hunter strikes the animal below it from the air and lands beside it.
+   Nothing sleeps in the air. Every world starts with flyers, and a walking
+   family can grow wings of its own. Flyers are drawn as eagles, vultures,
+   parrots and owls.
 2. Every plant is alive: it stores energy, earned where the water and temperature
    suit its genes, and with too little of either it cannot seed, and starves. Its
    seeds inherit its genes with small changes.
@@ -248,7 +257,8 @@ for the build that wrote them; a build with a different format refuses them.
    adult is willing without choosing to be; outside it, both must choose, which
    is rarer. Births slow as the world fills: the closer the land's animals come
    to 0.4 for every plant on the map (`birth_per_plant`), the likelier a mating
-   ends with no child. The sea has its own brake, against its plankton.
+   ends with no child. The sea has its own brake, against its plankton, and
+   the flyers theirs, against a share of the land's and the sea's room.
    A child is born on a cell that suits its own body, or not at all.
 8. Any creature can attack whatever stands right ahead of it, and biting only
    eats. Bigger attackers hit more often, and the odds rise for each other

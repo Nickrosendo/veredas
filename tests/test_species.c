@@ -11,7 +11,7 @@ static BodyTraits rounded(float size, float speed, float sight, float plant,
                           float meat, float armour, float weapon, float legs,
                           float swim)
 {
-    BodyTraits raw = {size, speed, sight, plant, meat, armour, weapon, legs, swim, 0};
+    BodyTraits raw = {size, speed, sight, plant, meat, armour, weapon, legs, swim, 0, 0, 0};
     return species_round(&raw);
 }
 
@@ -29,7 +29,7 @@ static int role_of(BodyTraits raw)
 
 static void test_roles_first_match_wins(void)
 {
-    BodyTraits t = {0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0};
+    BodyTraits t = {0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0, 0, 0};
     CHECK(role_of(t) == ROLE_GRAZER);
 
     t = base(); t.meat = 0.8f; t.plant = 0.6f; t.swim = 1.0f;
@@ -67,9 +67,12 @@ static void test_every_species_listed_once_in_its_role(void)
         }
     }
     /* Two or more to choose from on land; the sea's armoured and grazing
-     * roles have one animal each (the water and air design, 5.6). */
+     * roles and the air's grazing and watching ones have one animal each (the
+     * water and air design, 5.6). */
     for (int r = 0; r < ROLE_COUNT; r++) {
-        CHECK(in_role[r] >= (r == ROLE_SEA_ARMOURED || r == ROLE_SEA_GRAZER ? 1 : 2));
+        bool one = r == ROLE_SEA_ARMOURED || r == ROLE_SEA_GRAZER ||
+                   r == ROLE_AIR_GRAZER || r == ROLE_AIR_WATCHER;
+        CHECK(in_role[r] >= (one ? 1 : 2));
     }
     /* A few values pinned, so a transcription slip fails. */
     CHECK(SPECIES[SPECIES_ELEPHANT].leg_w == 1.9f);
@@ -199,7 +202,7 @@ static void test_family_keeps_species_while_growing(void)
 
 static void test_small_gene_change_same_body(void)
 {
-    BodyTraits a = {0.40f, 0.3f, 0.3f, 0.5f, 0.1f, 0.2f, 0.2f, 0.2f, 0.2f, 0};
+    BodyTraits a = {0.40f, 0.3f, 0.3f, 0.5f, 0.1f, 0.2f, 0.2f, 0.2f, 0.2f, 0, 0, 0};
     BodyTraits b = a;
     b.size = 0.41f;
     BodyTraits ra = species_round(&a), rb = species_round(&b);
@@ -313,8 +316,51 @@ static void test_land_swimmer_keeps_land_species(void)
     CHECK(role_of(raw) == ROLE_SEA_GRAZER);
 }
 
+/* A flyer asks the air first: a hunter (eagle, vulture), a watcher (owl) or
+ * anything else (parrot), a gull too. */
+static void test_air_roles(void)
+{
+    BodyTraits t = base();
+    t.air = 1.0f;
+    CHECK(role_of(t) == ROLE_AIR_GRAZER);
+    t.armour = 1.0f;
+    t.speed = 1.0f;
+    CHECK(role_of(t) == ROLE_AIR_GRAZER); /* no armoured or running bird */
+    t.sight = 1.0f;
+    CHECK(role_of(t) == ROLE_AIR_WATCHER);
+    t.meat = 1.0f;
+    CHECK(role_of(t) == ROLE_AIR_HUNTER);
+    t.sea = 1.0f;
+    CHECK(role_of(t) == ROLE_AIR_HUNTER);
+    for (uint32_t lineage = 0; lineage < 200; lineage++) {
+        int s = species_pick(lineage, ROLE_AIR_HUNTER, 2.0f);
+        CHECK(s == SPECIES_EAGLE || s == SPECIES_VULTURE);
+        CHECK(species_pick(lineage, ROLE_AIR_GRAZER, 2.0f) == SPECIES_PARROT);
+        CHECK(species_pick(lineage, ROLE_AIR_WATCHER, 2.0f) == SPECIES_OWL);
+        CHECK(SPECIES[s].plan == PLAN_BIRD);
+    }
+}
+
+/* The line is on the raw gene: wings of 0.75 keep the land species, 0.8 is a
+ * flyer. */
+static void test_half_wings_keep_land_species(void)
+{
+    Genome g = {0};
+    g.g[GENE_LEAF] = 0.3f;
+    g.g[GENE_WINGS] = 0.75f;
+    BodyTraits raw = species_traits(&g);
+    CHECK(raw.air == 0.0f && raw.aloft == 0.0f);
+    CHECK(role_of(raw) == ROLE_GRAZER);
+    g.g[GENE_WINGS] = 0.8f;
+    raw = species_traits(&g);
+    CHECK(raw.air == 1.0f);
+    CHECK(role_of(raw) == ROLE_AIR_GRAZER);
+}
+
 int main(void)
 {
+    test_air_roles();
+    test_half_wings_keep_land_species();
     test_sea_roles();
     test_land_swimmer_keeps_land_species();
     test_roles_first_match_wins();

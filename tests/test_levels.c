@@ -20,11 +20,12 @@ static void test_the_list(void)
           LEVEL_SURFACE < LEVEL_UNDERWATER && LEVEL_UNDERWATER < LEVEL_ABYSS);
     CHECK(levels_built(LEVEL_SURFACE));
     CHECK(levels_built(LEVEL_UNDERWATER));
-    CHECK(!levels_built(LEVEL_SKY)); /* step 3, with the air half */
+    CHECK(levels_built(LEVEL_SKY)); /* step 3, with the air half */
     CHECK(!levels_built(LEVEL_HIGH_SKY));
     CHECK(!levels_built(LEVEL_ABYSS));
     CHECK(strcmp(levels_name(LEVEL_SURFACE), "") == 0);
     CHECK(strcmp(levels_name(LEVEL_UNDERWATER), "Underwater") == 0);
+    CHECK(strcmp(levels_name(LEVEL_SKY), "Sky") == 0);
     CHECK(strcmp(levels_name(-1), "") == 0);
     CHECK(strcmp(levels_name(LEVEL_COUNT), "") == 0);
     Camera c;
@@ -38,7 +39,9 @@ static void test_step_stops_at_the_ends(void)
     CHECK(levels_step(LEVEL_SURFACE, 1) == LEVEL_UNDERWATER);
     CHECK(levels_step(LEVEL_UNDERWATER, 1) == LEVEL_UNDERWATER); /* no abyss yet */
     CHECK(levels_step(LEVEL_UNDERWATER, -1) == LEVEL_SURFACE);
-    CHECK(levels_step(LEVEL_SURFACE, -1) == LEVEL_SURFACE); /* no sky yet */
+    CHECK(levels_step(LEVEL_SURFACE, -1) == LEVEL_SKY);
+    CHECK(levels_step(LEVEL_SKY, -1) == LEVEL_SKY); /* no high sky yet */
+    CHECK(levels_step(LEVEL_SKY, 1) == LEVEL_SURFACE);
     CHECK(levels_step(LEVEL_SURFACE, 0) == LEVEL_SURFACE);
     LevelFollow f;
     levels_follow_init(&f);
@@ -49,8 +52,11 @@ static void test_step_stops_at_the_ends(void)
     levels_key(&f, &c, 1, false);
     CHECK(c.level == LEVEL_UNDERWATER);
     levels_key(&f, &c, -1, false);
-    levels_key(&f, &c, -1, false);
     CHECK(c.level == LEVEL_SURFACE);
+    levels_key(&f, &c, -1, false);
+    CHECK(c.level == LEVEL_SKY);
+    levels_key(&f, &c, -1, false);
+    CHECK(c.level == LEVEL_SKY);
     CHECK(!f.held); /* nobody followed: nothing to hold against */
 }
 
@@ -91,6 +97,30 @@ static void test_home_level(void)
     CHECK(levels_home(&c) == LEVEL_SURFACE);
     c.genome.g[GENE_SWIM] = 1.0f;
     CHECK(levels_home(&c) == LEVEL_UNDERWATER);
+    /* A flyer on the ground is a surface body; up in the air, a sky one (a
+     * gull too, over the sea). */
+    c.genome.g[GENE_SWIM] = 0.0f;
+    c.genome.g[GENE_WINGS] = 1.0f;
+    CHECK(levels_home(&c) == LEVEL_SURFACE);
+    c.up = 1;
+    CHECK(levels_home(&c) == LEVEL_SKY);
+    c.genome.g[GENE_SWIM] = 1.0f;
+    CHECK(levels_home(&c) == LEVEL_SKY);
+}
+
+/* Following a flyer: the view rises to the sky when it goes up and comes back
+ * down with it when it lands. */
+static void test_follow_flyer_to_the_sky_and_back(void)
+{
+    LevelFollow f;
+    levels_follow_init(&f);
+    Camera c = camera_at(CAMERA_NORMAL, LEVEL_SURFACE);
+    levels_follow(&f, &c, true, 7, LEVEL_SURFACE, 0);
+    CHECK(c.level == LEVEL_SURFACE);
+    levels_follow(&f, &c, true, 7, LEVEL_SKY, 10);
+    CHECK(c.level == LEVEL_SKY);
+    levels_follow(&f, &c, true, 7, LEVEL_SURFACE, 20);
+    CHECK(c.level == LEVEL_SURFACE);
 }
 
 /* Following takes the view to the creature's level; a key wins until let go
@@ -207,6 +237,7 @@ int main(void)
     test_step_stops_at_the_ends();
     test_dive_only_over_water_at_close();
     test_home_level();
+    test_follow_flyer_to_the_sky_and_back();
     test_follow_and_hold();
     test_cut_fades();
     TEST_SUMMARY();

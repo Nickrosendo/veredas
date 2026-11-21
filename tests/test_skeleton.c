@@ -13,21 +13,21 @@ static SkeletonRaster raster_a, raster_b;
 /* The mockup's role genes (v9:82-86), rounded as the drawing rounds them. */
 static BodyTraits role_traits(int role)
 {
-    BodyTraits raw = {0.5f, 0.4f, 0.35f, 1.0f, 0.0f, 0.0f, 0.0f, 0.55f, 0.0f, 0};
+    BodyTraits raw = {0.5f, 0.4f, 0.35f, 1.0f, 0.0f, 0.0f, 0.0f, 0.55f, 0.0f, 0, 0, 0};
     if (role == ROLE_RUNNER) {
-        BodyTraits r = {0.25f, 1.0f, 0.5f, 0.5f, 0.2f, 0.0f, 0.0f, 1.0f, 0.0f, 0};
+        BodyTraits r = {0.25f, 1.0f, 0.5f, 0.5f, 0.2f, 0.0f, 0.0f, 1.0f, 0.0f, 0, 0, 0};
         raw = r;
     } else if (role == ROLE_HUNTER) {
-        BodyTraits r = {0.85f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.5f, 0.0f, 0};
+        BodyTraits r = {0.85f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.5f, 0.0f, 0, 0, 0};
         raw = r;
     } else if (role == ROLE_WATCHER) {
-        BodyTraits r = {0.3f, 0.4f, 1.0f, 0.6f, 0.2f, 0.0f, 0.0f, 0.35f, 0.0f, 0};
+        BodyTraits r = {0.3f, 0.4f, 1.0f, 0.6f, 0.2f, 0.0f, 0.0f, 0.35f, 0.0f, 0, 0, 0};
         raw = r;
     } else if (role == ROLE_ARMOURED) {
-        BodyTraits r = {0.8f, 0.2f, 0.3f, 0.8f, 0.1f, 1.0f, 0.0f, 0.3f, 0.0f, 0};
+        BodyTraits r = {0.8f, 0.2f, 0.3f, 0.8f, 0.1f, 1.0f, 0.0f, 0.3f, 0.0f, 0, 0, 0};
         raw = r;
     } else if (role == ROLE_SWIMMER) {
-        BodyTraits r = {0.5f, 0.4f, 0.3f, 0.6f, 0.2f, 0.0f, 0.0f, 0.3f, 1.0f, 0};
+        BodyTraits r = {0.5f, 0.4f, 0.3f, 0.6f, 0.2f, 0.0f, 0.0f, 0.3f, 1.0f, 0, 0, 0};
         raw = r;
     }
     return species_round(&raw);
@@ -44,7 +44,7 @@ static BodyTraits corner(int c)
     for (int i = 0; i < 7; i++) {
         v[i] = ((c >> i) & 1) ? 1.0f : 0.0f;
     }
-    BodyTraits t = {v[0], v[1], v[2], v[3], v[4], v[6], v[6], v[5], 0.0f, 0};
+    BodyTraits t = {v[0], v[1], v[2], v[3], v[4], v[6], v[6], v[5], 0.0f, 0, 0, 0};
     return t;
 }
 
@@ -311,7 +311,7 @@ static void test_large_grid_keeps_the_ground_point(void)
         CHECK(raster_b.w == SKELETON_DETAIL_W && raster_b.oy == SKELETON_DETAIL_OY);
         /* The lowest ink is the outline under the feet, on the ground row,
          * for every species, pillar legs included. */
-        if (SPECIES[s].plan != PLAN_LAND) {
+        if (SPECIES[s].plan == PLAN_FISH || SPECIES[s].plan == PLAN_TURTLE) {
             /* A sea body floats: nothing below the ground row, and its lowest
              * ink within two rows of it. */
             CHECK(raster_a.y1 - 1 <= raster_a.oy && raster_a.y1 - 1 >= raster_a.oy - 2);
@@ -725,7 +725,7 @@ static void test_sea_species_drawn_without_legs(void)
     const int sea[4] = {SPECIES_SHARK, SPECIES_DOLPHIN, SPECIES_SEA_TURTLE,
                         SPECIES_MANATEE};
     for (int k = 0; k < 4; k++) {
-        BodyTraits t = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f};
+        BodyTraits t = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0, 0};
         SpritePose p;
         Anatomy a;
         skeleton_pose_standing(&p);

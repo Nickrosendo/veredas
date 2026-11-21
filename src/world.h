@@ -15,6 +15,9 @@
 enum { TERRAIN_WATER, TERRAIN_SOIL, TERRAIN_ROCK, TERRAIN_SHALLOW };
 #define VEG_MAX 4
 
+/* The layers of air above the ground, lowest first. */
+enum { SKY_LOW, SKY_LAYERS };
+
 /*
  * A plant on one cell: what it has stored and what it inherited. Only
  * meaningful while the cell's veg is above 0; on bare soil it is whatever the
@@ -70,7 +73,13 @@ typedef struct {
      * from the terrain and the temperature, which are saved, so it is worked
      * out again after a load instead of being saved itself. */
     float *plankton_cap;
-    int32_t *occupant;       /* creature index, or -1 */
+    int32_t *occupant;       /* creature index, or -1: the ground grid */
+    /* The grids above the ground, one per layer of air, each a creature index
+     * or -1 per cell (the air half; the levels design, 5.1). A flyer up is on
+     * one of these and not on occupant, over any terrain. Only SKY_LOW is
+     * built; a high sky later is one more entry. Like occupant, not saved:
+     * rebuilt on loading from where each creature says it is. */
+    int32_t *sky[SKY_LAYERS];
 } World;
 
 /* Allocates every layer: occupant set to -1, everything else to 0.
@@ -89,5 +98,8 @@ bool world_walkable(const World *w, int cell);
 /* The same for either body: a sea body (sea true) stands on deep or shallow
  * water, a land body on soil or shallow water. Rock is closed to both. */
 bool world_walkable_for(const World *w, int cell, bool sea);
+/* The ground a body may stand on, flyers included: world_walkable_for, and rock
+ * too for a flyer (only flyers can stand on rock: safe roosts). */
+bool world_ground_for(const World *w, int cell, bool sea, bool flyer);
 
 #endif

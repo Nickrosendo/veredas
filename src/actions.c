@@ -73,6 +73,22 @@ static int find_living(const Pool *p, uint32_t id)
     return -1;
 }
 
+/* Where c's body would be after a gift that makes it body: its own cell when
+ * it may stay (a flyer up keeps flying; on the ground, ground the new body can
+ * use), else the nearest free cell that body can use within GIFT_MOVE_RADIUS;
+ * -1 for none. */
+static int gift_cell(const World *w, const Creature *c, BodyKind body)
+{
+    int own = world_idx(w, c->x, c->y);
+    if (c->up > 0 && body.flyer) {
+        return own;
+    }
+    if (c->up == 0 && world_ground_for(w, own, body.sea, body.flyer)) {
+        return own;
+    }
+    return creature_nearest_ground(w, c->x, c->y, body, GIFT_MOVE_RADIUS);
+}
+
 static void apply_trait(Sim *s, const PlayerAction *a)
 {
     int idx = find_living(&s->pool, a->creature);
@@ -82,18 +98,19 @@ static void apply_trait(Sim *s, const PlayerAction *a)
     Creature *c = &s->pool.items[idx];
     float old = c->genome.g[a->gene];
     c->genome.g[a->gene] = a->value;
-    /* A swim gift may move the body across the sea line: it goes to the
-     * nearest ground its new body can use. actions_give_trait checked there
-     * was some; should the cells have filled since, the gift does nothing. */
+    /* A swim or wings gift may move the body across a line: it goes to the
+     * nearest ground its new body can use, and a flyer that loses its wings
+     * up in the air comes down there. actions_give_trait checked there was
+     * some; should the cells have filled since, the gift does nothing. */
     int from = world_idx(&s->world, c->x, c->y);
-    int to = creature_nearest_cell_for(&s->world, c->x, c->y, creature_sea_body(c),
-                                       GIFT_MOVE_RADIUS);
+    int to = gift_cell(&s->world, c, creature_body_type(c));
     if (to < 0) {
         c->genome.g[a->gene] = old;
         return;
     }
-    if (to != from) {
-        s->world.occupant[from] = -1;
+    if (to != from || (c->up > 0 && !creature_flyer(c))) {
+        creature_grid(&s->world, c)[from] = -1;
+        c->up = 0;
         s->world.occupant[to] = idx;
         c->x = to % s->world.w;
         c->y = to / s->world.w;
@@ -120,12 +137,17 @@ const char *actions_gene_name(int gene)
     case GENE_LEGS: return "long legs";
     case GENE_NIGHT_EYES: return "night eyes";
     case GENE_LEARN: return "learning";
+    case GENE_WINGS: return "wings";
     default: return "?";
     }
 }
 
+/* The slider's traits, and wings, which are given only whole (the w key). */
 static bool givable(int gene)
 {
+    if (gene == GENE_WINGS) {
+        return true;
+    }
     for (int i = 0; i < ACTIONS_GIVABLE_COUNT; i++) {
         if (ACTIONS_GIVABLE[i] == gene) {
             return true;
@@ -141,8 +163,13 @@ bool actions_body_fits(const Sim *s, uint32_t creature, int gene, float value)
         return false;
     }
     const Creature *c = &s->pool.items[idx];
-    bool sea = gene == GENE_SWIM ? value >= SEA_FROM : creature_sea_body(c);
-    return creature_nearest_cell_for(&s->world, c->x, c->y, sea, GIFT_MOVE_RADIUS) >= 0;
+    BodyKind body = creature_body_type(c);
+    if (gene == GENE_SWIM) {
+        body.sea = value >= SEA_FROM;
+    } else if (gene == GENE_WINGS) {
+        body.flyer = value >= AIR_FROM;
+    }
+    return gift_cell(&s->world, c, body) >= 0;
 }
 
 bool actions_give_trait(Sim *s, uint32_t creature, int gene, float value)

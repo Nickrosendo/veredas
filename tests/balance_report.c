@@ -110,6 +110,8 @@ typedef struct {
     long sea_from;
     uint32_t sea_kills_at_from;
     uint64_t sea_line_births;
+    /* The air's measures as they stood at sea_from, for the AIR line. */
+    uint32_t air_plant_at_from, air_meat_at_from, air_landings_at_from;
 } Report;
 
 /* The seasons' verdict (the seasons design, section 8) is judged on the whole
@@ -1118,6 +1120,9 @@ static void run(Sim *s, long ticks, Shadow *shadow, Report *rep, Verdict *v)
         }
         if (rep->sea_from >= 0 && (long)s->tick == rep->sea_from) {
             rep->sea_kills_at_from = s->pool.sea_kills;
+            rep->air_plant_at_from = s->pool.air_meals_plant;
+            rep->air_meat_at_from = s->pool.air_meals_meat;
+            rep->air_landings_at_from = s->pool.air_landings;
         }
         uint32_t born_from = s->pool.next_id;
         sim_step(s);
@@ -1183,6 +1188,35 @@ static void print_sea(const Sim *s, const Report *rep)
            "line_births %llu line_alive %d\n",
            land, sea, hunters, s->pool.sea_kills - rep->sea_kills_at_from,
            s->pool.sea_kills, (unsigned long long)rep->sea_line_births, line);
+}
+
+/* The AIR line (with --sea FROM, for the air verdict): land bodies without
+ * wings over the line alive at the end, flyers alive and how many are up, flyer
+ * hunters, air-line flyers alive, and since FROM the flyers' meals of plants
+ * and of meat and their landings. */
+static void print_air(const Sim *s, const Report *rep)
+{
+    int walkers = 0, flyers = 0, up = 0, hunters = 0, line = 0;
+    for (int i = 0; i < s->pool.capacity; i++) {
+        const Creature *c = &s->pool.items[i];
+        if (!c->alive) {
+            continue;
+        }
+        int habitat = creature_habitat(c);
+        walkers += habitat == HABITAT_LAND;
+        if (habitat == HABITAT_AIR) {
+            flyers++;
+            up += c->up > 0;
+            hunters += creature_is_hunter(c);
+            line += c->air_line;
+        }
+    }
+    printf("AIR walkers %d flyers %d up %d air_hunters %d line_alive %d "
+           "plant_meals %u meat_meals %u landings %u\n",
+           walkers, flyers, up, hunters, line,
+           s->pool.air_meals_plant - rep->air_plant_at_from,
+           s->pool.air_meals_meat - rep->air_meat_at_from,
+           s->pool.air_landings - rep->air_landings_at_from);
 }
 
 /* The tactics seen since --tactics' tick: one TACTICS line naming them, then
@@ -1329,6 +1363,7 @@ int main(int argc, char **argv)
     }
     if (sea_from >= 0) {
         print_sea(&sim, &rep);
+        print_air(&sim, &rep);
     }
     free(shadow);
     sim_free(&sim);

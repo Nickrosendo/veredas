@@ -562,3 +562,15 @@ founders_per_sea_cell = 0.05
 
 # sea births slow as sea bodies alive near this many per plankton-rich cell (0: off) (0 to 1e+06)
 birth_per_plankton = 0.2
+
+# share of hits full wings dodge (0 to 1)
+wing_dodge = 0.35
+
+# upkeep of full wings (0 to 1e+06)
+wings_upkeep = 0.04
+
+# energy a step in the air costs per unit of size, on top of move_cost (0 to 1e+06)
+flight_step_cost = 0.15
+
+# flyer births slow as flyers alive near this share of the land's and the sea's room together (0: off) (0 to 1e+06)
+birth_per_air = 0.25

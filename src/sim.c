@@ -477,15 +477,19 @@ bool sim_in_season(uint64_t tick, const Settings *set)
 static void creatures_act(Sim *s)
 {
     int n = 0;
-    int sea = 0;
+    int sea = 0, air = 0;
     for (int i = 0; i < s->pool.capacity; i++) {
         if (s->pool.items[i].alive) {
             s->turns[n] = (Turn){i, s->pool.items[i].id};
             n++;
-            sea += creature_sea_body(&s->pool.items[i]); /* a bool counts 0 or 1 */
+            int habitat = creature_habitat(&s->pool.items[i]);
+            /* A comparison is an int, 0 or 1, so it can be added. */
+            sea += habitat == HABITAT_SEA;
+            air += habitat == HABITAT_AIR;
         }
     }
     s->pool.sea_alive = sea;
+    s->pool.air_alive = air;
     s->pool.plankton_rich = s->set.birth_per_plankton > 0.0f
                                 ? plankton_count_rich(&s->world)
                                 : 0;
@@ -865,6 +869,8 @@ static uint64_t hash_creature(uint64_t hash, const Creature *c)
     hash = fnv1a(hash, &c->id, sizeof(c->id));
     hash = fnv1a(hash, &c->lineage, sizeof(c->lineage));
     hash = fnv1a(hash, &c->sea_line, sizeof(c->sea_line));
+    hash = fnv1a(hash, &c->air_line, sizeof(c->air_line));
+    hash = fnv1a(hash, &c->up, sizeof(c->up));
     hash = fnv1a(hash, &c->family_hue, sizeof(c->family_hue));
     hash = fnv1a(hash, &c->x, sizeof(c->x));
     hash = fnv1a(hash, &c->y, sizeof(c->y));
@@ -948,6 +954,9 @@ uint64_t sim_checksum(const Sim *s)
     hash = fnv1a(hash, &w->rain_seed, sizeof(w->rain_seed));
     hash = fnv1a(hash, w->plankton, n * sizeof(float));
     hash = fnv1a(hash, w->occupant, n * sizeof(int32_t));
+    for (int k = 0; k < SKY_LAYERS; k++) {
+        hash = fnv1a(hash, w->sky[k], n * sizeof(int32_t));
+    }
     hash = fnv1a(hash, &s->pool.count, sizeof(s->pool.count));
     hash = fnv1a(hash, &s->pool.next_id, sizeof(s->pool.next_id));
     hash = fnv1a(hash, &s->pool.births_refused,

@@ -9,14 +9,14 @@
 /* All nine traits at one value. */
 static BodyTraits all_traits(float v)
 {
-    BodyTraits t = {v, v, v, v, v, v, v, v, v, 0};
+    BodyTraits t = {v, v, v, v, v, v, v, v, v, 0, 0, 0};
     return t;
 }
 
 /* The lab's hunter genes: long legs (0.5, rounded to 2/3), no other part. */
 static BodyTraits hunter(void)
 {
-    BodyTraits t = {0.85f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.5f, 0.0f, 0};
+    BodyTraits t = {0.85f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.5f, 0.0f, 0, 0, 0};
     return species_round(&t);
 }
 

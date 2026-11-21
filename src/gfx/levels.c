@@ -2,7 +2,7 @@
 
 bool levels_built(int level)
 {
-    return level == LEVEL_SURFACE || level == LEVEL_UNDERWATER;
+    return level == LEVEL_SKY || level == LEVEL_SURFACE || level == LEVEL_UNDERWATER;
 }
 
 const char *levels_name(int level)
@@ -33,6 +33,9 @@ int levels_step(int level, int dir)
 
 int levels_home(const Creature *c)
 {
+    if (c->up > 0) {
+        return LEVEL_SKY; /* a flyer up in the air; down, it is a surface body */
+    }
     return creature_sea_body(c) ? LEVEL_UNDERWATER : LEVEL_SURFACE;
 }
 

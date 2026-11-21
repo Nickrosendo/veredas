@@ -15,10 +15,15 @@ static int find_creature(const Pool *p, uint32_t id)
     return -1;
 }
 
-/* Follows whatever creature is on the cursor's cell, or none. */
+/* Follows whatever creature is on the cursor's cell, or none: a flyer up in the
+ * air over it first, since it is drawn on top, then whoever is on the ground. */
 static void pick(Inspect *in, const Sim *s)
 {
-    int slot = s->world.occupant[world_idx(&s->world, in->x, in->y)];
+    int cell = world_idx(&s->world, in->x, in->y);
+    int slot = s->world.sky[SKY_LOW][cell];
+    if (slot < 0) {
+        slot = s->world.occupant[cell];
+    }
     in->following = slot >= 0;
     if (in->following) {
         in->id = s->pool.items[slot].id;

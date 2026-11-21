@@ -51,6 +51,11 @@ int lab_row_of(int species)
     case ROLE_SEA_HUNTER: return ROLE_HUNTER;
     case ROLE_SEA_ARMOURED: return ROLE_ARMOURED;
     case ROLE_SEA_GRAZER: return ROLE_GRAZER;
+    /* The birds, where there is room: birds of prey with the runners, the
+     * parrot with the plant-eaters, the owl with the watchers. */
+    case ROLE_AIR_HUNTER: return ROLE_RUNNER;
+    case ROLE_AIR_GRAZER: return ROLE_GRAZER;
+    case ROLE_AIR_WATCHER: return ROLE_WATCHER;
     default: return SPECIES[species].role;
     }
 }
@@ -77,23 +82,32 @@ static BodyTraits role_genes(int role)
 {
     switch (role) {
     case ROLE_HUNTER:
-        return (BodyTraits){0.85f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.5f, 0.0f, 0.0f};
+        return (BodyTraits){0.85f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.5f, 0.0f, 0.0f, 0.0f, 0.0f};
     case ROLE_SWIMMER:
-        return (BodyTraits){0.6f, 0.35f, 0.4f, 0.7f, 0.2f, 0.0f, 0.0f, 0.3f, 1.0f, 0.0f};
+        return (BodyTraits){0.6f, 0.35f, 0.4f, 0.7f, 0.2f, 0.0f, 0.0f, 0.3f, 1.0f, 0.0f, 0.0f, 0.0f};
     case ROLE_ARMOURED:
-        return (BodyTraits){0.8f, 0.2f, 0.3f, 0.8f, 0.1f, 1.0f, 0.0f, 0.3f, 0.0f, 0.0f};
+        return (BodyTraits){0.8f, 0.2f, 0.3f, 0.8f, 0.1f, 1.0f, 0.0f, 0.3f, 0.0f, 0.0f, 0.0f, 0.0f};
     case ROLE_RUNNER:
-        return (BodyTraits){0.25f, 1.0f, 0.5f, 0.5f, 0.2f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f};
+        return (BodyTraits){0.25f, 1.0f, 0.5f, 0.5f, 0.2f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
     case ROLE_WATCHER:
-        return (BodyTraits){0.3f, 0.4f, 1.0f, 0.6f, 0.2f, 0.0f, 0.0f, 0.35f, 0.0f, 0.0f};
+        return (BodyTraits){0.3f, 0.4f, 1.0f, 0.6f, 0.2f, 0.0f, 0.0f, 0.35f, 0.0f, 0.0f, 0.0f, 0.0f};
     case ROLE_SEA_HUNTER:
-        return (BodyTraits){0.85f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f};
+        return (BodyTraits){0.85f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f};
     case ROLE_SEA_ARMOURED:
-        return (BodyTraits){0.7f, 0.2f, 0.3f, 0.8f, 0.1f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f};
+        return (BodyTraits){0.7f, 0.2f, 0.3f, 0.8f, 0.1f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f};
     case ROLE_SEA_GRAZER:
-        return (BodyTraits){0.8f, 0.3f, 0.35f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f};
+        return (BodyTraits){0.8f, 0.3f, 0.35f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f};
+    case ROLE_AIR_HUNTER:
+        return (BodyTraits){0.6f, 0.6f, 0.6f, 0.0f, 1.0f, 0.0f, 0.0f, 0.3f, 0.0f, 0.0f,
+                            1.0f, 0.0f};
+    case ROLE_AIR_GRAZER:
+        return (BodyTraits){0.4f, 0.5f, 0.4f, 1.0f, 0.0f, 0.0f, 0.0f, 0.3f, 0.0f, 0.0f,
+                            1.0f, 0.0f};
+    case ROLE_AIR_WATCHER:
+        return (BodyTraits){0.4f, 0.4f, 1.0f, 0.6f, 0.4f, 0.0f, 0.0f, 0.3f, 0.0f, 0.0f,
+                            1.0f, 0.0f};
     default: /* plant-eaters */
-        return (BodyTraits){0.5f, 0.4f, 0.35f, 1.0f, 0.0f, 0.0f, 0.0f, 0.55f, 0.0f, 0.0f};
+        return (BodyTraits){0.5f, 0.4f, 0.35f, 1.0f, 0.0f, 0.0f, 0.0f, 0.55f, 0.0f, 0.0f, 0.0f, 0.0f};
     }
 }
 
@@ -110,9 +124,14 @@ static float lab_size(int species)
 /* The body the lab shows for a species: its role's genes, and with parts on,
  * a gene of 1 for every part painted over its frames (art.h's layers), so
  * the painted plates, horns and fins can be looked at here. */
-static SpriteBody lab_body(int species, bool parts)
+static SpriteBody lab_body(int species, bool parts, int action)
 {
     BodyTraits genes = role_genes(SPECIES[species].role);
+    /* A bird walks or runs by flying: those two keys show it up in the air. */
+    if (SPECIES[species].plan == PLAN_BIRD &&
+        (action == ACTION_WALK || action == ACTION_RUN)) {
+        genes.aloft = 1.0f;
+    }
     const ArtSet *set = art_set(species);
     if (parts && set != NULL) {
         if (set->layer[ART_PART_ARMOUR][ART_SIZE_FULL] != NULL) {
@@ -150,7 +169,7 @@ static void largest_pictures(SpriteCache *sprites, int action, int frame, bool p
         row_h[r] = 0;
     }
     for (int s = 0; s < SPECIES_COUNT; s++) {
-        SpriteBody b = lab_body(s, parts);
+        SpriteBody b = lab_body(s, parts, action);
         SpritePicture p = sprite_picture(sprites, &b, action, frame);
         int row = lab_row_of(s);
         if (p.x1 - p.x0 > *max_w) {
@@ -518,7 +537,7 @@ static void draw_animal(SpriteCache *sprites, Canvas *c, const LabLayout *l, int
 {
     int s = l->scale;
     int strip_h = l->strip_h[lab_row_of(species)];
-    SpriteBody body = lab_body(species, l->parts);
+    SpriteBody body = lab_body(species, l->parts, action);
     /* Each animal at its own pace, the species number in place of an id so
      * the page is not in step. */
     uint32_t id = (uint32_t)species;
@@ -570,14 +589,14 @@ static void draw_attack(SpriteCache *sprites, Canvas *c, const LabLayout *l, int
     uint32_t id = (uint32_t)species;
     int attacker_x = sx + l->cell_w / 2 - ATTACKER_LEFT * s;
 
-    SpriteBody hunter = lab_body(species, l->parts);
+    SpriteBody hunter = lab_body(species, l->parts, ACTION_ATTACK);
     int frame = pose_frame(body_ms, id, ACTION_ATTACK, POSE_ATTACK_SECONDS);
     float share = (float)frame / (float)SPRITE_FRAMES[ACTION_ATTACK];
     float flash, knock, tremble;
     pose_hit(share, &flash, &knock, &tremble);
 
     /* The deer first, so the hunter's leap is drawn over it. */
-    SpriteBody deer = lab_body(SPECIES_DEER, l->parts);
+    SpriteBody deer = lab_body(SPECIES_DEER, l->parts, ACTION_REST);
     int deer_frame = pose_frame(body_ms, id, ACTION_REST, POSE_REST_SECONDS);
     SpritePicture prey = sprite_picture(sprites, &deer, ACTION_REST, deer_frame);
     SpritePalette look;
@@ -684,7 +703,7 @@ void lab_draw_parade(SpriteCache *sprites, Canvas *c, uint64_t body_ms, int x, i
     uint64_t walked = body_ms * PARADE_SPEED / 1000u;
     for (int i = 0; i < count; i++) {
         int species = PARADE[i];
-        SpriteBody body = lab_body(species, false);
+        SpriteBody body = lab_body(species, false, ACTION_WALK);
         /* The cast: road is a few thousand at most, so the remainder fits. */
         int along = (int)((walked + (uint64_t)(i * gap)) % (uint64_t)road);
         int foot_x = x + (along - SKELETON_DETAIL_W / 2) * s;

@@ -95,7 +95,7 @@ static Colour cell_colour(const Sim *s, int i, int season)
 {
     float light = years_light(s->tick, s->set.ticks_per_day);
     Colour day = cell_colour_by_day(s, i, season);
-    bool body = s->world.occupant[i] >= 0;
+    bool body = s->world.occupant[i] >= 0 || s->world.sky[SKY_LOW][i] >= 0;
     float keep = body ? palette_body_light(light) : palette_ground_light(light);
     /* In eighths: the terminal redraws only cells whose colour changed, and a
      * light changing a little every tick would change them all, every tick. */
@@ -109,8 +109,10 @@ static Colour cell_colour_by_day(const Sim *s, int i, int season)
     const World *w = &s->world;
     /* A creature hides whatever is under it. occupant holds its slot in
      * the pool, so its genome is one lookup away. */
-    if (w->occupant[i] >= 0) {
-        const Creature *c = &s->pool.items[w->occupant[i]];
+    /* A flyer up in the air is over everything on the cell, so it shows. */
+    int slot = w->sky[SKY_LOW][i] >= 0 ? w->sky[SKY_LOW][i] : w->occupant[i];
+    if (slot >= 0) {
+        const Creature *c = &s->pool.items[slot];
         Colour awake = palette_creature(c->genome.g[GENE_HUE],
                                         render_meat_share(c->level));
         if (!creature_asleep(c)) {

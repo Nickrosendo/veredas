@@ -14,7 +14,7 @@ static SkeletonRaster standing, sleeping;
 /* A middling body of this species, at Normal. */
 static SpriteBody middling(int species)
 {
-    BodyTraits t = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0};
+    BodyTraits t = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, 0};
     return sprite_body_of(&t, species, 1.0f, SPRITE_BASE_NORMAL);
 }
 
@@ -257,7 +257,7 @@ static void test_walk_has_a_planted_and_a_lifted_foot(void)
         if (SPECIES[sp].hop) {
             continue;
         }
-        BodyTraits t = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0};
+        BodyTraits t = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, 0};
         SpriteBody b = sprite_body_of(&t, sp, 1.0f, SPRITE_BASE_DETAIL);
         bool lifted_bent = false;
         for (int f = 0; f < SPRITE_FRAMES[ACTION_WALK]; f++) {

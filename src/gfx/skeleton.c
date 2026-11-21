@@ -965,6 +965,97 @@ static void build_turtle(ShapeList *list, Body *b)
                  by + 0.3f * R, bx - 0.8f * L - 0.5f * sw, by + 0.95f * R);
 }
 
+/* A bird (the water and air design, 5.6): eagle, vulture, parrot and owl.
+ * Down, it stands on two thin legs with its wings folded on its side; up in the
+ * air (Anatomy.g.aloft) the legs are tucked away and both wings stand out above
+ * the body, beating with the walk cycle's phase, or held half open in a glide
+ * when it is not moving. The pose's phase is 0 when standing, which is the top
+ * of the beat: the tallest picture, which the K cap is worked out from. */
+static void build_bird(ShapeList *list, Body *b)
+{
+    const Anatomy *a = b->a;
+    int species = a->species;
+    bool up = a->g.aloft > 0.5f;
+    float L = b->body_len * 0.9f;
+    float R = (b->hip_r + b->chest_r) * 0.5f;
+    float legs = up ? 0.0f : b->leg_len * 0.8f;
+    float bx = b->bx;
+    float by = -(legs + R * (up ? 1.4f : 0.9f)) + (up ? 0.0f : b->bob);
+    b->by = by;
+    /* The beat, 1 with the wings at the top, 0 at the bottom. cosf of a phase
+     * in radians: the walk cycle's phase already is one (pose.c). */
+    bool flapping = b->p->action == ACTION_WALK || b->p->action == ACTION_RUN;
+    float beat = flapping ? 0.5f + 0.5f * cosf(b->p->phase) : 0.55f + 0.1f * b->p->breath;
+    float s = a->skull * 0.7f;
+    bool owl = species == SPECIES_OWL;
+    /* The head: forward and up from the body, the owl's sunk into its
+     * shoulders, the vulture's out on a long bare neck. */
+    float reach = owl ? 0.7f : 1.05f;
+    b->hx = bx + reach * L + (species == SPECIES_VULTURE ? 0.3f * L : 0.0f);
+    b->hy = by - (owl ? 0.8f : 1.05f) * R + b->p->head_dy * b->k;
+    /* Anatomy's muzzle is a length, the land muzzle's: a beak is a share of it. */
+    b->mx = b->hx + s * 0.8f + a->muzzle * (owl ? 0.15f : 0.35f);
+    b->my = b->hy + s * 0.15f;
+    b->jpx = b->hx;
+    b->jpy = b->hy + s * 0.3f;
+    b->jtx = b->mx - s * 0.3f;
+    b->jty = b->my + s * 0.2f;
+
+    if (up) {
+        /* The far wing, darker and behind everything. */
+        new_triangle(list, PART_EAR_BACK, -2, bx + 0.45f * L, by - 0.35f * R,
+                     bx - 0.55f * L, by - 0.25f * R,
+                     bx - 1.05f * L, by - R * (1.0f + 1.5f * beat));
+    }
+    /* The tail: a fan behind, the parrot's long and narrow, the owl's a stub. */
+    float tail_len = species == SPECIES_PARROT ? 1.9f : owl ? 0.9f : 1.35f;
+    float fan = species == SPECIES_PARROT ? 0.25f : 0.45f;
+    new_triangle(list, PART_TAIL, -1, bx - 0.55f * L, by - 0.1f * R,
+                 bx - tail_len * L, by - fan * R + b->p->tail * R,
+                 bx - tail_len * L, by + fan * R + b->p->tail * R);
+    if (!up) {
+        /* Two thin legs, the far one a little behind. Horn's ink: bird legs
+         * are scaly and yellow-grey, not fur. */
+        float lw = 0.32f * a->leg_w; /* leg_w is a length already: K is in it */
+        /* The foot's round end sits on the ground point, its outline on the
+         * ground row: the tube ends its own radius above it. */
+        float foot = -lw * 0.8f;
+        new_cone(list, PART_HORN, -1, bx - 0.25f * L, by + 0.6f * R, bx - 0.3f * L, foot,
+                 lw, lw * 0.8f);
+        new_cone(list, PART_HORN, 0, bx + 0.05f * L, by + 0.6f * R, bx + 0.1f * L, foot,
+                 lw, lw * 0.8f);
+    }
+    Shape *body = new_shape(list, PART_BODY, 0);
+    add_oval(body, bx - 0.15f * L, by, 0.85f * L, R);
+    add_oval(body, bx + 0.45f * L, by - 0.15f * R, 0.55f * L, 0.9f * R);
+    if (species == SPECIES_VULTURE) {
+        /* The ruff at the base of the bare neck, and the neck itself. */
+        new_ellipse(list, PART_MANE, 0, bx + 0.6f * L, by - 0.5f * R, 0.35f * L, 0.45f * R);
+        new_cone(list, PART_NECK, 0, bx + 0.7f * L, by - 0.6f * R, b->hx, b->hy,
+                 0.3f * R, 0.25f * R);
+    }
+    Shape *head = new_ellipse(list, PART_HEAD, 0, b->hx, b->hy, s * (owl ? 1.15f : 1.0f),
+                              s * (owl ? 1.05f : 0.9f));
+    (void)head;
+    /* The beak: the eagle's hooked down at the tip, the parrot's deep and
+     * curved, the vulture's long, the owl's a small hook. Horn's ink. */
+    float depth = species == SPECIES_PARROT ? 0.55f : 0.3f;
+    float hook = species == SPECIES_EAGLE || species == SPECIES_PARROT ? 0.45f : 0.2f;
+    new_triangle(list, PART_HORN, 1, b->hx + 0.6f * s, b->hy - depth * s,
+                 b->hx + 0.6f * s, b->hy + depth * s, b->mx, b->my + hook * s);
+    if (up) {
+        /* From the shoulder, swept back, the tip always clear above the body
+         * (a downstroke hidden behind it would read as no wing at all), one
+         * shade darker than the body so it stands out from it. */
+        new_triangle(list, PART_EAR, -1, bx + 0.55f * L, by - 0.3f * R,
+                     bx - 0.5f * L, by - 0.2f * R,
+                     bx - 0.85f * L, by - R * (1.3f + 1.7f * beat));
+    } else {
+        /* The near wing folded along the side. */
+        new_ellipse(list, PART_EAR, 0, bx - 0.25f * L, by + 0.05f * R, 0.75f * L, 0.55f * R);
+    }
+}
+
 /* Declared here, defined after build_shapes: C needs a function declared
  * before its first call, and a prototype is that declaration on its own. */
 static void box_all(ShapeList *list, const Body *b);
@@ -977,7 +1068,9 @@ static void build_shapes(ShapeList *list, Body *b)
     list->count = 0;
     list->wanted = 0;
     if (b->sp->plan != PLAN_LAND) {
-        if (b->sp->plan == PLAN_TURTLE) {
+        if (b->sp->plan == PLAN_BIRD) {
+            build_bird(list, b);
+        } else if (b->sp->plan == PLAN_TURTLE) {
             build_turtle(list, b);
         } else {
             build_fish(list, b);
@@ -1377,7 +1470,8 @@ static void place_marks(SkeletonRaster *r, const Body *b, bool marks)
     if (r->eye_x < 0 || r->eye_y < 0 || r->eye_x >= r->w || r->eye_y >= r->h) {
         r->eye_x = r->eye_y = -1; /* off the grid: no eye to draw */
     }
-    if ((b->sp->features & FEATURE_TRUNK) == 0) {
+    /* A nose for every snout; a beak has none, nor a trunk. */
+    if ((b->sp->features & FEATURE_TRUNK) == 0 && b->sp->plan != PLAN_BIRD) {
         put_mark(r, pixel(b->mx + a->muzzle_r * 0.7f + ox),
                  pixel(b->my - a->muzzle_r * 0.25f + oy), INK_NOSE);
     }
@@ -1487,7 +1581,7 @@ static BodyTraits corner_traits(int c)
 
 /* Whether this standing body fits at k: within SPRITE_MAX_W by SPRITE_MAX_H,
  * and clear of the small grid's outer ring, with the allowance to spare. */
-static bool fits_at(int species, const BodyTraits *t, float k, SkeletonRaster *r)
+static bool fits_once(int species, const BodyTraits *t, float k, SkeletonRaster *r)
 {
     SpritePose p;
     Anatomy a;
@@ -1498,6 +1592,21 @@ static bool fits_at(int species, const BodyTraits *t, float k, SkeletonRaster *r
     return r->x1 - r->x0 <= SPRITE_MAX_W - CAP_ALLOWANCE &&
            r->y1 - r->y0 <= SPRITE_MAX_H - CAP_ALLOWANCE && r->x0 >= edge &&
            r->y0 >= edge && r->x1 <= r->w - edge && r->y1 <= r->h - edge;
+}
+
+/* A bird must fit both standing and up in the air with its wings at the top
+ * of the beat; any other body has one shape. */
+static bool fits_at(int species, const BodyTraits *t, float k, SkeletonRaster *r)
+{
+    if (!fits_once(species, t, k, r)) {
+        return false;
+    }
+    if (SPECIES[species].plan != PLAN_BIRD) {
+        return true;
+    }
+    BodyTraits up = *t;
+    up.aloft = 1.0f;
+    return fits_once(species, &up, k, r);
 }
 
 /* The cap is the smallest of the corners' own caps. A body only grows with K,

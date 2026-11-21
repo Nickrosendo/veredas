@@ -406,29 +406,37 @@ static void check_gifts(Notices *n, const Sim *s)
     }
 }
 
-/* ---- a family taking to the sea ---- */
+/* ---- a family taking to the sea or the air ---- */
 
-static bool sea_told(const Notices *n, uint32_t lineage)
+/* One habitat's list of families told already: the newest NOTICE_SEA_FAMILIES
+ * of them, written round in a ring. Pointers into a Notices, so one set of
+ * functions serves both the sea and the air. */
+typedef struct {
+    uint32_t *told;
+    uint32_t *total;
+} ToldList;
+
+static bool told(ToldList list, uint32_t lineage)
 {
-    uint32_t kept = n->sea_told_total < NOTICE_SEA_FAMILIES ? n->sea_told_total
-                                                            : NOTICE_SEA_FAMILIES;
+    uint32_t kept = *list.total < NOTICE_SEA_FAMILIES ? *list.total
+                                                      : NOTICE_SEA_FAMILIES;
     for (uint32_t i = 0; i < kept; i++) {
-        if (n->sea_told[i] == lineage) {
+        if (list.told[i] == lineage) {
             return true;
         }
     }
     return false;
 }
 
-/* Whether c's swim gene is one the player gave: within the carrier tolerance
- * of a swim gift's value. A crossing helped by a gift is not news. */
-static bool swim_given(const Sim *s, const Creature *c)
+/* Whether c's gene is one the player gave: within the carrier tolerance of a
+ * gift of that gene. A crossing helped by a gift is not news. */
+static bool gene_given(const Sim *s, const Creature *c, int gene)
 {
     const ActionLog *log = &s->actions;
     for (int i = 0; i < log->next; i++) {
         const PlayerAction *a = &log->items[i];
-        float d = c->genome.g[GENE_SWIM] - a->value;
-        if (a->kind == ACTION_TRAIT && a->gene == GENE_SWIM &&
+        float d = c->genome.g[gene] - a->value;
+        if (a->kind == ACTION_TRAIT && a->gene == gene &&
             d < ACTIONS_CARRIER_TOLERANCE && d > -ACTIONS_CARRIER_TOLERANCE) {
             return true;
         }
@@ -436,24 +444,31 @@ static bool swim_given(const Sim *s, const Creature *c)
     return false;
 }
 
-/* A living sea body of a line that took to the sea (sea_line), whose family is
- * not told yet: "the X family took to the sea", once per family. */
-static void check_sea(Notices *n, const Sim *s)
+/* A living sea body of a line that took to the sea (sea_line), or a flyer of a
+ * line that took to the air (air_line), whose family is not told yet: "the X
+ * family took to the sea" (or "to the air"), once per family. */
+static void check_crossing(Notices *n, const Sim *s, bool air)
 {
+    ToldList list = air ? (ToldList){n->air_told, &n->air_told_total}
+                        : (ToldList){n->sea_told, &n->sea_told_total};
+    int gene = air ? GENE_WINGS : GENE_SWIM;
     for (int i = 0; i < s->pool.capacity; i++) {
         const Creature *c = &s->pool.items[i];
-        if (!c->alive || !c->sea_line || !creature_sea_body(c) ||
-            sea_told(n, c->lineage) || swim_given(s, c)) {
+        bool crossed = air ? c->air_line && creature_flyer(c)
+                           : c->sea_line && creature_sea_body(c);
+        if (!c->alive || !crossed || told(list, c->lineage) ||
+            gene_given(s, c, gene)) {
             continue;
         }
-        n->sea_told[n->sea_told_total % NOTICE_SEA_FAMILIES] = c->lineage;
-        n->sea_told_total++;
+        list.told[*list.total % NOTICE_SEA_FAMILIES] = c->lineage;
+        (*list.total)++;
         if (!n->started) {
             continue; /* there already: known, not news */
         }
         char family[16], text[NOTICE_TEXT];
         name_from_id(c->lineage, family, sizeof(family));
-        snprintf(text, sizeof(text), "the %s family took to the sea", family);
+        snprintf(text, sizeof(text), "the %s family took to the %s", family,
+                 air ? "air" : "sea");
         notices_add(n, s->tick, c->id, text);
     }
 }
@@ -470,6 +485,7 @@ void notices_check(Notices *n, const Sim *s)
     check_families(n, s);
     check_unlike(n, s);
     check_gifts(n, s);
-    check_sea(n, s);
+    check_crossing(n, s, false);
+    check_crossing(n, s, true);
     n->started = true;
 }

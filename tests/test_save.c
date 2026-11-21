@@ -614,34 +614,36 @@ enum {
     AT_LINEAGE = 5,
     AT_FAMILY_HUE = 9,
     AT_SEA_LINE = 13,
-    AT_X = 14,
-    AT_Y = 18,
-    AT_HEADING = 22,
-    AT_ENERGY = 23,
-    AT_HEALTH = 27,
-    AT_GROWN = 31,
-    AT_HITS_TAKEN = 35,
-    AT_RECENT_HITS = 39, /* HITS_KEPT pairs of u32: 64 bytes */
-    AT_AGE = 103,
-    AT_KIND = 107,
-    AT_HOLD = 108,
-    AT_HOLD_LEFT = 110,
-    AT_MOVE_POINTS = 112,
-    AT_MATE_WISH = 116,
-    AT_LEVEL = 118,
-    AT_EATEN = 122,
-    AT_GUT_SEED = 126, /* seven floats: 28 bytes */
-    AT_GUT_TICKS = 154,
-    AT_SINCE_MEAL = 156,
-    AT_MEAL_X = 158,
-    AT_MEAL_Y = 162,
-    AT_MEAL_AT = 166,
-    AT_MEAL_KNOWN = 170,
-    AT_SLEEP_TICKS = 171,
-    AT_HIBERNATING = 173,
-    AT_CALLING = 174,
-    AT_MEMORY = 175,
-    AT_MIND = 187, /* adjust then trace, MIND_LEN floats each */
+    AT_AIR_LINE = 14,
+    AT_UP = 15,
+    AT_X = 16,
+    AT_Y = 20,
+    AT_HEADING = 24,
+    AT_ENERGY = 25,
+    AT_HEALTH = 29,
+    AT_GROWN = 33,
+    AT_HITS_TAKEN = 37,
+    AT_RECENT_HITS = 41, /* HITS_KEPT pairs of u32: 64 bytes */
+    AT_AGE = 105,
+    AT_KIND = 109,
+    AT_HOLD = 110,
+    AT_HOLD_LEFT = 112,
+    AT_MOVE_POINTS = 114,
+    AT_MATE_WISH = 118,
+    AT_LEVEL = 120,
+    AT_EATEN = 124,
+    AT_GUT_SEED = 128, /* seven floats: 28 bytes */
+    AT_GUT_TICKS = 156,
+    AT_SINCE_MEAL = 158,
+    AT_MEAL_X = 160,
+    AT_MEAL_Y = 164,
+    AT_MEAL_AT = 168,
+    AT_MEAL_KNOWN = 172,
+    AT_SLEEP_TICKS = 173,
+    AT_HIBERNATING = 175,
+    AT_CALLING = 176,
+    AT_MEMORY = 177,
+    AT_MIND = 189, /* adjust then trace, MIND_LEN floats each */
     AT_GENOME = AT_MIND + 2 * 4 * MIND_LEN,
     /* The life story: ten u32 counts, max_size, flags, two region bytes and
      * region_ticks (49 bytes); then events_noted and 8 events of 13 bytes each
@@ -781,7 +783,7 @@ static void test_layout_is_as_documented(void)
         return;
     }
     CHECK(memcmp(t.bytes, "VEREDASV", 8) == 0);
-    CHECK(get_le32(t.bytes + OFF_VERSION) == 32);
+    CHECK(get_le32(t.bytes + OFF_VERSION) == 33);
     CHECK(get_le32(t.bytes + OFF_CONTENT) == 0);
     CHECK(get_le32(t.bytes + OFF_WIDTH) == 8);
     CHECK(get_le32(t.bytes + OFF_HEIGHT) == 8);
@@ -1035,6 +1037,10 @@ static void test_refuses_creature_off_soil(void)
     uint32_t x = get_le32(t.bytes + t.living + AT_X);
     uint32_t y = get_le32(t.bytes + t.living + AT_Y);
     refuses_byte(&t, t.layers + y * 8 + x, TERRAIN_WATER, "cannot");
+    /* Up on a sky grid that does not exist; and, for a body without wings
+     * over the line (this seed's founder), up at all. */
+    refuses_byte(&t, t.living + AT_UP, SKY_LAYERS + 1, "cannot");
+    refuses_byte(&t, t.living + AT_UP, 1, "cannot");
     free(t.bytes);
 }
 
@@ -1261,12 +1267,12 @@ static void test_older_versions_refused(void)
     size_t len = 0;
     CHECK(save_to_memory(&a, &mem, &len, err, sizeof(err)));
     if (mem != NULL) {
-        for (unsigned char version = 30; version <= 31; version++) {
+        for (unsigned char version = 30; version <= 32; version++) {
             mem[OFF_VERSION] = version;
             Sim b;
             CHECK(!save_from_memory(&b, mem, len, err, sizeof(err)));
             CHECK(strstr(err, "save version 3") != NULL);
-            CHECK(strstr(err, "reads only version 32") != NULL);
+            CHECK(strstr(err, "reads only version 33") != NULL);
         }
         free(mem);
     }

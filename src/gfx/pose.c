@@ -269,7 +269,10 @@ void pose_at(SpritePose *out, const SpriteBody *b, int action, int frame)
     frame = (frame % n + n) % n; /* % keeps a negative sign: see sprite.c */
     float u = (float)frame / (float)n;
     bool hop = SPECIES[b->species].hop;
-    bool swim = SPECIES[b->species].plan != PLAN_LAND;
+    /* A sea body swims without bobbing, and a bird up in the air flies
+     * without it: neither has feet on the ground. */
+    int plan = SPECIES[b->species].plan;
+    bool swim = plan == PLAN_FISH || plan == PLAN_TURTLE || b->traits.aloft > 0.5f;
     switch (action) {
     case ACTION_WALK:
     case ACTION_RUN:

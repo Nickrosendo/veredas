@@ -13,7 +13,8 @@ BodyTraits species_traits(const Genome *g)
     BodyTraits t = {g->g[GENE_SIZE], g->g[GENE_SPEED], g->g[GENE_SIGHT],
                     leaf > fruit ? leaf : fruit, g->g[GENE_MEAT],
                     g->g[GENE_ARMOUR], g->g[GENE_WEAPON], g->g[GENE_LEGS],
-                    g->g[GENE_SWIM], g->g[GENE_SWIM] >= SEA_FROM ? 1.0f : 0.0f};
+                    g->g[GENE_SWIM], g->g[GENE_SWIM] >= SEA_FROM ? 1.0f : 0.0f,
+                    g->g[GENE_WINGS] >= AIR_FROM ? 1.0f : 0.0f, 0.0f};
     return t;
 }
 
@@ -40,12 +41,19 @@ BodyTraits species_round(const BodyTraits *t)
                     round_trait(t->sight),  round_trait(t->plant),
                     round_trait(t->meat),   round_trait(t->armour),
                     round_trait(t->weapon), round_trait(t->legs),
-                    round_trait(t->swim),  t->sea};
+                    round_trait(t->swim),  t->sea,
+                    t->air,                t->aloft};
     return r;
 }
 
 int species_role(const BodyTraits *t)
 {
+    if (t->air > 0.5f) {
+        if (t->meat > t->plant && t->meat >= PART_FROM) {
+            return ROLE_AIR_HUNTER;
+        }
+        return t->sight >= WATCHER_SIGHT ? ROLE_AIR_WATCHER : ROLE_AIR_GRAZER;
+    }
     if (t->sea > 0.5f) {
         if (t->meat > t->plant && t->meat >= PART_FROM) {
             return ROLE_SEA_HUNTER;
@@ -153,6 +161,22 @@ const Species SPECIES[SPECIES_COUNT] = {
     [SPECIES_MANATEE] = {"manatee", ROLE_SEA_GRAZER, HEX(0xb48c6c),
         1.15f, 1.2f, 1.05f, 1.05f, 1, 1, 1, 0, 1, 0.7f, 1.2f, 1, EAR_POINTED, TAIL_PADDLE,
         false, false, false, false, FEATURE_FOLDS, NO_STRIPE, PLAN_FISH},
+    /* The air (the water and air design, 5.6). Two legs and two wings: leg_len
+     * sets the legs, body_len the body, skull the head, muzzle the beak. The
+     * eagle's head is pale (FEATURE_PALE_FACE), the vulture's neck long and
+     * bare, the parrot's tail long, the owl's head big with big eyes. */
+    [SPECIES_EAGLE] = {"eagle", ROLE_AIR_HUNTER, HEX(0x7a5634),
+        1.1f, 1, 0.9f, 0.8f, 0.8f, 1, 1, 0, 0.9f, 1, 1, 1, EAR_POINTED, TAIL_TUFT,
+        false, false, false, false, FEATURE_PALE_FACE, NO_STRIPE, PLAN_BIRD},
+    [SPECIES_VULTURE] = {"vulture", ROLE_AIR_HUNTER, HEX(0x4e4448),
+        1.15f, 1.05f, 0.95f, 0.85f, 0.8f, 1, 1.6f, 0, 0.75f, 1.1f, 1, 1, EAR_POINTED,
+        TAIL_TUFT, false, false, false, false, FEATURE_NECK_MANE, NO_STRIPE, PLAN_BIRD},
+    [SPECIES_PARROT] = {"parrot", ROLE_AIR_GRAZER, HEX(0x34b04a),
+        0.9f, 0.85f, 0.85f, 0.75f, 0.6f, 1, 1, 0, 1, 1.2f, 1.2f, 1, EAR_POINTED,
+        TAIL_LONG, false, false, false, false, 0, NO_STRIPE, PLAN_BIRD},
+    [SPECIES_OWL] = {"owl", ROLE_AIR_WATCHER, HEX(0x9a7a58),
+        0.95f, 0.85f, 1.1f, 1, 0.6f, 1, 0.5f, 0, 1.45f, 0.6f, 0.9f, 1, EAR_POINTED,
+        TAIL_STUB, false, false, false, false, FEATURE_FOLDS, NO_STRIPE, PLAN_BIRD},
 };
 
 uint32_t species_hash(uint32_t lineage, int role)
@@ -263,7 +287,7 @@ void species_anatomy(Anatomy *out, int species, const BodyTraits *rounded, float
                   sp->muzzle / root;
     out->muzzle_r = (0.75f + g.meat * 0.3f) * k * sp->muzzle_r / root;
     out->ear_size = sp->ear_size * (0.85f + 0.3f * g.sight); /* sight enlarges ears (plan's call) */
-    out->eye_big = g.sight > 0.45f || species == SPECIES_LEMUR;
+    out->eye_big = g.sight > 0.45f || species == SPECIES_LEMUR || species == SPECIES_OWL;
     out->step_hz = (0.9f + g.speed * 0.8f) / root;
     out->stride = (2.0f + g.legs * 2.2f) * k * sp->leg_len;
     out->horn_scale = 0.8f + 0.4f * g.weapon;   /* weapon sizes horns and tusks (plan's call) */

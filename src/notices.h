@@ -102,6 +102,9 @@ typedef struct {
      * a new one replaces the oldest (sea_told_total % NOTICE_SEA_FAMILIES). */
     uint32_t sea_told[NOTICE_SEA_FAMILIES];
     uint32_t sea_told_total;
+    /* The same for families that took to the air. */
+    uint32_t air_told[NOTICE_SEA_FAMILIES];
+    uint32_t air_told_total;
 } Notices;
 
 /* Empty, as for a new world: the next check tells nothing. */

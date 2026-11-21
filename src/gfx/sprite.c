@@ -44,6 +44,9 @@ SpriteBody sprite_body(const Creature *c, const Settings *s, int base)
     BodyTraits rounded = species_round(&t);
     float size = creature_size(c, s);
     int species = species_pick(c->lineage, species_role(&rounded), size);
+    /* Only a body with wings over the line can be up, and only then are they
+     * drawn spread. */
+    t.aloft = c->up > 0 && t.air > 0.5f ? 1.0f : 0.0f;
     return sprite_body_of(&t, species, size, base);
 }
 
@@ -54,7 +57,7 @@ bool sprite_body_equal(const SpriteBody *a, const SpriteBody *b)
            x->size == y->size && x->speed == y->speed && x->sight == y->sight &&
            x->plant == y->plant && x->meat == y->meat && x->armour == y->armour &&
            x->weapon == y->weapon && x->legs == y->legs && x->swim == y->swim &&
-           x->sea == y->sea;
+           x->sea == y->sea && x->air == y->air && x->aloft == y->aloft;
 }
 
 const int SPRITE_FRAMES[ACTION_COUNT] = {24, 24, 16, 30, 39, 54, 6};
@@ -193,7 +196,7 @@ void sprite_palette_flash(SpritePalette *out, const SpritePalette *in, float fla
 
 /* ---- The cache ---- */
 
-/* No key is ever this: a real one uses only the low 37 bits. */
+/* No key is ever this: a real one uses only the low 38 bits. */
 #define KEY_NONE UINT64_MAX
 
 /* A trait of 0, 1/3, 2/3 or 1 as the step 0..3. */
@@ -222,6 +225,9 @@ static uint64_t key_of(const SpriteBody *b, int action, int frame)
     key = key << 2 | (b->base & 3u);
     key = key << 3 | ((unsigned)action & 7u);
     key = key << 6 | ((unsigned)frame & 63u);
+    /* Wings spread or folded: one more bit, at the top (38 bits in all). The
+     * sea and air lines need none, the species already says them. */
+    key |= (uint64_t)(t->aloft > 0.5f) << 37;
     return key;
 }
 

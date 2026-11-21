@@ -313,6 +313,10 @@ Settings settings_default(void)
         .plankton_winter = 0.4f,
         .founders_per_sea_cell = 0.05f,
         .birth_per_plankton = 0.2f,
+        .wing_dodge = 0.35f,
+        .wings_upkeep = 0.04f,
+        .flight_step_cost = 0.15f,
+        .birth_per_air = 0.25f,
     };
     return s;
 }
@@ -564,6 +568,13 @@ static const SettingInfo TABLE[] = {
     FLOAT_ROW(birth_per_plankton, 0, BIG, "sea births slow as sea bodies alive "
                                           "near this many per plankton-rich cell "
                                           "(0: off)"),
+    FLOAT_ROW(wing_dodge, 0, 1, "share of hits full wings dodge"),
+    FLOAT_ROW(wings_upkeep, 0, BIG, "upkeep of full wings"),
+    FLOAT_ROW(flight_step_cost, 0, BIG, "energy a step in the air costs per "
+                                        "unit of size, on top of move_cost"),
+    FLOAT_ROW(birth_per_air, 0, BIG, "flyer births slow as flyers alive near "
+                                     "this share of the land's and the sea's "
+                                     "room together (0: off)"),
 };
 
 int settings_count(void)

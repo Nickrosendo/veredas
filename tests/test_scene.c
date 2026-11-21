@@ -459,6 +459,12 @@ static void test_known_world_pixels(void)
         canvas_fill(&c, magenta);
         scene_draw_world(&sc, &c, &cam, &s, 0.5f, 1000, 1000, 0, 0);
         hashes[level] = hash_canvas(&c);
+        const char *out = getenv("VEREDAS_WRITE_PICTURES"); /* a folder, to look at */
+        if (out != NULL) {
+            char path[512];
+            snprintf(path, sizeof(path), "%s/known-%d.ppm", out, level);
+            CHECK(canvas_write_ppm(&c, path));
+        }
         /* The pinned pictures are the public build's: a pack with frames of
          * its own (make CONTENT=...) draws its species differently, so only
          * the checks after the pin apply to it (test_lab.c checks that the
@@ -537,10 +543,14 @@ static void test_known_world_pixels(void)
          * Re-pinned for the surface look of sea animals (levels step 1,
          * 2026-11-20): no shadow, no walking bob, a sway, their pixels mixed
          * with the water; the three map levels move, the World zoom does not.
-         * Old and new pictures written out and compared side by side. */
+         * Old and new pictures written out and compared side by side.
+         * Re-pinned for the air (rules 3, 2026-11-21): the wing gene and four
+         * more senses re-roll every genome, flyers go up and are drawn
+         * raised over everything with a small shadow; every level moves.
+         * Written out (VEREDAS_WRITE_PICTURES) and looked at. */
         static const uint64_t EXPECTED[CAMERA_ZOOMS] = {
-            0x965fb1d45bd6978du, 0x52b3c342f0de7c91u,
-            0x5e632bc73d8d3a07u, 0x5548508875eb4585u,
+            0x6ca8d3c611dbef35u, 0xf8369f53e3c26f72u,
+            0xa9122a580b90bcbbu, 0x853705c901b743edu,
         };
         if (pinned && hashes[level] != EXPECTED[level]) {
             printf("level %d: 0x%llxu\n", level,
@@ -1580,9 +1590,11 @@ static void test_underwater_pixels(void)
     bool pinned = content_get()->art_set_count == 0;
 #ifndef _WIN32
     /* Linux only, as test_known_world_pixels. Pinned 2026-11-20 (levels step
-     * 2), after the three pictures were written out and looked at. */
+     * 2), after the three pictures were written out and looked at. Re-pinned
+     * for the air (rules 3, 2026-11-21): another world, flyers up not drawn
+     * from underwater; written out and looked at. */
     static const uint64_t EXPECTED[3] = {
-        0xc6b0b234c4573763u, 0x6fe92c71cd60fc5cu, 0x1fab5987f11d1298u,
+        0x5144c60529f96bbdu, 0xa733250f1d6331bcu, 0x676c78bd765b8d9bu,
     };
     for (int zoom = 0; zoom < 3; zoom++) {
         if (pinned && hashes[zoom] != EXPECTED[zoom]) {
@@ -2527,6 +2539,77 @@ static void test_paused_scenery_steps_half_as_often(void)
     CHECK(scene_ambient_frame(1000) != scene_ambient_frame(1100));
 }
 
+/* The same world from the sky, centred on its first flyer up in the air: the
+ * ground hazed, walkers as faint shapes, flyers clear and raised, clouds at
+ * Close and Normal (levels step 3). Going up and back down draws the surface
+ * exactly as before. Pinned after the pictures were written out and looked at. */
+static void test_sky_pixels(void)
+{
+    Settings set = settings_default();
+    Sim s;
+    CHECK(sim_init(&s, &set, 3, 64, 32));
+    Scene sc;
+    CHECK(scene_init(&sc, &s));
+    for (int t = 0; t < 300; t++) {
+        sim_step(&s);
+        scene_update(&sc, &s, 10, 0);
+    }
+    int bird = -1;
+    for (int i = 0; i < s.pool.capacity && bird < 0; i++) {
+        if (s.pool.items[i].alive && s.pool.items[i].up > 0) {
+            bird = i;
+        }
+    }
+    CHECK(bird >= 0);
+    Canvas c;
+    CHECK(canvas_init(&c, VIEW_W, VIEW_H));
+    Camera cam;
+    camera_init(&cam, 64, 32, VIEW_W, VIEW_H);
+    if (bird >= 0) {
+        camera_centre_on(&cam, (float)s.pool.items[bird].x + 0.5f,
+                         (float)s.pool.items[bird].y + 0.5f);
+    }
+    const char *out = getenv("VEREDAS_WRITE_PICTURES");
+    uint64_t hashes[3];
+    for (int zoom = CAMERA_CLOSE; zoom <= CAMERA_FAR; zoom++) {
+        cam.zoom = zoom;
+        cam.level = LEVEL_SURFACE;
+        scene_draw_world(&sc, &c, &cam, &s, 0.5f, 1000, 1000, 0, 0);
+        uint64_t surface = hash_canvas(&c);
+        cam.level = LEVEL_SKY;
+        scene_draw_world(&sc, &c, &cam, &s, 0.5f, 1000, 1000, 0, 0);
+        hashes[zoom] = hash_canvas(&c);
+        CHECK(hashes[zoom] != surface);
+        if (out != NULL) {
+            char path[512];
+            snprintf(path, sizeof(path), "%s/sky-%d.ppm", out, zoom);
+            CHECK(canvas_write_ppm(&c, path));
+        }
+        cam.level = LEVEL_SURFACE;
+        scene_draw_world(&sc, &c, &cam, &s, 0.5f, 1000, 1000, 0, 0);
+        CHECK(hash_canvas(&c) == surface);
+    }
+    bool pinned = content_get()->art_set_count == 0;
+#ifndef _WIN32
+    /* Pinned 2026-11-21 (levels step 3), after the three pictures were
+     * written out and looked at. */
+    static const uint64_t EXPECTED[3] = {
+        0x23fe9d935dc3402cu, 0xa7cc2a8951333a9bu, 0x8f00ec180d1dcde6u,
+    };
+    for (int zoom = 0; zoom < 3; zoom++) {
+        if (pinned && hashes[zoom] != EXPECTED[zoom]) {
+            printf("sky zoom %d: 0x%llxu\n", zoom, (unsigned long long)hashes[zoom]);
+        }
+        CHECK(!pinned || hashes[zoom] == EXPECTED[zoom]);
+    }
+#else
+    (void)pinned;
+#endif
+    canvas_free(&c);
+    scene_free(&sc);
+    sim_free(&s);
+}
+
 int main(void)
 {
     /* Tests register this one themselves: the real program never has it. */
@@ -2553,6 +2636,7 @@ int main(void)
     test_known_world_pixels();
     test_bodies_underwater();
     test_underwater_pixels();
+    test_sky_pixels();
     test_ground_layer_refreshes_when_it_should();
     test_water_only_redraw_matches_whole();
     test_layout_family_area();

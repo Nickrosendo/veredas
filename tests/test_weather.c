@@ -118,25 +118,37 @@ static void test_events_have_effects(void)
     CHECK(food[WEATHER_WARM_YEAR] > food[WEATHER_NONE]);
 }
 
-/* A hard winter makes cold costlier: creatures spend more energy, so fewer of
- * them are alive a season later than with clear weather. */
+/* A hard winter makes cold costlier: once it has begun, the same creatures on
+ * the same ground pay more for the cold than the year's own settings would
+ * charge them, in sum over every creature alive. (It used to count who was
+ * alive half a year on, with and without one. Since the air half, flyers over
+ * water escape the cold and crowding moves the count either way: on eight
+ * seeds the hard winter left fewer alive on three only, and on the sea half's
+ * build on five; the population was never a clear sign of this rule.) */
 static void test_hard_winter_costs_more(void)
 {
     Settings set = settings_default();
-    uint64_t end = (uint64_t)set.ticks_per_year / 2u;
-    int alive[2];
-    for (int k = 0; k < 2; k++) {
-        Sim s;
-        CHECK(sim_init(&s, &set, 5, 128, 64));
-        if (k == 1) {
-            CHECK(actions_weather(&s, WEATHER_HARD_WINTER));
-        }
-        run_to(&s, end);
-        alive[k] = s.pool.count;
-        sim_free(&s);
+    Sim s;
+    CHECK(sim_init(&s, &set, 5, 128, 64));
+    CHECK(actions_weather(&s, WEATHER_HARD_WINTER));
+    uint64_t limit = (uint64_t)set.ticks_per_year;
+    while (!weather_active(&s.weather, s.tick) && s.tick < limit) {
+        sim_step(&s);
     }
-    printf("alive half a year on: clear %d, hard winter %d\n", alive[0], alive[1]);
-    CHECK(alive[1] < alive[0]);
+    CHECK(weather_active(&s.weather, s.tick));
+    Settings hard = weather_settings(&set, &s.weather, s.tick);
+    double clear_cost = 0.0, hard_cost = 0.0;
+    for (int i = 0; i < s.pool.capacity; i++) {
+        const Creature *c = &s.pool.items[i];
+        if (c->alive) {
+            clear_cost += creature_region_cost(&s.world, c, &set);
+            hard_cost += creature_region_cost(&s.world, c, &hard);
+        }
+    }
+    printf("the cold's cost in a hard winter: clear %.1f, hard %.1f\n", clear_cost,
+           hard_cost);
+    CHECK(hard_cost > 1.2 * clear_cost);
+    sim_free(&s);
 }
 
 /* How much of an event is left, and its label in season words. */

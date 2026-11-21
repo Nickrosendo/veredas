@@ -302,8 +302,10 @@ static void test_lab_pixels(void)
      * Re-pinned 2026-11-14: the lab's title in the new fixed font (text.h).
      * Re-pinned 2026-11-18: the four sea animals, drawn by the skeleton, in
      * their land roles' rows (five columns); looked at by eye, his approval
-     * to come. */
-    static const uint64_t EXPECTED = 0x20716f6c0618cb4eu;
+     * to come. Re-pinned 2026-11-21: the four birds, drawn by the
+     * skeleton, in the runners', watchers' and plant-eaters' rows; looked at
+     * by eye resting and flying (walk), his approval to come. */
+    static const uint64_t EXPECTED = 0xff4913346800428au;
     if (h != EXPECTED) {
         printf("lab: 0x%llxu\n", (unsigned long long)h);
     }

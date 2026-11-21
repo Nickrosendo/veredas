@@ -112,8 +112,10 @@ static void draw_trait(Ui *u, Canvas *c, int x, int y, const Sandbox *b)
     row += ROW;
     at = x + PAD;
     at += word_button(u, c, at, row, "Give", "give it (Enter)", '\r', false) + 8;
-    word_button(u, c, at, row, "s sea body", "a sea body, or a land body back (s)",
-                's', false);
+    at += word_button(u, c, at, row, "s sea body",
+                      "a sea body, or a land body back (s)", 's', false) + 8;
+    word_button(u, c, at, row, "w wings", "wings to fly, or half-wings back (w)",
+                'w', false);
 }
 
 static void draw_weather(Ui *u, Canvas *c, int x, int y)

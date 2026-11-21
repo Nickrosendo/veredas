@@ -142,8 +142,13 @@ int pool_spawn(Pool *p, World *w, int x, int y)
 
 int pool_spawn_body(Pool *p, World *w, int x, int y, bool sea)
 {
+    return pool_spawn_as(p, w, x, y, (BodyKind){sea, false});
+}
+
+int pool_spawn_as(Pool *p, World *w, int x, int y, BodyKind body)
+{
     int cell = world_idx(w, x, y);
-    if (p->free_head < 0 || !world_walkable_for(w, cell, sea) ||
+    if (p->free_head < 0 || !world_ground_for(w, cell, body.sea, body.flyer) ||
         w->occupant[cell] >= 0) {
         return -1;
     }
@@ -187,7 +192,9 @@ void pool_kill(Pool *p, World *w, int idx, const Settings *s, DeathCause cause)
     float left = c->energy > 0.0f ? c->energy : 0.0f;
     carrion_add(w, cell, s->body_energy * creature_size(c, s) + left,
                 c->level);
-    w->occupant[cell] = -1;
+    /* A flyer that dies up falls: its sky cell is freed, its body lies on the
+     * ground below, whatever the ground is. */
+    creature_grid(w, c)[cell] = -1;
     c->alive = false;
     /* Put the slot at the front of the free list: the next spawn reuses
      * it. Its old contents stay until then, but alive is false. */
@@ -216,11 +223,52 @@ bool creature_sea_body(const Creature *c)
     return c->genome.g[GENE_SWIM] >= SEA_FROM;
 }
 
-/* Whether a body could step onto this cell: ground that body can stand on,
- * with nobody on it. sea says which body (creature_sea_body). */
-static bool cell_is_free(const World *w, int cell, bool sea)
+bool creature_flyer(const Creature *c)
 {
-    return world_walkable_for(w, cell, sea) && w->occupant[cell] < 0;
+    return c->genome.g[GENE_WINGS] >= AIR_FROM;
+}
+
+BodyKind genome_body(const Genome *g)
+{
+    return (BodyKind){g->g[GENE_SWIM] >= SEA_FROM, g->g[GENE_WINGS] >= AIR_FROM};
+}
+
+BodyKind creature_body_type(const Creature *c)
+{
+    return genome_body(&c->genome);
+}
+
+int creature_habitat(const Creature *c)
+{
+    if (creature_flyer(c)) {
+        return HABITAT_AIR;
+    }
+    return creature_sea_body(c) ? HABITAT_SEA : HABITAT_LAND;
+}
+
+int32_t *creature_grid(const World *w, const Creature *c)
+{
+    /* w is a pointer to a const World, so its fields cannot be changed through
+     * it; but the fields are pointers, and what they point at is not const.
+     * Returning one hands out memory the caller may write, which is meant. */
+    return c->up > 0 ? w->sky[c->up - 1] : w->occupant;
+}
+
+/* Whether a body could step onto this cell on the ground: ground that body can
+ * stand on, with nobody on it. */
+static bool cell_is_free(const World *w, int cell, BodyKind body)
+{
+    return world_ground_for(w, cell, body.sea, body.flyer) && w->occupant[cell] < 0;
+}
+
+/* Whether c could step onto this cell where it is now: on the ground as
+ * cell_is_free says, in the air onto any sky cell with nobody on it. */
+static bool can_enter(const World *w, const Creature *c, int cell)
+{
+    if (c->up > 0) {
+        return w->sky[c->up - 1][cell] < 0;
+    }
+    return cell_is_free(w, cell, creature_body_type(c));
 }
 
 static float clamp01(float v)
@@ -314,7 +362,8 @@ float creature_upkeep_cost(const Creature *c, const Settings *s)
            s->territory_upkeep * c->genome.g[GENE_TERRITORY] +
            s->night_eye_upkeep * c->genome.g[GENE_NIGHT_EYES] +
            s->learn_upkeep * c->genome.g[GENE_LEARN] +
-           s->place_memory_upkeep * c->genome.g[GENE_PLACE_MEMORY];
+           s->place_memory_upkeep * c->genome.g[GENE_PLACE_MEMORY] +
+           s->wings_upkeep * c->genome.g[GENE_WINGS];
 }
 
 int creature_place_span(const Creature *c, const Settings *s)
@@ -426,8 +475,8 @@ int creature_crowd(const World *w, const Creature *c, int radius)
 
 float creature_crowd_cost(const World *w, const Creature *c, const Settings *s)
 {
-    if (s->crowd_upkeep <= 0.0f) {
-        return 0.0f; /* off: spares looking at the cells at all */
+    if (s->crowd_upkeep <= 0.0f || c->up > 0) {
+        return 0.0f; /* off, or up in the open air: no crowd to count */
     }
     int over = creature_crowd(w, c, s->crowd_radius) - s->crowd_free;
     return over > 0 ? s->crowd_upkeep * (float)over : 0.0f;
@@ -690,7 +739,12 @@ static void sense_view(const World *w, const Pool *p, const Creature *c,
      * wide either way, wrap_near is enough; on a smaller one world_idx does it. */
     bool small_map = reach >= w->w || reach >= w->h;
     bool sea = creature_sea_body(c);
+    /* From up in the air nothing on the ground hides anything: rock and
+     * creatures below stop only a walker's lines. */
+    bool above = c->up > 0;
+    const int32_t *sky = w->sky[SKY_LOW];
     float plants = 0.0f;
+    float aloft = 0.0f; /* the clearest flyer up seen so far */
     Seen seen = {0.0f, -1};
     for (int d = 1; d <= reach; d++) {
         bool any_open = false;
@@ -710,7 +764,7 @@ static void sense_view(const World *w, const Pool *p, const Creature *c,
             int y = c->y + d * STEP_Y[heading] + offset * STEP_Y[side];
             int cell = small_map ? world_idx(w, x, y)
                                  : wrap_near(y, w->h) * w->w + wrap_near(x, w->w);
-            if (w->terrain[cell] == TERRAIN_ROCK) {
+            if (w->terrain[cell] == TERRAIN_ROCK && !above) {
                 open[j] = false;
                 continue;
             }
@@ -718,7 +772,11 @@ static void sense_view(const World *w, const Pool *p, const Creature *c,
             if (other >= 0 && &p->items[other] == c) {
                 other = -1; /* itself, come round the wrap */
             }
-            if (other >= 0) {
+            int bird = sky[cell];
+            if (bird >= 0 && &p->items[bird] == c) {
+                bird = -1;
+            }
+            if (other >= 0 && !above) {
                 open[j] = false; /* the creature blocks what is behind it */
             } else {
                 any_open = true;
@@ -731,7 +789,7 @@ static void sense_view(const World *w, const Pool *p, const Creature *c,
             bool food = sea && w->terrain[cell] == TERRAIN_WATER
                             ? w->plankton[cell] >= PLANKTON_STEP
                             : plant_has_food(w, cell, s, p->season);
-            if (!food && other < 0) {
+            if (!food && other < 0 && bird < 0) {
                 continue; /* nothing here to see: no need for its clarity */
             }
             /* sqrtf is the float square root; d and offset are ints, converted
@@ -740,6 +798,9 @@ static void sense_view(const World *w, const Pool *p, const Creature *c,
             float clear = view_clarity(distance, sight);
             if (food) {
                 plants += clear;
+            }
+            if (bird >= 0 && clear > aloft) {
+                aloft = clear; /* a flyer against the sky: no ground to hide in */
             }
             if (other >= 0) {
                 /* A creature matching the ground is seen less clearly, though
@@ -755,6 +816,7 @@ static void sense_view(const World *w, const Pool *p, const Creature *c,
         }
     }
     out[VIEW_PLANT] = plants / (plants + s->view_half);
+    out[VIEW_ALOFT] = aloft;
     if (seen.idx >= 0) {
         describe_seen(w, p, c, s, seen, out);
     }
@@ -1020,6 +1082,7 @@ static void sense_all(const World *w, const Pool *p, int idx,
         out->v[SENSE_MEMORY + m] = c->memory[m];
     }
     sense_place(w, p, c, s, out);
+    out->v[SENSE_ALOFT] = c->up > 0 ? 1.0f : 0.0f;
 
     /* Asleep, it feels only its own body and the time of year: everything
      * outside it (the way ahead, who is beside it, the three views, food in
@@ -1029,7 +1092,7 @@ static void sense_all(const World *w, const Pool *p, int idx,
     }
     /* The same test act_move makes, so the sense cannot disagree with walking. */
     int ahead = cell_towards(w, c->x, c->y, c->heading);
-    out->v[SENSE_BLOCKED] = cell_is_free(w, ahead, creature_sea_body(c)) ? 0.0f : 1.0f;
+    out->v[SENSE_BLOCKED] = can_enter(w, c, ahead) ? 0.0f : 1.0f;
     sense_neighbours(w, p, c, s, out);
     hear_calls(w, p, c, s, out);
 
@@ -1056,8 +1119,7 @@ static uint8_t way_around(const World *w, const Creature *c, Rng *r)
     const int tries[3] = {first_side, 4 - first_side, 2};
     for (int k = 0; k < 3; k++) {
         uint8_t heading = turned(c->heading, tries[k]);
-        if (cell_is_free(w, cell_towards(w, c->x, c->y, heading),
-                         creature_sea_body(c))) {
+        if (can_enter(w, c, cell_towards(w, c->x, c->y, heading))) {
             return heading;
         }
     }
@@ -1076,18 +1138,29 @@ static void act_move(World *w, Creature *c, int idx, const Settings *s, Rng *r)
     c->move_points -= 1.0f;
     c->energy -= s->move_cost;
     int from = world_idx(w, c->x, c->y);
+    /* A flyer on the ground takes off when the air above it is free: moving is
+     * what takes it up (the water and air design, 5.4). With the air above
+     * taken it walks, as any body would. */
+    if (c->up == 0 && creature_flyer(c) && w->sky[SKY_LOW][from] < 0) {
+        w->occupant[from] = -1;
+        w->sky[SKY_LOW][from] = idx;
+        c->up = 1;
+    }
     int to = cell_towards(w, c->x, c->y, c->heading);
-    bool sea = creature_sea_body(c);
-    if (!cell_is_free(w, to, sea)) {
+    if (!can_enter(w, c, to)) {
         c->heading = way_around(w, c, r);
         to = cell_towards(w, c->x, c->y, c->heading);
-        if (!cell_is_free(w, to, sea)) {
+        if (!can_enter(w, c, to)) {
             return;
         }
     }
-    c->energy -= creature_step_extra(w, c, to, s);
-    w->occupant[from] = -1;
-    w->occupant[to] = idx;
+    /* In the air the ground's price does not apply; the air's is by size, so a
+     * winged lion is possible but dear and a flying elephant starves. */
+    c->energy -= c->up > 0 ? s->flight_step_cost * creature_size(c, s)
+                           : creature_step_extra(w, c, to, s);
+    int32_t *grid = creature_grid(w, c);
+    grid[from] = -1;
+    grid[to] = idx;
     c->x = to % w->w;
     c->y = to / w->w;
 }
@@ -1096,7 +1169,10 @@ int creature_attack_target(const World *w, const Pool *p, int idx,
                            const Settings *s)
 {
     const Creature *c = &p->items[idx];
-    int other = w->occupant[cell_towards(w, c->x, c->y, c->heading)];
+    /* From the air a strike aims at whoever is on the ground right below. */
+    int aim = c->up > 0 ? world_idx(w, c->x, c->y)
+                        : cell_towards(w, c->x, c->y, c->heading);
+    int other = w->occupant[aim];
     /* other == idx only in a world one cell across, where ahead wraps to itself. */
     if (other < 0 || other == idx || p->items[other].health <= 0.0f) {
         return -1;
@@ -1177,6 +1253,16 @@ static float hit_damage(const Creature *c, const Creature *target, float a,
     return s->bite_damage * a * raised * (left > 0.0f ? left : 0.0f);
 }
 
+/* Whether wings make a hit that would land miss: chance wing_dodge times the
+ * wing gene, the mirror of armour (which takes a share off a hit that lands).
+ * The random number is drawn only when a dodge is possible at all, so a world
+ * with wing_dodge 0 draws what it did without wings. */
+static bool dodged(const Creature *target, const Settings *s, Rng *r)
+{
+    float chance = s->wing_dodge * target->genome.g[GENE_WINGS];
+    return chance > 0.0f && rng_unit(r) < chance;
+}
+
 /* A bitten sleeper wakes: it rests with nothing left to hold, so its brain
  * chooses again on its next turn, this tick or the next. A creature already
  * awake is left doing what it was doing, so a second hit changes nothing. */
@@ -1196,21 +1282,21 @@ static void wake(Creature *c)
  * attacker gains nothing directly. chosen: the brain chose it (ACT_ATTACK), as
  * against the territory drive; only chosen hits are told to the tactic watch,
  * which must never take a reflex for a tactic. */
-static void act_attack(const World *w, Pool *p, int idx, const Settings *s,
-                       Rng *r, bool chosen)
+static int act_attack(const World *w, Pool *p, int idx, const Settings *s,
+                      Rng *r, bool chosen)
 {
     Creature *c = &p->items[idx];
     c->energy -= s->attack_cost;
     int slot = creature_attack_target(w, p, idx, s);
     if (slot < 0) {
-        return;
+        return -1;
     }
     Creature *target = &p->items[slot];
     float a = creature_size(c, s);
     int others = creature_others_recently(target, c->id, p->now, s->gang_window);
     float chance = attack_odds(a, creature_size(target, s), s->attack_steepness,
                                others, s->gang_bonus);
-    if (rng_unit(r) < chance) {
+    if (rng_unit(r) < chance && !dodged(target, s, r)) {
         float before = target->health;
         target->health -= hit_damage(c, target, a, s);
         target->hurt_tick += before - target->health;
@@ -1226,6 +1312,7 @@ static void act_attack(const World *w, Pool *p, int idx, const Settings *s,
         note_hit(target, c->id, p->now);
         wake(target);
     }
+    return slot;
 }
 
 /* How much one bite of carrion on cell i would take. A larger mouth takes more. */
@@ -1541,6 +1628,14 @@ static void act_bite(World *w, Pool *p, int idx, const Settings *s, Rng *r)
         c->energy -= s->bite_empty_cost;
         break;
     }
+    if (creature_flyer(c) && c->energy > before) {
+        /* Measures for the air verdict, read by no rule. */
+        if (choice.kind == BITE_CARRION) {
+            p->air_meals_meat++;
+        } else if (choice.kind == BITE_PLANT) {
+            p->air_meals_plant++;
+        }
+    }
     remember_meal(c, c->energy - before, choice.cell, w, p->now, s);
 }
 
@@ -1600,13 +1695,22 @@ int creature_nearest_cell_for(const World *w, int x, int y, bool sea, int radius
     if (world_walkable_for(w, own, sea)) {
         return own; /* where it stands already suits that body */
     }
+    return creature_nearest_ground(w, x, y, (BodyKind){sea, false}, radius);
+}
+
+int creature_nearest_ground(const World *w, int x, int y, BodyKind body, int radius)
+{
+    int own = world_idx(w, x, y);
+    if (cell_is_free(w, own, body)) {
+        return own;
+    }
     for (int d = 1; d <= radius; d++) {
         /* A ring of side 2d + 1 has 8d cells. */
         for (int k = 0; k < 8 * d; k++) {
             int dx, dy;
             ring_cell(d, k, &dx, &dy);
             int cell = world_idx(w, x + dx, y + dy);
-            if (cell_is_free(w, cell, sea)) {
+            if (cell_is_free(w, cell, body)) {
                 return cell;
             }
         }
@@ -1680,12 +1784,12 @@ static int find_partner(const World *w, const Pool *p, const Creature *c,
 /* A free cell beside c that a body (sea or land) can stand on, looking round
  * from start; -1 for none. The body is the child's, not c's: a sea child of
  * land parents is born in the water beside them. */
-static int free_cell_around(const World *w, const Creature *c, int start, bool sea)
+static int free_cell_around(const World *w, const Creature *c, int start, BodyKind body)
 {
     for (int k = 0; k < 8; k++) {
         int dir = (start + k) % 8;
         int cell = world_idx(w, c->x + AROUND_X[dir], c->y + AROUND_Y[dir]);
-        if (cell_is_free(w, cell, sea)) {
+        if (cell_is_free(w, cell, body)) {
             return cell;
         }
     }
@@ -1716,6 +1820,11 @@ static void make_child(Creature *child, Creature *a, Creature *b,
     child->sea_line = (uint8_t)((a->sea_line || b->sea_line ||
                                  (sea && !creature_sea_body(a) &&
                                   !creature_sea_body(b)))
+                                    ? 1
+                                    : 0);
+    bool flyer = creature_flyer(child);
+    child->air_line = (uint8_t)((a->air_line || b->air_line ||
+                                 (flyer && !creature_flyer(a) && !creature_flyer(b)))
                                     ? 1
                                     : 0);
     child->health = creature_max_health(child, s); /* needs the genes above */
@@ -1792,15 +1901,25 @@ static bool crowd_allows_birth(const World *w, const Pool *p, const Creature *a,
     }
     /* Each habitat has its own brake: a sea body's pair counts only the sea
      * bodies against the plankton, a land pair only the land bodies against
-     * the plants. A pair on the shore goes by a's body. */
-    if (creature_sea_body(a)) {
+     * the plants, a flyers' pair only the flyers against a share of both
+     * rooms together, since a flyer can feed over either. A mixed pair goes by
+     * a's body. */
+    int habitat = creature_habitat(a);
+    if (habitat == HABITAT_AIR) {
+        float room = s->birth_per_plant * (float)p->plants +
+                     s->birth_per_plankton * (float)p->plankton_rich;
+        if (s->birth_per_air > 0.0f &&
+            !room_on_the_land(p->air_alive, s->birth_per_air * room, r)) {
+            return false;
+        }
+    } else if (habitat == HABITAT_SEA) {
         if (s->birth_per_plankton > 0.0f &&
             !room_on_the_land(p->sea_alive,
                               s->birth_per_plankton * (float)p->plankton_rich, r)) {
             return false;
         }
     } else if (s->birth_per_plant > 0.0f &&
-               !room_on_the_land(p->count - p->sea_alive,
+               !room_on_the_land(p->count - p->sea_alive - p->air_alive,
                                  s->birth_per_plant * (float)p->plants, r)) {
         return false;
     }
@@ -1835,15 +1954,15 @@ static int act_mate(World *w, Pool *p, int idx, const Settings *s, Rng *r)
     uint8_t heading = (uint8_t)rng_below(r, HEADING_COUNT);
     Genome genes;
     genome_cross(&genes, &a->genome, &b->genome, r, s);
-    bool sea = genes.g[GENE_SWIM] >= SEA_FROM;
-    int cell = free_cell_around(w, a, start, sea);
+    BodyKind body = genome_body(&genes);
+    int cell = free_cell_around(w, a, start, body);
     if (cell < 0) {
-        cell = free_cell_around(w, b, start, sea);
+        cell = free_cell_around(w, b, start, body);
     }
     if (cell < 0) {
         return -1; /* no room for this body: nobody pays, they can try again */
     }
-    int child_idx = pool_spawn_body(p, w, cell % w->w, cell / w->w, sea);
+    int child_idx = pool_spawn_as(p, w, cell % w->w, cell / w->w, body);
     if (child_idx < 0) {
         /* The cell suits the body and is free, so only a full pool said no. */
         p->births_refused++;
@@ -1851,8 +1970,11 @@ static int act_mate(World *w, Pool *p, int idx, const Settings *s, Rng *r)
     }
     Creature *child = &p->items[child_idx];
     make_child(child, a, b, &genes, heading, s);
-    if (sea) {
+    int habitat = creature_habitat(child);
+    if (habitat == HABITAT_SEA) {
         p->sea_alive++;
+    } else if (habitat == HABITAT_AIR) {
+        p->air_alive++;
     }
     record_birth(p, child, a, b);
     /* Read after the crossing: a child can differ from both parents. */
@@ -1892,6 +2014,96 @@ static bool territorial_drive(const World *w, Pool *p, int idx, const Settings *
     return false;
 }
 
+/* Comes down from the air onto the ground right below, if nobody is there and
+ * a flyer may stand there: soil, shallows, rock, and deep water for a sea body
+ * or, with dive, for anyone (a dive to bite). True when it came down. */
+static bool come_down(World *w, Pool *p, Creature *c, int idx, bool dive)
+{
+    int cell = world_idx(w, c->x, c->y);
+    bool ground = world_ground_for(w, cell, creature_sea_body(c), true) ||
+                  (dive && w->terrain[cell] == TERRAIN_WATER);
+    if (!ground || w->occupant[cell] >= 0) {
+        return false;
+    }
+    w->sky[c->up - 1][cell] = -1;
+    w->occupant[cell] = idx;
+    c->up = 0;
+    p->air_landings++; /* a measure, read by no rule */
+    return true;
+}
+
+/* After a strike from the air on the creature in slot prey: the flyer comes
+ * down onto a free cell beside it that a flyer may stand on, deep water
+ * included, looking round from the way it faces; with none free it stays up. */
+static void land_beside(World *w, Pool *p, Creature *c, int idx, int prey)
+{
+    const Creature *t = &p->items[prey];
+    int start = 2 * c->heading;
+    for (int k = 0; k < 8; k++) {
+        int dir = (start + k) % 8;
+        int cell = world_idx(w, t->x + AROUND_X[dir], t->y + AROUND_Y[dir]);
+        bool ground = world_ground_for(w, cell, creature_sea_body(c), true) ||
+                      w->terrain[cell] == TERRAIN_WATER;
+        if (ground && w->occupant[cell] < 0) {
+            w->sky[c->up - 1][world_idx(w, c->x, c->y)] = -1;
+            w->occupant[cell] = idx;
+            c->x = cell % w->w;
+            c->y = cell / w->w;
+            c->up = 0;
+            p->air_landings++;
+            return;
+        }
+    }
+}
+
+/* What action a does to a creature up in the air (the water and air design,
+ * 5.4). A bite or an attack aims at the ground below: a hunter's strike there
+ * brings it down beside its prey, and a plain bite brings it down to eat.
+ * Mating, resting and sleeping bring it down. Where it cannot come down, mating
+ * fails, and resting or sleeping is a rest whose brain chooses again next tick:
+ * nothing sleeps in the air. Returns true when the tick is used up here, false
+ * when the action goes on as usual (it came down, or it moves or turns). */
+static bool act_in_air(World *w, Pool *p, int idx, Action a, const Settings *s,
+                       Rng *r)
+{
+    Creature *c = &p->items[idx];
+    switch (a.kind) {
+    case ACT_BITE:
+    case ACT_ATTACK: {
+        bool strike = a.kind == ACT_ATTACK ||
+                      (s->bite_strikes && creature_is_hunter(c) &&
+                       creature_attack_target(w, p, idx, s) >= 0);
+        if (strike) {
+            int prey = act_attack(w, p, idx, s, r, true);
+            if (prey >= 0) {
+                land_beside(w, p, c, idx, prey);
+            }
+            return true;
+        }
+        if (come_down(w, p, c, idx, true)) {
+            return false; /* bites from the ground, this same tick */
+        }
+        c->energy -= s->bite_empty_cost; /* nothing in reach from up here */
+        return true;
+    }
+    case ACT_MATE:
+    case ACT_REST:
+    case ACT_SLEEP:
+        if (come_down(w, p, c, idx, false)) {
+            return false;
+        }
+        if (a.kind != ACT_MATE) {
+            c->current.kind = ACT_REST;
+            c->current.hold = 1;
+            c->hold_left = 0;
+            c->hibernating = 0;
+        }
+        return true;
+    default:
+        return false;
+    }
+}
+
 int creature_act(World *w, Pool *p, int idx, Action a, const Settings *s,
                  Rng *r)
 {
@@ -1903,22 +2115,30 @@ int creature_act(World *w, Pool *p, int idx, Action a, const Settings *s,
     if (c->move_points > 1.0f) {
         c->move_points = 1.0f;
     }
+    /* Up in the air, the action may bring it down first, or use up the tick
+     * there (act_in_air). */
+    if (c->up > 0 && act_in_air(w, p, idx, a, s, r)) {
+        return -1;
+    }
     /* Deep sleep: nothing else happens, not even the season's drive or the
      * territorial one below. The seed above still travels and drops, and move
      * points still build up, as they do whatever the action. */
     if (a.kind == ACT_SLEEP) {
         return -1;
     }
+    /* The two drives below act only on the ground: up in the air there is
+     * nobody beside it to mate with or to drive off. */
+    bool down = c->up == 0;
     /* The season's drive: no choice needed. ACT_MATE below would only try a
      * second time in one tick, so it is left to the switch. */
-    if (p->in_season && a.kind != ACT_MATE) {
+    if (down && p->in_season && a.kind != ACT_MATE) {
         int child = act_mate(w, p, idx, s, r);
         if (child >= 0) {
             return child;
         }
     }
     /* A creature that has chosen to mate is not turned from it by this. */
-    if (a.kind != ACT_MATE && territorial_drive(w, p, idx, s, r)) {
+    if (down && a.kind != ACT_MATE && territorial_drive(w, p, idx, s, r)) {
         return -1;
     }
     switch (a.kind) {
@@ -1982,6 +2202,9 @@ static void grow(Creature *c, const Settings *s)
  * less, and a hibernating one far less. Ageing itself goes on at the same pace. */
 static float upkeep_share(const Creature *c, const Settings *s)
 {
+    if (c->up > 0) {
+        return 1.0f; /* a body holding itself up in the air never rests */
+    }
     if (creature_asleep(c) && c->hibernating) {
         return s->sleep_upkeep;
     }

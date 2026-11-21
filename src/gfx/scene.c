@@ -337,6 +337,10 @@ static GroundRamp base_ramp(const Sim *s, int i)
 static const GroundRamp SEA_SAND = {{{120, 136, 116}, {146, 160, 130}, {172, 182, 146}}};
 static const GroundRamp SEA_DEEP = {{{18, 52, 64}, {26, 68, 78}, {36, 84, 90}}};
 static const Colour SHORE_DIM = {10, 20, 34};
+/* The haze the surface fades to seen from the sky, and the colour a walker
+ * there is drawn in. */
+static const Colour SKY_HAZE = {158, 182, 204};
+static const Colour SKY_SHAPE = {78, 92, 112};
 
 /* The colours a cell's tile is drawn in: its ground's, with a little of its
  * region's colour. Underwater, water cells are the sea floor and land is dim. */
@@ -354,6 +358,9 @@ static GroundRamp cell_ramp(const Sim *s, int i, int level)
     }
     if (under && !wet) {
         g = ramp_ground_mix(g, SHORE_DIM, SCENE_SHORE_DIM);
+    }
+    if (level == LEVEL_SKY) {
+        g = ramp_ground_mix(g, SKY_HAZE, SCENE_SKY_DIM);
     }
     return g;
 }
@@ -1316,6 +1323,50 @@ static void draw_sea_overlays(Scene *sc, Canvas *c, const Overlay *o, const Came
     }
 }
 
+/* A cloud wisp over a few cells (picked by a hash, so the same cells every
+ * time): two soft white ellipses, wide and flat, drifting slowly east and
+ * back and swelling and thinning, like the sea's light patches but larger. */
+static void draw_cloud(const Scene *sc, Canvas *c, const Overlay *o, int x, int y,
+                       int sx, int sy)
+{
+    if (gfx_hash(x, y, 71) >= SCENE_CLOUD_SHARE) {
+        return;
+    }
+    float phase = gfx_hash(x, y, 72) * 6.2831853f;
+    float span = (float)(o->size * o->scale);
+    int cx = sx + round_to_int(span * (0.5f + 2.0f * sine_of(sc, o->t * 0.05f + phase)));
+    int cy = sy + round_to_int(span * (0.5f + 0.4f * sine_of(sc, o->t * 0.04f + phase * 1.3f)));
+    float swell = 0.7f + 0.3f * sine_of(sc, o->t * 0.12f + phase * 2.1f);
+    int keep = round_to_int((float)SCENE_CLOUD_KEEP * swell * 0.5f);
+    uint32_t white = to_pixel(WHITE);
+    canvas_mix_ellipse(c, cx, cy, round_to_int(span * 2.6f), round_to_int(span * 0.9f),
+                       white, keep, o->clip);
+    canvas_mix_ellipse(c, cx + round_to_int(span * 0.4f), cy - round_to_int(span * 0.2f),
+                       round_to_int(span * 1.5f), round_to_int(span * 0.55f), white, keep,
+                       o->clip);
+}
+
+/* The overlays of the sky level: cloud wisps, at the two 16-pixel zooms only,
+ * as for the sea. No glints, foam, grass or rain: those are the surface's. */
+static void draw_sky_overlays(Scene *sc, Canvas *c, const Overlay *o, const Camera *cam,
+                              const World *w, int view_x, int view_y)
+{
+    if (o->size != 16) {
+        return;
+    }
+    CameraCells v;
+    camera_cells(cam, &v);
+    int ppc = camera_ppc(cam);
+    for (int r = 0; r < v.rows; r++) {
+        int y = (v.first_y + r) % w->h;
+        int sy = view_y + v.screen_y + r * ppc;
+        for (int k = 0; k < v.cols; k++) {
+            int x = (v.first_x + k) % w->w;
+            draw_cloud(sc, c, o, x, y, view_x + v.screen_x + k * ppc, sy);
+        }
+    }
+}
+
 /* Everything that moves over the ground layer, cell by visible cell: rain, water
  * glints, foam and grass tufts. Not at the World zoom, whose flat colours have
  * no room for them (its rain is a veil in the colour). */
@@ -1340,6 +1391,10 @@ static void draw_overlays(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
     };
     if (cam->level == LEVEL_UNDERWATER) {
         draw_sea_overlays(sc, c, &o, cam, s, view_x, view_y);
+        return;
+    }
+    if (cam->level == LEVEL_SKY) {
+        draw_sky_overlays(sc, c, &o, cam, &s->world, view_x, view_y);
         return;
     }
     const World *w = &s->world;
@@ -1596,20 +1651,27 @@ static void body_shadow(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
      * a swimmer seen from the surface is under it, so it casts none; seen from
      * underwater it swims over the floor, so it casts a soft one further down;
      * a land body seen from underwater is on another level and casts none. */
-    bool sea = creature_sea_body(&s->pool.items[it->index]);
+    /* A flyer up casts a small, light shadow on the ground below it, seen
+     * from the surface and from the sky; nothing underwater sees it. */
+    int home = levels_home(&s->pool.items[it->index]);
     bool under = cam->level == LEVEL_UNDERWATER;
-    if (sea != under) {
+    bool aloft = home == LEVEL_SKY;
+    if (aloft ? under : home != cam->level) {
         return;
     }
     BodyDraw d = world_body(sc, cam, s, it->index, it);
     int cx = d.foot_x + d.pic.shadow_dx * (d.flip ? -1 : 1) * d.scale;
     int cy = under ? d.foot_y + SCENE_FLOOR_SHADOW_DROP * d.scale : d.foot_y;
-    int keep = under ? SCENE_FLOOR_SHADOW_KEEP : BODY_SHADOW_KEEP;
+    int keep = under ? SCENE_FLOOR_SHADOW_KEEP
+               : aloft ? SCENE_AIR_SHADOW_KEEP
+                       : BODY_SHADOW_KEEP;
+    /* Half as wide from the air: a bird's spread wings would cast a big one. */
+    int shrink = aloft ? 2 : 1;
     int dx[9], dy[9];
     int copies = copy_offsets(area, dx, dy);
     for (int k = 0; k < copies; k++) {
-        canvas_darken_ellipse(c, cx + dx[k], cy + dy[k], d.pic.shadow_rx * d.scale,
-                              d.pic.shadow_ry * d.scale, keep, area->clip);
+        canvas_darken_ellipse(c, cx + dx[k], cy + dy[k], d.pic.shadow_rx * d.scale / shrink,
+                              d.pic.shadow_ry * d.scale / shrink, keep, area->clip);
     }
 }
 
@@ -1656,6 +1718,11 @@ static void draw_body(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
                     to_pixel(creature_colour(cr)));
         return;
     }
+    /* Two levels away is hidden (the levels design, 5.1): a sea body seen
+     * from the sky. (A flyer up seen from underwater is never handed here.) */
+    if (cam->level == LEVEL_SKY && levels_home(cr) == LEVEL_UNDERWATER) {
+        return;
+    }
     BodyDraw d = world_body(sc, cam, s, it->index, it);
     /* Being bitten: every colour part of the way to white. The flashed
      * palette is a local here, in the function that paints with it: d keeps
@@ -1668,19 +1735,33 @@ static void draw_body(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
     }
     int sway_x = 0, sway_y = 0;
     int scars = recent_hit_count(cr, s->tick);
+    int home = levels_home(cr);
     bool under = cam->level == LEVEL_UNDERWATER;
-    /* A land body seen from underwater: a faint dark shape, every ink the one
+    /* A body seen from a level next to its own, by the levels design's one
+     * rule (5.1): a land body from underwater is a faint dark shape, a body on
+     * the ground seen from the sky a faint grey-blue one; every ink the one
      * colour, mixed with what is under it; no scars, no flash. Declared out
      * here, not inside the if: d.palette points at it until the end. */
     SpritePalette shape;
-    if (creature_sea_body(cr) && !sc->sea_clear) {
+    bool as_shape = false;
+    Colour shape_colour = SHORE_SHAPE;
+    if (home == LEVEL_UNDERWATER && !sc->sea_clear) {
         /* Underwater it is clear, on its own level; seen from the surface it
          * is mixed with the water. It sways on both. */
         d.keep = under ? 256 : sea_keep(s, cr);
         sea_sway(sc, cr, body_ms, d.scale, &sway_x, &sway_y);
-    } else if (under && !creature_sea_body(cr)) {
+    } else if (home == LEVEL_SURFACE && under) {
+        as_shape = true;
+    } else if (home == LEVEL_SURFACE && cam->level == LEVEL_SKY) {
+        as_shape = true;
+        shape_colour = SKY_SHAPE;
+    } else if (home == LEVEL_SKY) {
+        /* Up in the air: raised over its cell. */
+        d.foot_y -= SCENE_AIR_RISE * d.scale;
+    }
+    if (as_shape) {
         for (int k = 0; k < INK_COUNT; k++) {
-            shape.ink[k] = to_pixel(SHORE_SHAPE);
+            shape.ink[k] = to_pixel(shape_colour);
         }
         d.palette = &shape;
         d.keep = SCENE_SHAPE_KEEP;
@@ -1747,7 +1828,7 @@ static uint32_t mix_pixel(uint32_t a, uint32_t b, uint32_t keep)
 /* A plant's tree colours: the crown from its colour lit and shaded, all turning
  * to straw as it withers; fruit shows only on a plant that offers it and holds
  * a whole one. */
-static void tree_colours(const Sim *s, int i, uint32_t out[TREE_INKS], bool dim)
+static void tree_colours(const Sim *s, int i, uint32_t out[TREE_INKS], int level)
 {
     const World *w = &s->world;
     const Plant *p = &w->plant[i];
@@ -1771,14 +1852,17 @@ static void tree_colours(const Sim *s, int i, uint32_t out[TREE_INKS], bool dim)
     out[TREE_CROWN_FLECK] = to_pixel(fleck);
     out[TREE_FRUIT] = fruit ? to_pixel(PALETTE_FRUIT) : to_pixel(crown);
     out[TREE_BRANCH] = to_pixel(TRUNK_DARK);
-    if (dim) {
-        /* From underwater: every colour the shore's way to the dark blue, in
-         * whole numbers, as there are thousands of trees at Far. Ink 0
-         * (TREE_NONE) is never drawn, so it is left as it is. */
-        const uint32_t keep = (uint32_t)(256.0f * (1.0f - SCENE_SHORE_DIM) + 0.5f);
-        const uint32_t shore = to_pixel(SHORE_DIM);
+    if (level != LEVEL_SURFACE) {
+        /* From underwater: every colour the shore's way to the dark blue; from
+         * the sky, the haze's way to its pale blue. In whole numbers, as there
+         * are thousands of trees at Far. Ink 0 (TREE_NONE) is never drawn, so
+         * it is left as it is. */
+        bool sky = level == LEVEL_SKY;
+        float dim = sky ? SCENE_SKY_DIM : SCENE_SHORE_DIM;
+        const uint32_t keep = (uint32_t)(256.0f * (1.0f - dim) + 0.5f);
+        const uint32_t towards = to_pixel(sky ? SKY_HAZE : SHORE_DIM);
         for (int k = 1; k < TREE_INKS; k++) {
-            out[k] = mix_pixel(out[k], shore, keep);
+            out[k] = mix_pixel(out[k], towards, keep);
         }
     }
 }
@@ -1972,8 +2056,14 @@ static void sort_items(SceneItem *items, SceneItem *spare, int trees, int n)
     memcpy(items, spare, (size_t)n * sizeof(SceneItem));
 }
 
+/* Whether the body an item stands for is up in the air. */
+static bool body_aloft(const Sim *s, const SceneItem *it)
+{
+    return s->pool.items[it->index].up > 0;
+}
+
 /* Draws the frame's trees and bodies: their shadows first, then each from the
- * back row to the front. */
+ * back row to the front, then the flyers up in the air. */
 static void draw_items(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
                        float tick_fraction, uint64_t water_ms, uint64_t body_ms,
                        int view_x, int view_y)
@@ -1999,9 +2089,10 @@ static void draw_items(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
     float t = ambient_seconds(water_ms);
     int dx[9], dy[9];
     int copies = copy_offsets(&area, dx, dy);
-    /* Seen from underwater, trees are on the shore, a level up: dimmed, and
-     * they cast no shadow. */
-    bool under = cam->level == LEVEL_UNDERWATER;
+    /* Seen from underwater, trees are on the shore, a level up; seen from the
+     * sky, on the ground a level down: dimmed both ways, and they cast no
+     * shadow. */
+    bool under = cam->level != LEVEL_SURFACE;
     if (size > 0) {
         for (int k = 0; k < n; k++) {
             const SceneItem *it = &sc->items[k];
@@ -2031,13 +2122,27 @@ static void draw_items(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
             TreeDraw d = tree_draw(sc, s, it->index, it->foot_x - (size / 2 - 1) * scale,
                                    it->foot_y - ppc, size, scale, season, t);
             uint32_t colours[TREE_INKS];
-            tree_colours(s, it->index, colours, under);
+            tree_colours(s, it->index, colours, cam->level);
             for (int j = 0; j < copies; j++) {
                 paint_tree(c, &d, d.x + dx[j], d.y + dy[j], scale, colours, area.clip);
             }
             continue;
         }
-        draw_body(sc, c, cam, s, it, &area, body_ms);
+        if (!body_aloft(s, it)) {
+            draw_body(sc, c, cam, s, it, &area, body_ms);
+        }
+    }
+    /* Flyers up in the air last, over every tree and body on the ground, still
+     * back to front among themselves. Underwater they are two levels away and
+     * are not drawn at all. */
+    if (cam->level == LEVEL_UNDERWATER) {
+        return;
+    }
+    for (int k = 0; k < n; k++) {
+        const SceneItem *it = &sc->items[k];
+        if (it->kind == SCENE_ITEM_BODY && body_aloft(s, it)) {
+            draw_body(sc, c, cam, s, it, &area, body_ms);
+        }
     }
 }
 
@@ -2231,7 +2336,11 @@ static void draw_particles(Scene *sc, Canvas *c, const Camera *cam, const Sim *s
     if (was_started && body_ms > since) {
         for (int k = 0; k < sc->item_count; k++) {
             const SceneItem *it = &sc->items[k];
-            if (it->kind == SCENE_ITEM_BODY && feet_in_view(it, cam, view_x, view_y)) {
+            /* From the sky, the ground's dust and z's are a level down. */
+            bool below = cam->level == LEVEL_SKY &&
+                         levels_home(&s->pool.items[it->index]) != LEVEL_SKY;
+            if (it->kind == SCENE_ITEM_BODY && !below &&
+                feet_in_view(it, cam, view_x, view_y)) {
                 emit_for(sc, s, it->index, since, body_ms,
                          cam->level == LEVEL_UNDERWATER);
             }
@@ -2305,8 +2414,9 @@ void scene_click(Inspect *in, const Sim *s, float wx, float wy)
         for (int dx = -2; dx <= 2; dx++) {
             int distance = dx * dx + dy * dy;
             /* world_idx wraps, so a cell over the edge is found too. */
-            if (w->occupant[world_idx(w, cx + dx, cy + dy)] >= 0 &&
-                (best_distance < 0 || distance < best_distance)) {
+            int cell = world_idx(w, cx + dx, cy + dy);
+            bool someone = w->occupant[cell] >= 0 || w->sky[SKY_LOW][cell] >= 0;
+            if (someone && (best_distance < 0 || distance < best_distance)) {
                 best_distance = distance;
                 best_x = cx + dx;
                 best_y = cy + dy;
@@ -2454,7 +2564,10 @@ void scene_draw_names(Scene *sc, Canvas *c, const Camera *cam,
          * are non-zero. */
         /* Underwater, a land giant is a faint shape on the shore, a level
          * up: its name would float over the dim land, so only sea giants'. */
-        bool other_level = cam->level == LEVEL_UNDERWATER && !creature_sea_body(cr);
+        /* From the sky, the same for a giant on the ground below. */
+        int home = levels_home(cr);
+        bool other_level = (cam->level == LEVEL_UNDERWATER && home != LEVEL_UNDERWATER) ||
+                           (cam->level == LEVEL_SKY && home != LEVEL_SKY);
         if (cr->alive && i != followed_slot && (cr->tally.flags & TALLY_GIANT) &&
             !other_level) {
             draw_name(sc, c, cam, s, i, tick_fraction, view_x, view_y);

@@ -44,6 +44,9 @@ enum { SANDBOX_WILD_STEPS = 6, SANDBOX_JUMP_STEPS = 5 };
  * sea; and a land body, a good swimmer's, back under it. */
 #define SANDBOX_SEA_SWIM 0.9f
 #define SANDBOX_LAND_SWIM 0.5f
+/* The wings gift's two values: over the flyer line, and half-wings. */
+#define SANDBOX_WINGS 0.9f
+#define SANDBOX_HALF_WINGS 0.3f
 
 /* A weather event watched from its start, to say when it ends what changed in
  * its season (sandbox_weather_check). */

@@ -39,6 +39,10 @@ enum {
     /* How long it remembers where it last ate well, from nothing to
      * place_memory_max ticks (creature_place_span); costs upkeep. */
     GENE_PLACE_MEMORY,
+    /* Wings (the air half). Below AIR_FROM they make a share of the hits aimed
+     * at the body miss, the mirror of armour; from AIR_FROM up the body is a
+     * flyer, which can go up onto the sky grid. Costs upkeep, like armour. */
+    GENE_WINGS,
     GENE_TRAITS
 };
 
@@ -47,6 +51,9 @@ enum {
  * swimmer keeps its land body and only pays less in the shallows. A fixed
  * line, not a setting, so the drawing code and the simulation share it. */
 #define SEA_FROM 0.8f
+/* A wing gene from here up is a flyer (the water and air design, 5.1 and
+ * 5.4): it can go up into the air and come down to act. Fixed like SEA_FROM. */
+#define AIR_FROM 0.8f
 
 /* The sharpness of the choice at the sure gene's two ends: an action's chance
  * is in proportion to exp(output * sharpness). At 20 an output ahead of the
@@ -60,7 +67,7 @@ enum {
  * values, which plus a constant 1 feed NET_OUT outputs, one per action and
  * one per memory value. NET_IN must equal SENSE_COUNT and NET_OUT
  * ACT_COUNT + MEMORY_VALUES (brain.h); brain_net.c checks both when compiled. */
-#define NET_IN 61
+#define NET_IN 65
 #define NET_HIDDEN 10
 #define NET_OUT 12
 /* The parentheses matter: a macro is pasted as text, and without them

@@ -25,6 +25,9 @@ void world_free(World *w)
     free(w->plankton);
     free(w->plankton_cap);
     free(w->occupant);
+    for (int k = 0; k < SKY_LAYERS; k++) {
+        free(w->sky[k]);
+    }
     /* Clear every field, pointers included, so a second world_free (or a
      * use after free) meets NULL instead of a dangling address. A compound
      * literal, (World){0}, is a temporary struct with every field zero. */
@@ -68,6 +71,11 @@ bool world_init(World *w, int width, int height)
     w->plankton = calloc(n, sizeof(float));
     w->plankton_cap = calloc(n, sizeof(float));
     w->occupant = malloc(n * sizeof(int32_t));
+    bool sky_ok = true;
+    for (int k = 0; k < SKY_LAYERS; k++) {
+        w->sky[k] = malloc(n * sizeof(int32_t));
+        sky_ok = sky_ok && w->sky[k] != NULL;
+    }
 
     if (w->terrain == NULL || w->fertility == NULL || w->veg == NULL ||
         w->veg_next == NULL || w->veg_age == NULL || w->veg_wither == NULL ||
@@ -75,7 +83,7 @@ bool world_init(World *w, int width, int height)
         w->carrion_level == NULL || w->scent == NULL ||
         w->scent_next == NULL || w->water == NULL ||
         w->temperature == NULL || w->rain == NULL || w->snow == NULL ||
-        w->plankton == NULL || w->plankton_cap == NULL || w->occupant == NULL) {
+        w->plankton == NULL || w->plankton_cap == NULL || w->occupant == NULL || !sky_ok) {
         /* Partial failure: some layers exist and some do not. Free the
          * ones that do, and leave the struct empty. */
         world_free(w);
@@ -112,6 +120,9 @@ void world_clear(World *w)
     w->rain_seed = 0;
     for (size_t i = 0; i < n; i++) {
         w->occupant[i] = -1;
+        for (int k = 0; k < SKY_LAYERS; k++) {
+            w->sky[k][i] = -1;
+        }
     }
 }
 
@@ -127,6 +138,13 @@ bool world_walkable_for(const World *w, int cell, bool sea)
         return true; /* the shore band both bodies share */
     }
     return sea ? t == TERRAIN_WATER : t == TERRAIN_SOIL;
+}
+
+bool world_ground_for(const World *w, int cell, bool sea, bool flyer)
+{
+    /* Only a flyer can stand on rock: it gets up there by flying. */
+    return world_walkable_for(w, cell, sea) ||
+           (flyer && w->terrain[cell] == TERRAIN_ROCK);
 }
 
 int world_idx(const World *w, int x, int y)

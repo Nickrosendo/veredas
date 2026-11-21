@@ -100,7 +100,7 @@ typedef struct Sim {
  * here would grow a different world. tests/test_sim.c pins it beside the
  * pinned checksum, so a change that moves the checksum fails until this rises.
  */
-#define VEREDAS_RULES 2
+#define VEREDAS_RULES 3
 
 /* Allocates a w by h world and a creature pool, opens the brain named in
  * set and builds the world from seed. False if the size or the pool

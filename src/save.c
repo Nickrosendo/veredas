@@ -61,7 +61,10 @@ _Static_assert(sizeof(SAVE_MAGIC_OLD) == SAVE_MAGIC_LEN + 1, "old save marker le
  * settings). Older files are refused (Nicolas, 2026-11-18): their worlds grew
  * under rules without a sea, and a world loaded from one would not be the
  * world those rules make. */
-#define SAVE_VERSION 32u
+/* 33: the air (the wing gene, up and air_line on every creature, the air's
+ * settings; four more senses, so longer genomes). Older files are refused for
+ * the same reason. */
+#define SAVE_VERSION 33u
 
 /* No value in a healthy world comes near this. Bounding them keeps sums
  * from reaching infinity, and float-to-int conversions defined. */
@@ -324,6 +327,8 @@ static void put_creature(Writer *w, const Creature *c)
     put_u32(w, c->lineage);
     put_float(w, c->family_hue);
     put_bytes(w, &c->sea_line, 1);
+    put_bytes(w, &c->air_line, 1);
+    put_bytes(w, &c->up, 1);
     put_i32(w, c->x);
     put_i32(w, c->y);
     put_bytes(w, &c->heading, 1);
@@ -957,6 +962,8 @@ static void get_creature(Reader *r, Creature *c, const Settings *set,
     c->lineage = get_u32(r);
     c->family_hue = get_float(r, 0.0f, 1.0f);
     c->sea_line = get_byte(r) != 0 ? 1 : 0;
+    c->air_line = get_byte(r) != 0 ? 1 : 0;
+    c->up = get_byte(r);
     c->x = get_i32(r);
     c->y = get_i32(r);
     c->heading = get_byte(r);
@@ -1044,6 +1051,27 @@ static void check_free_list(Reader *r, const Pool *p)
     }
 }
 
+/* Whether a loaded creature may be where it says: up only for a flyer, on a
+ * sky grid that exists, over any ground; down on ground its body can use (a
+ * flyer anywhere but deep water, unless it dove there to bite); and nobody
+ * else on that cell of that grid. c->up is from the file, so it is checked
+ * before it picks a grid. */
+static bool stands_where_it_can(const World *w, const Creature *c, int cell)
+{
+    if (c->up > SKY_LAYERS || (c->up > 0 && !creature_flyer(c))) {
+        return false;
+    }
+    if (c->up == 0) {
+        bool ground = world_ground_for(w, cell, creature_sea_body(c),
+                                       creature_flyer(c)) ||
+                      (creature_flyer(c) && w->terrain[cell] == TERRAIN_WATER);
+        if (!ground) {
+            return false;
+        }
+    }
+    return creature_grid(w, c)[cell] < 0;
+}
+
 /* Reads every slot and rebuilds the occupant layer from where the
  * creatures say they stand. */
 static void get_pool(Reader *r, Pool *p, World *w, const Settings *set)
@@ -1068,12 +1096,11 @@ static void get_pool(Reader *r, Pool *p, World *w, const Settings *set)
                 return;
             }
             int cell = world_idx(w, c->x, c->y);
-            if (!world_walkable_for(w, cell, creature_sea_body(c)) ||
-                w->occupant[cell] >= 0) {
+            if (!stands_where_it_can(w, c, cell)) {
                 fail(r, "a creature in the file stands where it cannot");
                 return;
             }
-            w->occupant[cell] = i;
+            creature_grid(w, c)[cell] = i;
             p->count++;
         } else {
             fail(r, "a creature slot in the file is impossible");

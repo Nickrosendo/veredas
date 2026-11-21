@@ -36,7 +36,11 @@ enum { VIEW_AHEAD, VIEW_LEFT, VIEW_RIGHT, VIEW_COUNT };
  *   VIEW_ALIKE how alike its body looks (genome_body_likeness),
  *   VIEW_FIGHTING whether it was hit in the last gang_window ticks,
  *   VIEW_ALONE 1 minus the share of the 8 cells around it holding its own
- *     relatives, VIEW_HURT the share of its health it has lost. */
+ *     relatives, VIEW_HURT the share of its health it has lost.
+ *   VIEW_ALOFT: how clearly the most clearly seen flyer up in the air that way
+ *     is seen (the air half), 0 for none. Flyers up are on the sky grid, not
+ *     on the ground, so VIEW_SEEN and the values after it never see them: a
+ *     walker tells a bird overhead from a wolf beside it by this value. */
 enum {
     VIEW_PLANT,
     VIEW_CARRION,
@@ -49,6 +53,7 @@ enum {
     VIEW_FIGHTING,
     VIEW_ALONE,
     VIEW_HURT,
+    VIEW_ALOFT,
     VIEW_VALUES
 };
 
@@ -56,7 +61,7 @@ enum {
  * views: view k's value j is at SENSE_VIEWS + k * VIEW_VALUES + j. After the
  * views come the drives, then the memory values, the last ones between -1 and 1.
  * The neural network has one input per sense, so its NET_IN must equal
- * SENSE_COUNT (61). An enum value may be set from earlier ones, and the next
+ * SENSE_COUNT (65). An enum value may be set from earlier ones, and the next
  * goes on counting from there. */
 enum {
     SENSE_ENERGY,
@@ -114,6 +119,9 @@ enum {
     SENSE_PLACE_RIGHT,
     SENSE_PLACE_NEAR,
     SENSE_PLACE_FRESH,
+    /* 1 while it is up in the air, 0 on the ground (the air half). Its own
+     * body, so felt asleep too, though a sleeper is always on the ground. */
+    SENSE_ALOFT,
     SENSE_MEMORY,
     SENSE_COUNT = SENSE_MEMORY + MEMORY_VALUES
 };

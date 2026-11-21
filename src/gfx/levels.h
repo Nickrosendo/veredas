@@ -1,7 +1,7 @@
 /*
  * levels: the stack of places the map can show, top to bottom (the levels
  * design, 5.1): a high sky, the sky, the surface (the map as it always was),
- * underwater and an abyss. Only the surface and underwater are built today;
+ * underwater and an abyss. The sky, the surface and underwater are built;
  * the others are rows kept so that a new level is one more entry here and one
  * more look in scene.c. Pure rules, no drawing: which level comes next, when
  * the wheel dives, which level a followed animal takes the view to, and the
@@ -35,14 +35,15 @@ enum {
 #define LEVELS_FADE_MS 600u
 #define LEVELS_FADE_KEEP 24
 
-/* True for a level that can be shown: the surface and underwater. */
+/* True for a level that can be shown: the sky, the surface and underwater. */
 bool levels_built(int level);
 /* The level's name for the top line: "" for the surface, which needs none. */
 const char *levels_name(int level);
 /* The next built level from level in direction dir (-1 up, +1 down), or level
  * itself when there is none that way. */
 int levels_step(int level, int dir);
-/* The level a creature lives on: underwater for a sea body, else the surface. */
+/* The level a creature is on: the sky for a flyer up in the air, underwater
+ * for a sea body, else the surface (a flyer on the ground included). */
 int levels_home(const Creature *c);
 
 /*

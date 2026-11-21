@@ -26,7 +26,7 @@ static Creature creature_of(uint32_t lineage)
 /* All nine traits at one value. */
 static BodyTraits all_traits(float v)
 {
-    BodyTraits t = {v, v, v, v, v, v, v, v, v, 0};
+    BodyTraits t = {v, v, v, v, v, v, v, v, v, 0, 0, 0};
     return t;
 }
 

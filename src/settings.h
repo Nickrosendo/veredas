@@ -500,6 +500,18 @@ typedef struct {
     /* The sea's birth brake, as birth_per_plant is the land's: sea births slow
      * as sea bodies alive near this many per plankton-rich cell. 0: off. */
     float birth_per_plankton;
+    /* The air (the water and air design, 5.1 and 5.4). A hit on a body with
+     * wing gene w is dodged with chance wing_dodge * w; wings cost
+     * wings_upkeep * w a tick; a flyer's step in the air costs
+     * flight_step_cost * its size on top of move_cost. */
+    float wing_dodge;
+    float wings_upkeep;
+    float flight_step_cost;
+    /* The flyers' birth brake (5.2b): flyer births slow as flyers alive near
+     * birth_per_air times the room the land and the sea give together
+     * (birth_per_plant * plants + birth_per_plankton * plankton-rich cells).
+     * 0: off. */
+    float birth_per_air;
 } Settings;
 
 Settings settings_default(void);

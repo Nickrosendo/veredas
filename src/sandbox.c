@@ -79,6 +79,8 @@ static void refused(const Sim *s, uint32_t target, int gene, float value,
         snprintf(notice, size, "%s is no longer alive", name);
     } else if (gene == GENE_SWIM && value >= SEA_FROM) {
         snprintf(notice, size, "no water near enough for %s to have a sea body", name);
+    } else if (gene == GENE_WINGS) {
+        snprintf(notice, size, "no ground near enough for %s to come down on", name);
     } else {
         snprintf(notice, size, "no land near enough for %s to have a land body", name);
     }
@@ -120,6 +122,25 @@ static void give_sea_body(Sandbox *b, Sim *s, char *notice, size_t size)
     b->menu = SANDBOX_MENU_NONE;
 }
 
+/* Wings as one gift, like the sea body: a body without wings over the line gets
+ * SANDBOX_WINGS, a flyer SANDBOX_HALF_WINGS (half-wings that still dodge). */
+static void give_wings(Sandbox *b, Sim *s, char *notice, size_t size)
+{
+    const Creature *c = find_creature(s, b->target);
+    float value = c != NULL && creature_flyer(c) ? SANDBOX_HALF_WINGS : SANDBOX_WINGS;
+    char name[16];
+    name_from_id(b->target, name, sizeof(name));
+    if (c != NULL && actions_give_trait(s, b->target, GENE_WINGS, value)) {
+        b->did = SANDBOX_DID_TRAIT;
+        snprintf(notice, size, value >= AIR_FROM ? "gave %s wings"
+                                                 : "took %s's wings away",
+                 name);
+    } else {
+        refused(s, b->target, GENE_WINGS, value, notice, size);
+    }
+    b->menu = SANDBOX_MENU_NONE;
+}
+
 static int trait_key(Sandbox *b, Sim *s, int key, char *notice, size_t size)
 {
     int d = digit(key, ACTIONS_GIVABLE_COUNT);
@@ -144,6 +165,8 @@ static int trait_key(Sandbox *b, Sim *s, int key, char *notice, size_t size)
         give(b, s, notice, size);
     } else if (key == 's') {
         give_sea_body(b, s, notice, size);
+    } else if (key == 'w') {
+        give_wings(b, s, notice, size);
     }
     return SANDBOX_TAKEN; /* every key while the menu is open */
 }
@@ -391,7 +414,8 @@ int sandbox_menu_lines(const Sandbox *b, const Sim *s, uint64_t now_ms,
         if (n < max) {
             snprintf(lines[n++], SKIP_COLS,
                      "value %.2f  (, and . change it, 0 and 9 the ends; "
-                     "Enter gives, s a sea body, Esc closes)", (double)b->value);
+                     "Enter gives, s a sea body, w wings, Esc closes)",
+                     (double)b->value);
         }
         break;
     }

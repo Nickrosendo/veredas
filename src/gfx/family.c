@@ -11,7 +11,7 @@
 /* One family's total, while one pass adds its members up. */
 typedef struct {
     float size, speed, sight, plant, meat, meat_share, body_size;
-    float armour, weapon, legs, swim, sea;
+    float armour, weapon, legs, swim, sea, air;
     /* Hue is an angle round a wheel, so it is summed as an arrow: see below. */
     float hue_x, hue_y;
     int members;
@@ -183,6 +183,7 @@ static void add_to_sum(FamilySum *sum, const Creature *c, const Settings *set)
     sum->legs += t.legs;
     sum->swim += t.swim;
     sum->sea += t.sea;
+    sum->air += t.air;
     sum->meat_share += render_meat_share(c->level);
     float angle = c->genome.g[GENE_HUE] * TWO_PI;
     sum->hue_x += cosf(angle);
@@ -213,7 +214,7 @@ static FamilySample sample_from(const FamilySum *sum)
     out.traits = (BodyTraits){sum->size / n,   sum->speed / n,  sum->sight / n,
                               sum->plant / n,  sum->meat / n,   sum->armour / n,
                               sum->weapon / n, sum->legs / n,   sum->swim / n,
-                              sum->sea / n};
+                              sum->sea / n,    sum->air / n,    0.0f};
     out.hue = average_hue(sum);
     out.meat_share = sum->meat_share / n;
     out.body_size = sum->body_size / n;

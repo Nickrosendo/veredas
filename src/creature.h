@@ -23,6 +23,13 @@
 struct Chronicle;
 struct TacticWatch;
 
+/* What a body is, for where it may stand: a sea body, a flyer, both (a gull,
+ * which may also stand on deep water) or neither. A struct of two bools passed
+ * by value, like a number. */
+typedef struct {
+    bool sea, flyer;
+} BodyKind;
+
 /* Headings in clockwise order, so turning right is + 1 and turning left
  * is + 3 (that is, - 1), both modulo 4. */
 enum { HEADING_NORTH, HEADING_EAST, HEADING_SOUTH, HEADING_WEST,
@@ -116,6 +123,13 @@ typedef struct {
      * parent having it passes it on). Founders and Sandbox gifts start at 0.
      * No rule reads it; notices and the sea verdict do. Saved. */
     uint8_t sea_line;
+    /* The same for the air: 1 for a flyer born to two parents without wings
+     * over the line, or descended from one. Read by no rule. Saved. */
+    uint8_t air_line;
+    /* Where it is: 0 on the ground grid (World.occupant), 1 + k on sky grid k
+     * (World.sky[k]; only SKY_LOW today, so 1). Only a flyer is ever up.
+     * Saved and hashed. */
+    uint8_t up;
     int x, y;
     uint8_t heading;    /* a HEADING_ value */
     float energy;
@@ -241,6 +255,13 @@ typedef struct {
      * nor hashed, since both are counted again from the world every tick. */
     int sea_alive;
     int plankton_rich;
+    /* Flyers alive (creature_habitat HABITAT_AIR), counted and raised the same
+     * way, for the flyers' own brake. */
+    int air_alive;
+    /* Measures for the air verdict (balance_report), read by no rule, neither
+     * saved nor hashed: meals eaten by flyers, of plants (leaves or fruit) and
+     * of meat (carrion), and how often a flyer came down from the air. */
+    uint32_t air_meals_plant, air_meals_meat, air_landings;
     /* Sea animals killed by sea hunters so far: a measure for the sea verdict
      * (balance_report), read by no rule, neither saved nor hashed. */
     uint32_t sea_kills;
@@ -326,6 +347,9 @@ int pool_spawn(Pool *p, World *w, int x, int y);
 /* pool_spawn for either body: with sea true the cell must be deep or shallow
  * water (world_walkable_for). pool_spawn is this with sea false. */
 int pool_spawn_body(Pool *p, World *w, int x, int y, bool sea);
+/* The same for any body: a flyer may also be placed on rock. Always on the
+ * ground grid (up 0). */
+int pool_spawn_as(Pool *p, World *w, int x, int y, BodyKind body);
 /* Removes the creature in slot idx from the world, leaves its body as
  * carrion (body_energy * size plus any energy left, at its level), counts the
  * death under cause and frees the slot. Does nothing to a slot that is already
@@ -433,6 +457,23 @@ bool creature_in_shade(const World *w, const Creature *c, const Settings *s);
 bool creature_asleep(const Creature *c);
 /* Whether its body is a sea body: the raw swim gene at SEA_FROM or above. */
 bool creature_sea_body(const Creature *c);
+/* Whether its body is a flyer: the raw wing gene at AIR_FROM or above. */
+bool creature_flyer(const Creature *c);
+BodyKind creature_body_type(const Creature *c);
+/* The body a genome would make, before any creature has it. */
+BodyKind genome_body(const Genome *g);
+/* Which brake and which count a body belongs to: a flyer first (a gull too),
+ * then a sea body, then the land. */
+enum { HABITAT_LAND, HABITAT_SEA, HABITAT_AIR };
+int creature_habitat(const Creature *c);
+/* The grid it is on now: World.occupant on the ground, a sky grid when up.
+ * The pointer is into the world's own memory. */
+int32_t *creature_grid(const World *w, const Creature *c);
+/* The nearest free cell to (x, y), (x, y) itself included, that this body
+ * (flyers' rock included) may stand on, nearest ring first, up to radius
+ * cells out; -1 for none. Unlike creature_nearest_cell_for, its own cell
+ * counts only when nobody is on it: for a flyer coming down from the air. */
+int creature_nearest_ground(const World *w, int x, int y, BodyKind body, int radius);
 /* The nearest cell to (x, y) a body (sea or land) can use: (x, y)'s own cell if
  * that body may stand there, else the first free cell it may stand on in the
  * rings around, nearest ring first, up to radius cells out; -1 for none. For a
