@@ -2669,6 +2669,42 @@ static void test_clouds_drift_and_gather_in_rain(void)
     sim_free(&s);
 }
 
+/* The sky on a world with more cells than the pool has slots (128 x 80 is
+ * 10,240 cells; the pool 8,000): nothing on the sky level may look up a
+ * creature by a tree's cell number. The pushed air half did, in the particle
+ * loop, and a default-size world crashed on pressing < (the address checker
+ * in make test sees the read past the pool). Two frames, so particles run. */
+static void test_sky_on_a_world_bigger_than_the_pool(void)
+{
+    Settings set = settings_default();
+    Sim s;
+    CHECK(sim_init(&s, &set, 5, 128, 80));
+    CHECK(s.world.w * s.world.h > s.pool.capacity);
+    Scene sc;
+    CHECK(scene_init(&sc, &s));
+    for (int t = 0; t < 20; t++) {
+        sim_step(&s);
+        scene_update(&sc, &s, 10, 0);
+    }
+    Canvas c;
+    CHECK(canvas_init(&c, VIEW_W, VIEW_H));
+    Camera cam;
+    camera_init(&cam, 128, 80, VIEW_W, VIEW_H);
+    cam.level = LEVEL_SKY;
+    for (int zoom = CAMERA_CLOSE; zoom <= CAMERA_FAR; zoom++) {
+        cam.zoom = zoom;
+        /* Across the whole map, so trees at high cell numbers are in view. */
+        for (int y = 0; y < 80; y += 10) {
+            camera_centre_on(&cam, 64.0f, (float)y + 0.5f);
+            scene_draw_world(&sc, &c, &cam, &s, 0.5f, 1000, 1000, 0, 0);
+            scene_draw_world(&sc, &c, &cam, &s, 0.5f, 1100, 1100, 0, 0);
+        }
+    }
+    canvas_free(&c);
+    scene_free(&sc);
+    sim_free(&s);
+}
+
 /* The same world from the sky, centred on its first flyer up in the air: the
  * ground hazed, walkers as faint shapes, flyers clear and raised, clouds at
  * Close and Normal (levels step 3). Going up and back down draws the surface
@@ -2771,6 +2807,7 @@ int main(void)
     test_sky_pixels();
     test_swoop_glides_the_flyer();
     test_clouds_drift_and_gather_in_rain();
+    test_sky_on_a_world_bigger_than_the_pool();
     test_ground_layer_refreshes_when_it_should();
     test_water_only_redraw_matches_whole();
     test_layout_family_area();
