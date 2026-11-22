@@ -85,22 +85,26 @@ void sprite_palette_flash(SpritePalette *out, const SpritePalette *in, float fla
 #define SPRITE_DETAIL_ENTRIES 512  /* large-grid pictures */
 
 /* One kept picture: its key, the next entry of the same hash chain (-1: none)
- * and the clock when it was last asked for. Its inks are in the store's block. */
+ * and its two neighbours in the store's use order (newer, older; -1: none).
+ * Its inks are in the store's block. */
 typedef struct {
     uint64_t key;
     int32_t next;
-    uint64_t last_used;
+    int32_t newer, older;
     SpritePicture picture;
 } SpriteEntry;
 
 /* Pictures of up to slot_bytes inks each. heads[b] is the first entry whose
  * key hashes to bucket b, or -1. used counts the entries handed out so far:
  * until the store is full a new picture takes the next one, then the one
- * unused longest. */
+ * unused longest. Every entry handed out is on one chain in the order they
+ * were last asked for, newest to oldest, so that one is found at once
+ * (newest, oldest: its two ends, -1 while the store is empty). */
 typedef struct {
     SpriteEntry *entries;
     uint8_t *inks;         /* entries * slot_bytes bytes */
     int32_t *heads;
+    int32_t newest, oldest;
     int capacity, buckets, used, slot_bytes;
 } SpriteStore;
 
@@ -109,7 +113,6 @@ typedef struct {
      * small: the bigger ones; large: the detailed grid's (the panel, the lab). */
     SpriteStore trimmed, small, large;
     SkeletonRaster *raster;  /* the scratch every picture is drawn in: 22 KB */
-    uint64_t clock;          /* counts lookups, to tell which was used longest ago */
     long builds;  /* pictures drawn so far: the tests and slow_pictures read it */
     bool art;     /* true: species with drawn frames (art.h) use them; on from init */
 } SpriteCache;

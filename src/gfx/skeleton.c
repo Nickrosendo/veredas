@@ -1,6 +1,7 @@
 #include "skeleton.h"
 
 #include <math.h>   /* sqrtf, cosf, sinf, floorf, fabsf, fmaxf */
+#include <stddef.h> /* offsetof */
 #include <string.h> /* memset */
 
 #include "gfx_hash.h" /* gfx_hash: the mane's ragged edge */
@@ -1521,7 +1522,17 @@ void skeleton_raster(SkeletonRaster *out, const Anatomy *a, const SpritePose *p,
     b.marks = marks;
     build_shapes(&list, &b);
 
-    memset(out, 0, sizeof *out);
+    /* Everything 0, but of the two pixel arrays only the w * h cells this grid
+     * uses: sized for the large grid, they are 10,800 bytes each, and a
+     * small-grid picture (every one in the world view) uses 3,584 of them.
+     * Nothing reads past w * h (the raster's contract, skeleton.h), so the
+     * rest may keep an earlier picture's pixels. offsetof gives how many bytes
+     * into the struct a member starts: from hip to the end are the other
+     * fields, after the arrays. */
+    size_t cells = (size_t)b.w * (size_t)b.h;
+    memset(out->part, 0, cells);
+    memset(out->ink, 0, cells);
+    memset(&out->hip, 0, sizeof *out - offsetof(SkeletonRaster, hip));
     out->w = b.w;
     out->h = b.h;
     out->ox = b.ox;

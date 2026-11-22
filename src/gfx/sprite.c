@@ -245,6 +245,7 @@ static void store_reset(SpriteStore *st)
         st->heads[b] = -1;
     }
     st->used = 0;
+    st->newest = st->oldest = -1;
 }
 
 static bool store_init(SpriteStore *st, int capacity, int slot_bytes)
@@ -303,19 +304,47 @@ static void store_unlink(SpriteStore *st, int e)
     }
 }
 
+/* Takes entry e out of the use order, joining its two neighbours. */
+static void use_unlink(SpriteStore *st, int e)
+{
+    SpriteEntry *x = &st->entries[e];
+    if (x->newer >= 0) {
+        st->entries[x->newer].older = x->older;
+    } else {
+        st->newest = x->older;
+    }
+    if (x->older >= 0) {
+        st->entries[x->older].newer = x->newer;
+    } else {
+        st->oldest = x->newer;
+    }
+}
+
+/* Puts entry e at the newest end of the use order: it was just asked for. */
+static void use_push_newest(SpriteStore *st, int e)
+{
+    SpriteEntry *x = &st->entries[e];
+    x->newer = -1;
+    x->older = st->newest;
+    if (st->newest >= 0) {
+        st->entries[st->newest].newer = e;
+    } else {
+        st->oldest = e;
+    }
+    st->newest = e;
+}
+
 /* An entry for a new picture: the next unused one, or once all are in use the
- * one asked for longest ago, taken out of its chain. */
+ * one asked for longest ago, the oldest end of the use order, taken out of its
+ * hash chain and out of the use order. Either way it is not on the use order
+ * when returned; sprite_picture puts it at the newest end. */
 static int store_take(SpriteStore *st)
 {
     if (st->used < st->capacity) {
         return st->used++;
     }
-    int oldest = 0;
-    for (int e = 1; e < st->capacity; e++) {
-        if (st->entries[e].last_used < st->entries[oldest].last_used) {
-            oldest = e;
-        }
-    }
+    int oldest = st->oldest;
+    use_unlink(st, oldest);
     store_unlink(st, oldest);
     return oldest;
 }
@@ -343,7 +372,6 @@ void sprite_cache_free(SpriteCache *c)
     store_free(&c->large);
     free(c->raster);
     c->raster = NULL;
-    c->clock = 0;
 }
 
 void sprite_cache_reset(SpriteCache *c)
@@ -510,7 +538,6 @@ SpritePicture sprite_picture(SpriteCache *c, const SpriteBody *b, int action, in
     frame = (frame % n + n) % n;
     frame = first_pose_of_art_frame(c, b, action, frame);
     uint64_t key = key_of(b, action, frame);
-    c->clock++;
     /* A small picture may be in either small store, by its size. */
     SpriteStore *found = b->base == SPRITE_BASE_DETAIL ? &c->large : &c->trimmed;
     int e = store_find(found, key, bucket_of(found, key));
@@ -531,8 +558,10 @@ SpritePicture sprite_picture(SpriteCache *c, const SpriteBody *b, int action, in
         found->entries[e].next = found->heads[bucket];
         found->heads[bucket] = e;
         c->builds++;
+    } else {
+        use_unlink(found, e);  /* found: it moves from where it was to newest */
     }
-    found->entries[e].last_used = c->clock;
+    use_push_newest(found, e);
     return found->entries[e].picture;
 }
 

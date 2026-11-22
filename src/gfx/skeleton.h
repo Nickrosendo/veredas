@@ -55,7 +55,9 @@ typedef struct {
     bool stepping;
 } SpritePose;
 void skeleton_pose_standing(SpritePose *p);  /* all 0, eyes 1, stride 1, lift 1.1 */
-/* Sized for the large grid; a small-grid raster uses the first w * h of each.
+/* Sized for the large grid; a small-grid raster uses the first w * h of each,
+ * and only those are written: past them, an array may still hold an earlier
+ * picture's pixels, so nothing reads there.
  * Pixel (x, y) of the grid used is element y * w + x. */
 typedef struct {
     int w, h, ox, oy;                         /* the grid used */

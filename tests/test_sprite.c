@@ -99,6 +99,41 @@ static void test_cache_replaces_the_oldest(void)
     sprite_cache_free(&c);
 }
 
+/* The use order kept right when the entry asked for again is in the middle
+ * or already the newest, and after a reset: four entries, keys 0..3 the
+ * frames of an attack, and each replacement must be the one unused longest. */
+static void test_cache_order_after_middle_uses_and_reset(void)
+{
+    SpriteCache c;
+    CHECK(sprite_cache_init(&c, 4, 1));
+    sprite_cache_set_art(&c, false);
+    BodyTraits t = all_traits(0.3f);
+    SpriteBody b = sprite_body_of(&t, SPECIES_WOLF, 1.0f, SPRITE_BASE_NORMAL);
+    for (int round = 0; round < 2; round++) {
+        long start = c.builds;
+        for (int f = 0; f < 4; f++) {
+            sprite_picture(&c, &b, ACTION_ATTACK, f); /* order, newest first: 3 2 1 0 */
+        }
+        sprite_picture(&c, &b, ACTION_ATTACK, 2); /* from the middle: 2 3 1 0 */
+        sprite_picture(&c, &b, ACTION_ATTACK, 2); /* already newest:  2 3 1 0 */
+        sprite_picture(&c, &b, ACTION_ATTACK, 1); /* from the middle: 1 2 3 0 */
+        CHECK(c.builds - start == 4);
+        sprite_picture(&c, &b, ACTION_ATTACK, 4); /* replaces 0:      4 1 2 3 */
+        sprite_picture(&c, &b, ACTION_ATTACK, 5); /* replaces 3:      5 4 1 2 */
+        CHECK(c.builds - start == 6);
+        sprite_picture(&c, &b, ACTION_ATTACK, 1); /* kept:            1 5 4 2 */
+        sprite_picture(&c, &b, ACTION_ATTACK, 2); /* kept:            2 1 5 4 */
+        CHECK(c.builds - start == 6);
+        sprite_picture(&c, &b, ACTION_ATTACK, 3); /* replaces 4:      3 2 1 5 */
+        sprite_picture(&c, &b, ACTION_ATTACK, 5); /* kept */
+        CHECK(c.builds - start == 7);
+        sprite_picture(&c, &b, ACTION_ATTACK, 4); /* gone: drawn again */
+        CHECK(c.builds - start == 8);
+        sprite_cache_reset(&c); /* the second round starts from an empty order */
+    }
+    sprite_cache_free(&c);
+}
+
 /* A body drawn from art frames has fewer of them than the skeleton has poses
  * (a wolf walks in 4, the skeleton in 24), and its picture depends only on
  * the art frame: every pose showing the same art frame is one picture, built
@@ -350,6 +385,7 @@ int main(void)
 {
     test_picture_cached();
     test_cache_replaces_the_oldest();
+    test_cache_order_after_middle_uses_and_reset();
     test_art_frames_share_pictures();
     test_reset_forgets_bodies();
     test_family_shares_a_body();

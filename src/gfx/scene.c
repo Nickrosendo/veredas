@@ -2104,7 +2104,8 @@ static bool item_before(const SceneItem *a, const SceneItem *b)
 }
 
 /* Sorts items[0 .. n - 1] back to front by insertion: each item moves left
- * past the ones it goes before. Quick on a list that is nearly in order. */
+ * past the ones it goes before. Quick on a list that is nearly in order, as
+ * the trees are; slow on one in no order (merge_sort, below). */
 static void insertion_sort(SceneItem *items, int n)
 {
     for (int k = 1; k < n; k++) {
@@ -2118,17 +2119,60 @@ static void insertion_sort(SceneItem *items, int n)
     }
 }
 
+/* Merges the sorted runs from[lo .. mid - 1] and from[mid .. hi - 1] into
+ * to[lo .. hi - 1]. On a tie the left run's item goes first, so the merge
+ * keeps equal items in the order they came (it is "stable"). */
+static void merge_runs(const SceneItem *from, SceneItem *to, int lo, int mid, int hi)
+{
+    int a = lo, b = mid;
+    for (int out = lo; out < hi; out++) {
+        bool take_a = b >= hi || (a < mid && !item_before(&from[b], &from[a]));
+        to[out] = take_a ? from[a++] : from[b++];
+    }
+}
+
+/*
+ * Sorts items[0 .. n - 1] back to front by merging, with scratch (n items)
+ * as the second buffer: runs of 1 are merged into runs of 2, those into runs
+ * of 4, and so on, each pass from one buffer into the other. About n log n
+ * comparisons whatever the order they arrive in; insertion takes about n * n
+ * / 4 on a list in no order, which the bodies are (slot order), so for 1,000
+ * bodies about 10,000 comparisons instead of 250,000.
+ */
+static void merge_sort(SceneItem *items, SceneItem *scratch, int n)
+{
+    SceneItem *from = items, *to = scratch;
+    for (int width = 1; width < n; width *= 2) {
+        for (int lo = 0; lo < n; lo += 2 * width) {
+            int mid = lo + width < n ? lo + width : n;
+            int hi = lo + 2 * width < n ? lo + 2 * width : n;
+            merge_runs(from, to, lo, mid, hi);
+        }
+        /* The pass's output is the next pass's input: swap the two names. */
+        SceneItem *t = from;
+        from = to;
+        to = t;
+    }
+    if (from != items) {
+        memcpy(items, from, (size_t)n * sizeof(SceneItem));
+    }
+}
+
 /*
  * Sorts the frame's items back to front: the trees (items[0 .. trees - 1],
- * added row by row, so already nearly in order) and the bodies (the rest, in
- * slot order) each by insertion, then the two lists merged through the spare
- * block. Not the C library's qsort: it may allocate memory for a large array,
- * and nothing is allocated per frame.
+ * added row by row, so already nearly in order) by insertion, the bodies (the
+ * rest, in slot order, so in no order at all) by merging, then the two lists
+ * merged through the spare block. The two ways give the same order:
+ * item_before never calls two different items equal (index and kind tell
+ * apart any two), so there is only one sorted order. Not the C library's
+ * qsort: it may allocate memory for a large array, and nothing is allocated
+ * per frame.
  */
 static void sort_items(SceneItem *items, SceneItem *spare, int trees, int n)
 {
     insertion_sort(items, trees);
-    insertion_sort(items + trees, n - trees); /* items + trees: the bodies' start */
+    /* The spare block is free until the last merge: the bodies' scratch. */
+    merge_sort(items + trees, spare, n - trees); /* items + trees: the bodies' start */
     int a = 0, b = trees, out = 0;
     while (a < trees || b < n) {
         bool take_a = b >= n || (a < trees && !item_before(&items[b], &items[a]));

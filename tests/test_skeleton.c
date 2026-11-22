@@ -1,6 +1,7 @@
 #include "test.h"
 
 #include <math.h>   /* fabsf, sqrtf, floorf, ceilf, fmaxf */
+#include <stddef.h> /* offsetof */
 #include <string.h> /* memcmp, memcpy */
 
 #include "skeleton.h"
@@ -136,10 +137,40 @@ static void test_same_input_same_pixels(void)
     for (int s = 0; s < SPECIES_COUNT; s++) {
         raster_standing(&raster_a, s, largest_k(s), false);
         raster_standing(&raster_b, s, largest_k(s), false);
-        CHECK(memcmp(raster_a.part, raster_b.part, sizeof raster_a.part) == 0);
-        CHECK(memcmp(raster_a.ink, raster_b.ink, sizeof raster_a.ink) == 0);
+        /* Only the w * h cells in use: past them each raster may hold
+         * whatever an earlier test drew there (skeleton.h). */
+        size_t cells = (size_t)raster_a.w * (size_t)raster_a.h;
+        CHECK(raster_a.w == raster_b.w && raster_a.h == raster_b.h);
+        CHECK(memcmp(raster_a.part, raster_b.part, cells) == 0);
+        CHECK(memcmp(raster_a.ink, raster_b.ink, cells) == 0);
         CHECK(raster_a.eye_x == raster_b.eye_x && raster_a.eye_y == raster_b.eye_y);
         CHECK(count_ink(&raster_a, INK_NONE) < raster_a.w * raster_a.h);
+    }
+}
+
+/* skeleton_raster clears only the cells its grid uses. A small picture drawn
+ * over a large one must still be the very same as drawn on a raster that is
+ * all zero: every cell in use, and every other field. */
+static void test_small_over_large_same_as_fresh(void)
+{
+    for (int s = 0; s < SPECIES_COUNT; s++) {
+        for (int marks = 0; marks < 2; marks++) {
+            SpritePose p;
+            skeleton_pose_standing(&p);
+            raster_species(&raster_a, s, largest_k(s), &p, true, true); /* fills the large grid */
+            raster_species(&raster_a, s, largest_k(s), &p, marks == 1, false);
+            memset(&raster_b, 0, sizeof raster_b);
+            raster_species(&raster_b, s, largest_k(s), &p, marks == 1, false);
+            size_t cells = (size_t)raster_b.w * (size_t)raster_b.h;
+            CHECK(raster_a.w == raster_b.w && raster_a.h == raster_b.h);
+            CHECK(raster_a.ox == raster_b.ox && raster_a.oy == raster_b.oy);
+            CHECK(memcmp(raster_a.part, raster_b.part, cells) == 0);
+            CHECK(memcmp(raster_a.ink, raster_b.ink, cells) == 0);
+            /* From hip to the end: every field after the two arrays. */
+            size_t from = offsetof(SkeletonRaster, hip);
+            CHECK(memcmp((const char *)&raster_a + from, (const char *)&raster_b + from,
+                         sizeof raster_a - from) == 0);
+        }
     }
 }
 
@@ -194,7 +225,8 @@ static void test_other_traits_change_nothing(void)
         }
         species_anatomy(&a, s, &t, largest_k(s));
         skeleton_raster(&raster_b, &a, &p, true, false);
-        CHECK(memcmp(raster_a.ink, raster_b.ink, sizeof raster_a.ink) == 0);
+        CHECK(raster_a.w == raster_b.w && raster_a.h == raster_b.h);
+        CHECK(memcmp(raster_a.ink, raster_b.ink, (size_t)raster_a.w * (size_t)raster_a.h) == 0);
     }
 }
 
@@ -747,6 +779,7 @@ int main(void)
 {
     test_sea_species_drawn_without_legs();
     test_same_input_same_pixels();
+    test_small_over_large_same_as_fresh();
     test_everything_inside_the_grid();
     test_other_traits_change_nothing();
     test_planted_leg_is_straight();
