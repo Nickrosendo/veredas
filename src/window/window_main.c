@@ -531,7 +531,9 @@ static void copy_code(App *a)
  * the map, is what the demo cuts. Measured on a 192 by 108 world after three
  * years: 15.4 MB a world, 28.9 MB of drawing, about 60 MB in all (8,000 slots
  * would be 37 MB a world and 106 MB in all). The demo opens a code only up to
- * these.
+ * these. On 2026-11-21 the picture cache (sprite.h) doubled, 13.6 MB more of
+ * drawing, which the browser takes in full: about 74 MB in all, worked out,
+ * not measured.
  */
 #ifdef VEREDAS_DEMO
 #define DEMO_POOL_CAPACITY 3000

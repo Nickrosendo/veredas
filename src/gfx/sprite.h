@@ -78,9 +78,13 @@ void sprite_palette_flash(SpritePalette *out, const SpritePalette *in, float fla
 /* Small-grid pictures kept. Each is cut to its inked box first, which is 296
  * bytes on average on a crowded world (2026-11-07) against 3,584 for the whole
  * grid: SPRITE_ENTRIES of them go in slots of SPRITE_TRIMMED_BYTES, and the few
- * bigger ones in SPRITE_ENTRIES / 6 whole-grid slots. 13.6 MB in all, less than
- * the 14.7 MB that 4,096 whole grids took, for three times the pictures. */
-#define SPRITE_ENTRIES 12288
+ * bigger ones in SPRITE_ENTRIES / 6 whole-grid slots. 27.2 MB at most, taken
+ * only as pictures fill it. Doubled from 12,288 on 2026-11-21: the air half's
+ * busier world (birds drawn from the skeleton, 24 poses each) asked for more
+ * pictures than that held, so pictures were thrown out and drawn again soon
+ * after; doubled, Far zoom at 1080p took about 6% less time a frame, for 7 MB
+ * more at the peak of a 600-frame run (95 to 102 MB). */
+#define SPRITE_ENTRIES 24576
 #define SPRITE_TRIMMED_BYTES 512
 #define SPRITE_DETAIL_ENTRIES 512  /* large-grid pictures */
 
