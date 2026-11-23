@@ -154,10 +154,13 @@ fi
 # 6. A world that dies. A small world has too few founders to last: all six seeds
 # tried at 40x20 were empty by tick 5,000. The world stops on the tick it ended,
 # so more frames must not change it, and its save loads to the same dead world.
-dead_a=$("$OUT/veredas-window" --seed 1 --size 40x20 --speed 120 --frames 2500 \
+# Under rules 5 (2026-11-23) seed 1 lives longer: on Linux it ends between
+# frames 3,500 and 4,000 (it ended before 2,500 under rules 4), and on Windows,
+# whose maths rounds differently, it was still alive at 3,000. 5,000 leaves room.
+dead_a=$("$OUT/veredas-window" --seed 1 --size 40x20 --speed 120 --frames 5000 \
     --save "$TMP/dead.save" --screenshot "$TMP/dead.ppm" --checksum) ||
     fail "the dying world's run failed"
-dead_b=$("$OUT/veredas-window" --seed 1 --size 40x20 --speed 120 --frames 3000 --checksum) ||
+dead_b=$("$OUT/veredas-window" --seed 1 --size 40x20 --speed 120 --frames 6000 --checksum) ||
     fail "the longer dying world's run failed"
 [ -n "$dead_a" ] && [ "$dead_a" = "$dead_b" ] ||
     fail "a dead world went on changing: '$dead_a', then '$dead_b'"

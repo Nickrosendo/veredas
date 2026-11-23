@@ -99,10 +99,10 @@
  * else). Both are pinned, so a change that moves the world fails on both.
  * For rules 3 (2026-11-21) it was read from the first GitHub run's log, gcc
  * and clang alike: an Ubuntu 24.04 container gives this machine's value, not
- * the runner's, so it cannot stand in. For rules 4 (2026-11-22) and rules
- * 5 (2026-11-23) not read yet: the next GitHub run's log gives it, and until
- * then this pin fails there. */
-#define SEED_7_AFTER_500_CI 0xb8ef810d840c1f1cULL
+ * the runner's, so it cannot stand in. For rules 5 (2026-11-23) read from
+ * GitHub run 45168088536's log, gcc and clang alike (rules 4's was never
+ * read: it was replaced before a run gave it). */
+#define SEED_7_AFTER_500_CI 0x454691eb4ae4f55cULL
 
 /* One creature in a bare 16x16 world with the scripted brain, resting for a
  * tick, calling or not. Returns the energy it has left. */
