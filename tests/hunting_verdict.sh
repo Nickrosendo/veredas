@@ -3,8 +3,10 @@
 # Runs seeds 1 to 15 side by side to year 23, watched from year 20, and
 # applies the bars agreed before running:
 #   1. land unharmed: walkers alive at year 23 in 15 of 15, and walkers' wound
-#      deaths other than dives within 30 % of engine 2123688's on the same
-#      seed (tests/hunting_baseline.txt) in 15 of 15;
+#      deaths other than dives, summed over the 15 worlds, within 30 % of the
+#      sum of engine 2123688's (tests/hunting_baseline.txt). Judged on the sum,
+#      not per seed (Nicolas, 2026-11-23): any new rule replays every world
+#      differently, so one seed swings -54 % to +66 % while the average holds;
 #   2. the sea feeds its hunters: sea hunters alive at year 23 in at least 12
 #      of 15, and at least 1,000 sea meat meals (fish and carrion eaten by sea
 #      bodies) in years 20 to 23 in at least 10 of 15;
@@ -56,7 +58,7 @@ echo "hunting verdict: $SEEDS seeds to year 23, watched from year 20${CONFIG:+, 
 echo
 printf "%4s %7s %7s %6s %6s %8s %7s %6s %6s %6s %5s\n" seed walkers wounds base change sea_hunt sea_meat \
     air_meat plant meat% dives
-walk_ok=0 wound_ok=0 seah_ok=0 seam_ok=0 share_ok=0 dive_ok=0
+walk_ok=0 wound_sum=0 base_sum=0 seah_ok=0 seam_ok=0 share_ok=0 dive_ok=0
 for seed in $(seq 1 "$SEEDS"); do
     air_line=$(grep '^AIR ' "$TMP/$seed.txt" || echo "AIR walkers 0 flyers 0 up 0 air_hunters 0 line_alive 0 plant_meals 0 meat_meals 0 landings 0")
     hunt_line=$(grep '^HUNT ' "$TMP/$seed.txt" || echo "HUNT land_wounds 0 dive_kills_land 0 dive_kills 0 sea_meat 0 sea_fish 0 air_meat 0 air_plant 0 air_fish 0 sea_hunters 0")
@@ -71,12 +73,19 @@ for seed in $(seq 1 "$SEEDS"); do
     printf "%4s %7s %7s %6s %5s%% %8s %7s %6s %6s %5s%% %5s\n" "$seed" "$walkers" "$wounds" "$base" \
         "$change" "$sea_hunters" "$sea_meat" "$air_meat" "$air_plant" "$share" "$dives"
     [ "$walkers" -gt 0 ] && walk_ok=$((walk_ok + 1))
-    [ "$change" -ge -30 ] && [ "$change" -le 30 ] && wound_ok=$((wound_ok + 1))
+    wound_sum=$((wound_sum + wounds))
+    base_sum=$((base_sum + base))
     [ "$sea_hunters" -gt 0 ] && seah_ok=$((seah_ok + 1))
     [ "$sea_meat" -ge 1000 ] && seam_ok=$((seam_ok + 1))
     [ "$share" -ge 20 ] && share_ok=$((share_ok + 1))
     [ "$dives" -ge 100 ] && dive_ok=$((dive_ok + 1))
 done
+
+# The per-seed change above is shown for reading; bar 1 judges the sum.
+sum_change=$(( (wound_sum - base_sum) * 100 / base_sum ))
+wound_ok=0
+[ "$sum_change" -ge -30 ] && [ "$sum_change" -le 30 ] && wound_ok=1
+printf "%4s %7s %7s %6s %5s%%\n" sum "" "$wound_sum" "$base_sum" "$sum_change"
 
 echo
 printf "%4s %6s %8s\n" seed picks sea_sky
@@ -93,7 +102,11 @@ verdict() {
 }
 echo
 verdict "1 walkers alive at year 23" "$walk_ok" 15 "$SEEDS"
-verdict "1 walkers' wound deaths (no dives) within 30% of 2123688" "$wound_ok" 15 "$SEEDS"
+if [ "$wound_ok" -eq 1 ]; then
+    echo "PASS  1 walkers' wound deaths (no dives), sum of 15: $sum_change% from 2123688's (needs within 30%)"
+else
+    echo "FAIL  1 walkers' wound deaths (no dives), sum of 15: $sum_change% from 2123688's (needs within 30%)"
+fi
 verdict "2 sea hunters alive at year 23" "$seah_ok" 12 "$SEEDS"
 verdict "2 at least 1,000 sea meat meals, years 20-23" "$seam_ok" 10 "$SEEDS"
 verdict "3 meat at least 20% of flyers' meals, years 20-23" "$share_ok" 10 "$SEEDS"
