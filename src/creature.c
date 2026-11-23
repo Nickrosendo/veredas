@@ -713,10 +713,12 @@ static void describe_seen(const World *w, const Pool *p, const Creature *c,
  * pass through the same cell; a cell is counted once, for the first line still
  * open that reaches it at that step. The lines are walked in order of slope, so
  * their sideways offsets never fall as j rises, and a repeat can only be the
- * same offset as the line before.
+ * same offset as the line before. With looks_down, a flyer up also sees the
+ * creature on the ground of its own cell, at step 0.
  */
 static void sense_view(const World *w, const Pool *p, const Creature *c,
-                       uint8_t heading, const Settings *s, float *out)
+                       uint8_t heading, bool looks_down, const Settings *s,
+                       float *out)
 {
     int first = cell_towards(w, c->x, c->y, heading);
     /* The scent on that first cell, squashed into 0..1: half at one bite's
@@ -762,6 +764,19 @@ static void sense_view(const World *w, const Pool *p, const Creature *c,
     float fish = 0.0f;
     float aloft = 0.0f; /* the clearest flyer up seen so far */
     Seen seen = {0.0f, -1};
+    if (looks_down && above) {
+        /* From the air the view ahead also takes in the ground right below,
+         * where a strike from the air aims first (creature_attack_target; the
+         * livelier hunting design, section 10.1). Only the creature there
+         * counts, at the clarity of distance 0: no plants or fish, which the
+         * strike does not need. A walker's own cell holds only itself. */
+        int own = world_idx(w, c->x, c->y);
+        int under = w->occupant[own];
+        if (under >= 0 && &p->items[under] != c) {
+            float how = view_clarity(0.0f, sight) * sight_reach(&p->items[under], own, w, s);
+            seen = (Seen){how, under};
+        }
+    }
     for (int d = 1; d <= reach; d++) {
         bool any_open = false;
         int last_offset = 0;
@@ -1131,7 +1146,8 @@ static void sense_all(const World *w, const Pool *p, int idx,
         /* A pointer into the middle of the array: the view's first slot.
          * sense_view writes out[0] .. out[VIEW_VALUES - 1] from there. */
         float *slots = &out->v[SENSE_VIEWS + view * VIEW_VALUES];
-        sense_view(w, p, c, view_heading[view], s, slots);
+        /* Only the view ahead, the way a strike goes, looks down as well. */
+        sense_view(w, p, c, view_heading[view], view == VIEW_AHEAD, s, slots);
     }
 }
 

@@ -89,9 +89,10 @@
  * four more senses, and a brake for flyers; then fish (rules 4): the fish
  * layer, fish bitten as meat, a dive's strike bonus and a flyer's farther
  * sight and smell up in the air; then a strike from the air that reaches the
- * cell ahead when nobody is right below (rules 5).
+ * cell ahead when nobody is right below (rules 5); then a flyer up whose view
+ * ahead also sees the creature right below it (rules 6).
  */
-#define SEED_7_AFTER_500 0x904dda38d58dd109ULL
+#define SEED_7_AFTER_500 0x8898b6ba0272fbb8ULL
 /* The same world on GitHub's Linux runner. Its maths library rounds the last
  * bit of some tanhf results differently from Debian 12 on Nicolas's machine
  * (found 2026-11-19: the runner image changed, and the old code's pin failed
@@ -101,7 +102,9 @@
  * and clang alike: an Ubuntu 24.04 container gives this machine's value, not
  * the runner's, so it cannot stand in. For rules 5 (2026-11-23) read from
  * GitHub run 45168088536's log, gcc and clang alike (rules 4's was never
- * read: it was replaced before a run gave it). */
+ * read: it was replaced before a run gave it). For rules 6 (2026-11-23) not
+ * read yet: the next GitHub run's log gives it, and until then this pin
+ * still holds rules 5's value and fails there. */
 #define SEED_7_AFTER_500_CI 0x454691eb4ae4f55cULL
 
 /* One creature in a bare 16x16 world with the scripted brain, resting for a
@@ -174,7 +177,7 @@ static void test_same_seed_same_checksum(void)
      * value above changes how worlds unfold, so old world codes would replay
      * wrong: raise VEREDAS_RULES (sim.h) in the same commit, and this number with
      * it. Checked on every platform, since it is the rule, not the maths. */
-    CHECK(VEREDAS_RULES == 5);
+    CHECK(VEREDAS_RULES == 6);
     sim_free(&a);
     sim_free(&b);
 }

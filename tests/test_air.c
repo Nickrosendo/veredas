@@ -550,6 +550,55 @@ static void test_dive_at_the_cell_ahead(void)
 }
 
 /* Up, a flyer's view sight is aloft_sight times its sight on the ground. */
+/* Up in the air, the view ahead also takes in the cell right below, where a
+ * strike from the air aims first (the livelier hunting design, section 10.1):
+ * a walker standing there is seen at the clarity of distance 0. The views to
+ * the sides do not count it. A walker on the ground has nothing under it but
+ * itself, and does not see itself. */
+static void test_aloft_sees_below(void)
+{
+    Settings s = settings_default();
+    World w;
+    make_world(&w, 16, 16);
+    Pool p;
+    CHECK(pool_init(&p, 2));
+    p.light = 1.0f;
+    Rng r;
+    rng_seed(&r, 1);
+    int f = spawn_winged(&p, &w, 8, 9, 1.0f);
+    creature_act(&w, &p, f, act(ACT_MOVE), &s, &r); /* up, at (8, 8) */
+    CHECK(p.items[f].up > 0);
+    p.items[f].heading = HEADING_NORTH;
+    Senses in = {0};
+    creature_sense(&w, &p, f, &s, &in);
+    CHECK(in.v[SENSE_VIEWS + VIEW_AHEAD * VIEW_VALUES + VIEW_SEEN] == 0.0f);
+
+    int walker = spawn_winged(&p, &w, 8, 8, 0.0f); /* right below it */
+    CHECK(walker >= 0);
+    make_stranger(&p.items[walker]);
+    p.items[walker].heading = HEADING_NORTH;
+    creature_sense(&w, &p, f, &s, &in);
+    const float *ahead = &in.v[SENSE_VIEWS + VIEW_AHEAD * VIEW_VALUES];
+    float expected = sight_reach(&p.items[walker], world_idx(&w, 8, 8), &w, &s);
+    CHECK(expected > 0.0f);
+    CHECK(fabsf(ahead[VIEW_SEEN] - expected) < 1e-6f);
+    CHECK(ahead[VIEW_RELSIZE] > 0.0f);
+    CHECK(in.v[SENSE_VIEWS + VIEW_LEFT * VIEW_VALUES + VIEW_SEEN] == 0.0f);
+    CHECK(in.v[SENSE_VIEWS + VIEW_RIGHT * VIEW_VALUES + VIEW_SEEN] == 0.0f);
+
+    /* The walker, with the flyer up and nobody else on the ground, sees no
+     * creature in any view: not the flyer (only VIEW_ALOFT tells of it, and
+     * only where the flyer is in a view) and not itself. */
+    Senses ground = {0};
+    creature_sense(&w, &p, walker, &s, &ground);
+    for (int view = 0; view < VIEW_COUNT; view++) {
+        CHECK(ground.v[SENSE_VIEWS + view * VIEW_VALUES + VIEW_SEEN] == 0.0f);
+    }
+    pool_free(&p);
+    world_free(&w);
+}
+
+/* Up, a flyer's view sight is aloft_sight times its sight on the ground. */
 static void test_aloft_sees_farther(void)
 {
     Settings s = settings_default();
@@ -904,6 +953,7 @@ int main(void)
     test_dive_kill_counted();
     test_air_strike_reaches_ahead();
     test_dive_at_the_cell_ahead();
+    test_aloft_sees_below();
     test_aloft_sees_farther();
     test_aloft_smells_farther();
     test_flyer_child_born_on_rock();

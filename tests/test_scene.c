@@ -552,10 +552,13 @@ static void test_known_world_pixels(void)
          * on deep water; old and new written out and compared side by side.
          * Re-pinned for the strike from the air that reaches ahead (rules 5,
          * 2026-11-23): another world, the same drawing; 4 to 9 % of pixels
-         * moved, old and new compared side by side. */
+         * moved, old and new compared side by side. Re-pinned for a flyer
+         * that sees the cell below it (rules 6, 2026-11-23): another world,
+         * the same drawing; 4 to 9 % of pixels moved, old and new compared
+         * side by side. */
         static const uint64_t EXPECTED[CAMERA_ZOOMS] = {
-            0x93d8caa003c98f9au, 0x3f1d8cbccda79c0cu,
-            0x03cd92b1069af47fu, 0x25ce44a2b61a69fdu,
+            0x9196f37e20ee3a79u, 0x7f9be097bbdd9f3fu,
+            0x9ab083a6eed62b37u, 0x0caceb27c07d23b5u,
         };
         if (pinned && hashes[level] != EXPECTED[level]) {
             printf("level %d: 0x%llxu\n", level,
@@ -1601,9 +1604,11 @@ static void test_underwater_pixels(void)
      * (rules 4, 2026-11-22): another world, shoals glittering underwater;
      * old and new compared side by side. Re-pinned for the strike from the
      * air that reaches ahead (rules 5, 2026-11-23): another world, so the
-     * view centres on another place; compared side by side. */
+     * view centres on another place; compared side by side. Re-pinned for a
+     * flyer that sees the cell below it (rules 6, 2026-11-23): another world
+     * and place again; compared side by side. */
     static const uint64_t EXPECTED[3] = {
-        0xcaa48a8c53cef9a8u, 0xd0d67ad4d0f26df1u, 0x24eaf0f95fb954e8u,
+        0xfe95c1507cf52725u, 0x4f94a984db7fe701u, 0x797468a071313f90u,
     };
     for (int zoom = 0; zoom < 3; zoom++) {
         if (pinned && hashes[zoom] != EXPECTED[zoom]) {
@@ -2772,9 +2777,11 @@ static void test_sky_pixels(void)
      * down drawn in the air), old and new pictures compared side by side.
      * Re-pinned for fish (rules 4, 2026-11-22): another world. Re-pinned
      * for the strike from the air that reaches ahead (rules 5, 2026-11-23):
-     * another world, another place; old and new compared side by side. */
+     * another world, another place; old and new compared side by side.
+     * Re-pinned for a flyer that sees the cell below it (rules 6,
+     * 2026-11-23): another world, another place; compared side by side. */
     static const uint64_t EXPECTED[3] = {
-        0xf61736cadabd1295u, 0x35256bf47b36d036u, 0xeace27b809d19a86u,
+        0x9cec1af308a01228u, 0x5bf1525559954769u, 0xf3f4828e535d7e49u,
     };
     for (int zoom = 0; zoom < 3; zoom++) {
         if (pinned && hashes[zoom] != EXPECTED[zoom]) {
