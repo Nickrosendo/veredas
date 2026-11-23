@@ -512,6 +512,33 @@ typedef struct {
      * (birth_per_plant * plants + birth_per_plankton * plankton-rich cells).
      * 0: off. */
     float birth_per_air;
+    /* Fish (the livelier hunting design, 5.1; fish.h). Every fish_every ticks
+     * the fish on each deep cell move fish_growth of the way to a cap of
+     * fish_cap_share times the cell's plankton, eating fish_graze of plankton
+     * per unit grown; then fish_drift of a cell's fish move to the richest
+     * deep side neighbour, or fish_flee of them away from a creature that ate
+     * fish within fish_fear_ticks. A new world starts with shoals on deep
+     * cells whose plankton cap is at least fish_start_rich. A full cell holds
+     * fish_energy, and a bite keeps fish_yield of what it takes before
+     * digestion (carrion keeps all of it). */
+    int fish_every;
+    float fish_growth;
+    float fish_cap_share;
+    float fish_graze;
+    float fish_drift;
+    float fish_flee;
+    int fish_fear_ticks;
+    float fish_start_rich;
+    float fish_energy;
+    float fish_yield;
+    /* The air's payoff (5.2). A hit struck from the air adds dive_strike_bonus
+     * times the attacker's size before armour; a flyer up sees with its sight
+     * times aloft_sight, and each of its views reads the strongest carrion
+     * scent of the first aloft_scent cells ahead (1: the first, as on the
+     * ground). */
+    float dive_strike_bonus;
+    float aloft_sight;
+    int aloft_scent;
 } Settings;
 
 Settings settings_default(void);

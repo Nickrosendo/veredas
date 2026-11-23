@@ -64,7 +64,10 @@ _Static_assert(sizeof(SAVE_MAGIC_OLD) == SAVE_MAGIC_LEN + 1, "old save marker le
 /* 33: the air (the wing gene, up and air_line on every creature, the air's
  * settings; four more senses, so longer genomes). Older files are refused for
  * the same reason. */
-#define SAVE_VERSION 33u
+/* 34: fish (the fish layer, fish_meal_at and fish_fed on every creature,
+ * three more counts in every life tally, the fish and dive settings). Older
+ * files are refused for the same reason. */
+#define SAVE_VERSION 34u
 
 /* No value in a healthy world comes near this. Bounding them keeps sums
  * from reaching infinity, and float-to-int conversions defined. */
@@ -243,6 +246,7 @@ static void put_world(Writer *w, const World *world)
     put_floats(w, world->rain, n);
     put_floats(w, world->snow, n);
     put_floats(w, world->plankton, n);
+    put_floats(w, world->fish, n);
     put_u64(w, world->rain_seed);
 }
 
@@ -287,6 +291,9 @@ static void put_tally(Writer *w, const LifeTally *t)
     put_u32(w, t->heavy_wounds);
     put_u32(w, t->kin_lost);
     put_u32(w, t->moves);
+    put_u32(w, t->dive_kills);
+    put_u32(w, t->sea_kills);
+    put_u32(w, t->fish_meals);
     put_float(w, t->max_size);
     put_bytes(w, &t->flags, 1);
     /* int8_t to unsigned char: -1 becomes 255, and get_tally turns it back. */
@@ -355,6 +362,8 @@ static void put_creature(Writer *w, const Creature *c)
     put_u32(w, (uint32_t)c->meal_y);
     put_u32(w, c->meal_at);
     put_bytes(w, &c->meal_known, 1);
+    put_u32(w, c->fish_meal_at);
+    put_bytes(w, &c->fish_fed, 1);
     put_u16(w, c->sleep_ticks);
     put_bytes(w, &c->hibernating, 1);
     put_bytes(w, &c->calling, 1);
@@ -760,6 +769,15 @@ static void get_world(Reader *r, World *w)
     get_floats(r, w->rain, n, 0.0f, 1.0f);
     get_floats(r, w->snow, n, 0.0f, 1.0f);
     get_floats(r, w->plankton, n, 0.0f, 1.0f);
+    get_floats(r, w->fish, n, 0.0f, 1.0f);
+    for (size_t i = 0; i < n; i++) {
+        /* Fish live on deep water only (fish.h); this program never writes
+         * them anywhere else. */
+        if (w->fish[i] != 0.0f && w->terrain[i] != TERRAIN_WATER) {
+            fail(r, "fish on dry land in the file");
+            break;
+        }
+    }
     w->rain_seed = get_u64(r);
 }
 
@@ -824,6 +842,9 @@ static void get_tally(Reader *r, LifeTally *t)
     t->heavy_wounds = get_u32(r);
     t->kin_lost = get_u32(r);
     t->moves = get_u32(r);
+    t->dive_kills = get_u32(r);
+    t->sea_kills = get_u32(r);
+    t->fish_meals = get_u32(r);
     t->max_size = get_float(r, 0.0f, FLOAT_LIMIT);
     t->flags = get_byte(r);
     t->home_region = get_region(r);
@@ -994,7 +1015,10 @@ static void get_creature(Reader *r, Creature *c, const Settings *set,
     uint32_t meal_y = get_u32(r);
     c->meal_at = get_u32(r);
     c->meal_known = get_byte(r);
-    if (meal_x >= (uint32_t)w->w || meal_y >= (uint32_t)w->h || c->meal_known > 1) {
+    c->fish_meal_at = get_u32(r);
+    c->fish_fed = get_byte(r);
+    if (meal_x >= (uint32_t)w->w || meal_y >= (uint32_t)w->h || c->meal_known > 1 ||
+        c->fish_fed > 1) {
         fail(r, "a creature in the file is impossible");
         return;
     }

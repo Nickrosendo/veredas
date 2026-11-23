@@ -24,6 +24,9 @@ void world_free(World *w)
     free(w->snow);
     free(w->plankton);
     free(w->plankton_cap);
+    free(w->fish);
+    free(w->fish_next);
+    free(w->fish_scare);
     free(w->occupant);
     for (int k = 0; k < SKY_LAYERS; k++) {
         free(w->sky[k]);
@@ -70,6 +73,9 @@ bool world_init(World *w, int width, int height)
     w->snow = calloc(n, sizeof(float));
     w->plankton = calloc(n, sizeof(float));
     w->plankton_cap = calloc(n, sizeof(float));
+    w->fish = calloc(n, sizeof(float));
+    w->fish_next = calloc(n, sizeof(float));
+    w->fish_scare = malloc(n * sizeof(int32_t));
     w->occupant = malloc(n * sizeof(int32_t));
     bool sky_ok = true;
     for (int k = 0; k < SKY_LAYERS; k++) {
@@ -83,7 +89,8 @@ bool world_init(World *w, int width, int height)
         w->carrion_level == NULL || w->scent == NULL ||
         w->scent_next == NULL || w->water == NULL ||
         w->temperature == NULL || w->rain == NULL || w->snow == NULL ||
-        w->plankton == NULL || w->plankton_cap == NULL || w->occupant == NULL || !sky_ok) {
+        w->plankton == NULL || w->plankton_cap == NULL || w->fish == NULL ||
+        w->fish_next == NULL || w->fish_scare == NULL || w->occupant == NULL || !sky_ok) {
         /* Partial failure: some layers exist and some do not. Free the
          * ones that do, and leave the struct empty. */
         world_free(w);
@@ -117,9 +124,12 @@ void world_clear(World *w)
     memset(w->snow, 0, n * sizeof(float));
     memset(w->plankton, 0, n * sizeof(float));
     memset(w->plankton_cap, 0, n * sizeof(float));
+    memset(w->fish, 0, n * sizeof(float));
+    memset(w->fish_next, 0, n * sizeof(float));
     w->rain_seed = 0;
     for (size_t i = 0; i < n; i++) {
         w->occupant[i] = -1;
+        w->fish_scare[i] = -1;
         for (int k = 0; k < SKY_LAYERS; k++) {
             w->sky[k][i] = -1;
         }

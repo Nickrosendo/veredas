@@ -574,3 +574,42 @@ flight_step_cost = 0.15
 
 # flyer births slow as flyers alive near this share of the land's and the sea's room together (0: off) (0 to 1e+06)
 birth_per_air = 0.25
+
+# ticks between updates of the fish (1 to 65535)
+fish_every = 10
+
+# share of the way to its cap fish grow at an update (0 to 1)
+fish_growth = 0.03
+
+# fish a cell can hold, as a share of its plankton (0 to 1)
+fish_cap_share = 0.8
+
+# plankton eaten per unit of fish grown (0 to 1e+06)
+fish_graze = 0.2
+
+# share of a cell's fish moving toward richer plankton at an update (0 to 1)
+fish_drift = 0.15
+
+# share of a cell's fish moving away from a fish eater at an update (0 to 1)
+fish_flee = 0.6
+
+# ticks after a fish meal that an eater scares fish (0 to 65535)
+fish_fear_ticks = 20
+
+# plankton cap from which a new world's deep cells start with fish (0.01 to 1)
+fish_start_rich = 0.5
+
+# energy in a cell full of fish (0 to 1e+06)
+fish_energy = 40
+
+# share of a fish bite's energy kept before digestion (0 to 1)
+fish_yield = 0.6
+
+# damage a hit from the air adds per unit of the attacker's size (0 to 1e+06)
+dive_strike_bonus = 3
+
+# a flyer's sight while up, times its sight on the ground (1 to 100)
+aloft_sight = 2
+
+# cells ahead whose strongest carrion scent a flyer up smells (1 to 16)
+aloft_scent = 5

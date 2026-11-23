@@ -55,6 +55,7 @@ void pool_clear(Pool *p)
     p->light = 1.0f;
     p->plant_eaters = 0;
     p->births_refused = 0;
+    p->hunts_total = 0;
     /* The struct's array itself, so this clears every cause, however many. */
     memset(p->deaths, 0, sizeof(p->deaths));
 }
@@ -654,6 +655,9 @@ float view_clarity(float d, float sight)
 float creature_view_sight(const Creature *c, float light, const Settings *s)
 {
     float sight = (float)creature_sight(c, s) * creature_vision(c, light, s);
+    if (c->up > 0) {
+        sight *= s->aloft_sight; /* the ground spread out below */
+    }
     return sight > 1.0f ? sight : 1.0f;
 }
 
@@ -716,8 +720,16 @@ static void sense_view(const World *w, const Pool *p, const Creature *c,
 {
     int first = cell_towards(w, c->x, c->y, heading);
     /* The scent on that first cell, squashed into 0..1: half at one bite's
-     * worth. The three views together say which way it grows. */
+     * worth. The three views together say which way it grows. A flyer up
+     * smells the strongest of the first aloft_scent cells: the air carries
+     * the smell of a carcass farther than the ground does. */
     float scent = w->scent[first];
+    int smelled = c->up > 0 ? s->aloft_scent : 1;
+    for (int d = 2; d <= smelled; d++) {
+        float there = w->scent[world_idx(w, c->x + d * STEP_X[heading],
+                                         c->y + d * STEP_Y[heading])];
+        scent = there > scent ? there : scent;
+    }
     out[VIEW_CARRION] = scent / (scent + s->bite_meat_energy);
 
     float sight = creature_view_sight(c, p->light, s);
@@ -744,6 +756,10 @@ static void sense_view(const World *w, const Pool *p, const Creature *c,
     bool above = c->up > 0;
     const int32_t *sky = w->sky[SKY_LOW];
     float plants = 0.0f;
+    /* Fish are meat food to a sea body and to a flyer (which can dive for
+     * them): summed like plants, each cell by how much it holds. */
+    bool sees_fish = sea || creature_flyer(c);
+    float fish = 0.0f;
     float aloft = 0.0f; /* the clearest flyer up seen so far */
     Seen seen = {0.0f, -1};
     for (int d = 1; d <= reach; d++) {
@@ -789,7 +805,8 @@ static void sense_view(const World *w, const Pool *p, const Creature *c,
             bool food = sea && w->terrain[cell] == TERRAIN_WATER
                             ? w->plankton[cell] >= PLANKTON_STEP
                             : plant_has_food(w, cell, s, p->season);
-            if (!food && other < 0 && bird < 0) {
+            float shoal = sees_fish ? w->fish[cell] : 0.0f;
+            if (!food && other < 0 && bird < 0 && shoal <= 0.0f) {
                 continue; /* nothing here to see: no need for its clarity */
             }
             /* sqrtf is the float square root; d and offset are ints, converted
@@ -799,6 +816,7 @@ static void sense_view(const World *w, const Pool *p, const Creature *c,
             if (food) {
                 plants += clear;
             }
+            fish += clear * shoal;
             if (bird >= 0 && clear > aloft) {
                 aloft = clear; /* a flyer against the sky: no ground to hide in */
             }
@@ -816,6 +834,13 @@ static void sense_view(const World *w, const Pool *p, const Creature *c,
         }
     }
     out[VIEW_PLANT] = plants / (plants + s->view_half);
+    /* Fish ride on the carrion value, as meat food ahead: whichever says more,
+     * the scent or the shoals, so no new sense (and no longer genome) is
+     * needed. */
+    float shoals = fish / (fish + s->view_half);
+    if (shoals > out[VIEW_CARRION]) {
+        out[VIEW_CARRION] = shoals;
+    }
     out[VIEW_ALOFT] = aloft;
     if (seen.idx >= 0) {
         describe_seen(w, p, c, s, seen, out);
@@ -1250,7 +1275,11 @@ static float hit_damage(const Creature *c, const Creature *target, float a,
 {
     float raised = 1.0f + s->weapon_damage * c->genome.g[GENE_WEAPON];
     float left = 1.0f - s->armour_block * target->genome.g[GENE_ARMOUR];
-    return s->bite_damage * a * raised * (left > 0.0f ? left : 0.0f);
+    float hit = s->bite_damage * a * raised;
+    if (c->up > 0) {
+        hit += s->dive_strike_bonus * a; /* the weight of a dive behind it */
+    }
+    return hit * (left > 0.0f ? left : 0.0f);
 }
 
 /* Whether wings make a hit that would land miss: chance wing_dodge times the
@@ -1273,6 +1302,24 @@ static void wake(Creature *c)
         c->current.hold = 1;
         c->hold_left = 0;
         c->hibernating = 0;
+    }
+}
+
+/* A kill from the air or at sea: into the pool's ring for the notices, and
+ * into the hunter's story for the Documentary camera. Changes no rule. */
+static void note_hunt(Pool *p, Creature *c, const Creature *target, uint8_t kind)
+{
+    /* A creature_habitat value is 0 to 2: it fits a uint8_t. */
+    p->hunts[p->hunts_total % HUNTS_KEPT] =
+        (HuntNote){.tick = p->now, .hunter = c->id, .prey = target->id, .kind = kind,
+                   .prey_habitat = (uint8_t)creature_habitat(target)};
+    p->hunts_total++;
+    if (p->chronicle != NULL) {
+        if (kind == HUNT_DIVE) {
+            c->tally.dive_kills++;
+        } else {
+            c->tally.sea_kills++;
+        }
     }
 }
 
@@ -1301,9 +1348,18 @@ static int act_attack(const World *w, Pool *p, int idx, const Settings *s,
         target->health -= hit_damage(c, target, a, s);
         target->hurt_tick += before - target->health;
         record_hit(p, c, target, before, s); /* reads the ring before the hit */
-        if (before > 0.0f && target->health <= 0.0f && creature_is_hunter(c) &&
-            creature_sea_body(c) && creature_sea_body(target)) {
+        bool killed = before > 0.0f && target->health <= 0.0f;
+        if (killed && creature_is_hunter(c) && creature_sea_body(c) &&
+            creature_sea_body(target)) {
             p->sea_kills++; /* a measure for the sea verdict, read by no rule */
+        }
+        if (killed && c->up > 0) {
+            /* Measures for the hunting verdict, read by no rule. */
+            p->dive_kills++;
+            p->dive_kills_land += creature_habitat(target) == HABITAT_LAND;
+            note_hunt(p, c, target, HUNT_DIVE);
+        } else if (killed && creature_sea_body(c) && creature_sea_body(target)) {
+            note_hunt(p, c, target, HUNT_SEA);
         }
         if (chosen) {
             tactics_note_hit(p->tactics, w, p, c, target, target->health <= 0.0f,
@@ -1456,6 +1512,47 @@ static void eat_plankton(World *w, Creature *c, int cell, const Settings *s)
     creature_ate(c, gain, 1.0f);
 }
 
+bool creature_fish_eater(const World *w, const Creature *c)
+{
+    if (creature_sea_body(c)) {
+        return true;
+    }
+    return creature_flyer(c) && c->up == 0 &&
+           w->terrain[world_idx(w, c->x, c->y)] == TERRAIN_WATER;
+}
+
+/* How much energy one bite of the fish on cell i would take: what the mouth
+ * takes of carrion, up to what the cell's fish hold (fish_energy a full cell). */
+static float fish_take(const World *w, int i, const Creature *c, const Settings *s)
+{
+    float mouth = s->bite_meat_energy * creature_size(c, s);
+    float there = w->fish[i] * s->fish_energy;
+    return there < mouth ? there : mouth;
+}
+
+/* What c gets from taking that much: fish_yield of it, then digested as meat.
+ * Below carrion's whole take, so a large kill still pays a sea hunter more. */
+static float fish_gain(const Creature *c, float take, const Settings *s)
+{
+    return take * s->fish_yield * meat_eff(c, s);
+}
+
+/* Eats what its mouth can take of the fish on this deep cell. Fish are a
+ * level-2 food: they eat plankton, a level-1 one. The meal is remembered as
+ * the newest, so the fish nearby slide away from it for a while (fish.h). */
+static void eat_fish(World *w, Creature *c, int cell, uint32_t now, const Settings *s)
+{
+    float take = fish_take(w, cell, c, s);
+    /* fish_energy is above 0 whenever take is: a cell of 0 energy gives 0. */
+    float left = s->fish_energy > 0.0f ? w->fish[cell] - take / s->fish_energy : 0.0f;
+    w->fish[cell] = left > 0.0f ? left : 0.0f;
+    float gain = fish_gain(c, take, s);
+    c->energy += gain;
+    creature_ate(c, gain, 2.0f);
+    c->fish_meal_at = now;
+    c->fish_fed = 1;
+}
+
 /* Eats whole fruit. The plant paid for it when it was made, so nothing else
  * happens to the plant. A creature already carrying a seed keeps that one: if
  * a newer seed replaced it, a steady fruit-eater would never drop any. */
@@ -1521,8 +1618,10 @@ BiteChoice creature_bite_choice(const World *w, const Pool *p, int idx,
     bool food_is_carrion = false;
     bool food_is_fruit = false;
     bool food_is_plankton = false;
+    bool food_is_fish = false;
     float best_gain = 0.0f;
     bool sea = creature_sea_body(c);
+    bool fish_eater = creature_fish_eater(w, c);
 
     /* AROUND_ is clockwise from north, two steps per heading. */
     int start = 2 * c->heading;
@@ -1540,6 +1639,18 @@ BiteChoice creature_bite_choice(const World *w, const Pool *p, int idx,
                 food_is_carrion = true;
                 food_is_fruit = false;
                 food_is_plankton = false;
+                food_is_fish = false;
+            }
+        }
+        if (fish_eater && w->fish[cell] > 0.0f) {
+            float gain = fish_gain(c, fish_take(w, cell, c, s), s);
+            if (gain > best_gain) {
+                best_gain = gain;
+                food_cell = cell;
+                food_is_carrion = false;
+                food_is_fruit = false;
+                food_is_plankton = false;
+                food_is_fish = true;
             }
         }
         /* Plankton grows only on deep water, where no plant does. */
@@ -1551,6 +1662,7 @@ BiteChoice creature_bite_choice(const World *w, const Pool *p, int idx,
                 food_is_carrion = false;
                 food_is_fruit = false;
                 food_is_plankton = true;
+                food_is_fish = false;
             }
             continue;
         }
@@ -1566,6 +1678,7 @@ BiteChoice creature_bite_choice(const World *w, const Pool *p, int idx,
                 food_is_carrion = false;
                 food_is_fruit = fruit >= leaves;
                 food_is_plankton = false;
+                food_is_fish = false;
             }
         }
     }
@@ -1574,7 +1687,9 @@ BiteChoice creature_bite_choice(const World *w, const Pool *p, int idx,
     if (food_cell >= 0) {
         choice.fruit = food_is_fruit;
         choice.plankton = food_is_plankton;
-        choice.kind = food_is_carrion ? BITE_CARRION : BITE_PLANT;
+        choice.kind = food_is_carrion ? BITE_CARRION
+                      : food_is_fish  ? BITE_FISH
+                                      : BITE_PLANT;
         choice.cell = food_cell;
     }
     return choice;
@@ -1623,18 +1738,30 @@ static void act_bite(World *w, Pool *p, int idx, const Settings *s, Rng *r)
             eat_leaves(w, c, choice.cell, s, p->season);
         }
         break;
+    case BITE_FISH:
+        eat_fish(w, c, choice.cell, p->now, s);
+        if (p->chronicle != NULL) {
+            c->tally.fish_meals++; /* the story's count, as kills are */
+        }
+        break;
     default:
         /* Nothing in reach: the effort is wasted, and it is paid for. */
         c->energy -= s->bite_empty_cost;
         break;
     }
+    bool meat = choice.kind == BITE_CARRION || choice.kind == BITE_FISH;
     if (creature_flyer(c) && c->energy > before) {
         /* Measures for the air verdict, read by no rule. */
-        if (choice.kind == BITE_CARRION) {
+        if (meat) {
             p->air_meals_meat++;
+            p->air_meals_fish += choice.kind == BITE_FISH;
         } else if (choice.kind == BITE_PLANT) {
             p->air_meals_plant++;
         }
+    } else if (creature_sea_body(c) && c->energy > before && meat) {
+        /* And for the hunting verdict. */
+        p->sea_meals_meat++;
+        p->sea_meals_fish += choice.kind == BITE_FISH;
     }
     remember_meal(c, c->energy - before, choice.cell, w, p->now, s);
 }

@@ -69,6 +69,11 @@ static void place_founders(Sim *s, int count)
         if (slot >= 0) {
             s->pool.items[slot].energy = s->set.energy_start;
             genome_random(&s->pool.items[slot].genome, &s->rng, &s->set);
+            /* Spawned as land bodies, so kept as land bodies: a random
+             * genome can be a sea body or a flyer, which could not stand
+             * here, and since fish a sea body beside the water lives on. */
+            s->pool.items[slot].genome.g[GENE_SWIM] = 0.0f;
+            s->pool.items[slot].genome.g[GENE_WINGS] = 0.0f;
         }
     }
 }
@@ -639,18 +644,20 @@ enum {
     AT_MEAL_Y = 164,
     AT_MEAL_AT = 168,
     AT_MEAL_KNOWN = 172,
-    AT_SLEEP_TICKS = 173,
-    AT_HIBERNATING = 175,
-    AT_CALLING = 176,
-    AT_MEMORY = 177,
-    AT_MIND = 189, /* adjust then trace, MIND_LEN floats each */
+    AT_FISH_MEAL_AT = 173,
+    AT_FISH_FED = 177,
+    AT_SLEEP_TICKS = 178,
+    AT_HIBERNATING = 180,
+    AT_CALLING = 181,
+    AT_MEMORY = 182,
+    AT_MIND = 194, /* adjust then trace, MIND_LEN floats each */
     AT_GENOME = AT_MIND + 2 * 4 * MIND_LEN,
-    /* The life story: ten u32 counts, max_size, flags, two region bytes and
-     * region_ticks (49 bytes); then events_noted and 8 events of 13 bytes each
+    /* The life story: thirteen u32 counts, max_size, flags, two region bytes
+     * and region_ticks (61 bytes); then events_noted and 8 events of 13 bytes each
      * (tick, kind, other_id, value: the struct's 3 padding bytes are not written). */
     AT_TALLY = AT_GENOME + 4 * GENOME_LEN,
-    TALLY_BYTES = 10 * 4 + 4 + 1 + 2 + 2,
-    AT_TALLY_HOME = AT_TALLY + 10 * 4 + 4 + 1,
+    TALLY_BYTES = 13 * 4 + 4 + 1 + 2 + 2,
+    AT_TALLY_HOME = AT_TALLY + 13 * 4 + 4 + 1,
     AT_EVENTS_NOTED = AT_TALLY + TALLY_BYTES,
     EVENT_BYTES = 4 + 1 + 4 + 4,
     AT_EVENTS = AT_EVENTS_NOTED + 4,
@@ -724,10 +731,10 @@ static Tiny tiny_save(void)
     }
     t.layers = OFF_SETTINGS + settings_bytes;
     /* terrain, fertility, veg, veg_age, veg_wither, plant, carrion,
-     * carrion_level, scent, water, temperature, rain, snow, plankton, for 64
-     * cells, and the rain's seed once. */
+     * carrion_level, scent, water, temperature, rain, snow, plankton, fish,
+     * for 64 cells, and the rain's seed once. */
     t.histories =
-        t.layers + 64 * (1 + 4 + 1 + 2 + 1 + 28 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4) + 8;
+        t.layers + 64 * (1 + 4 + 1 + 2 + 1 + 28 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4) + 8;
     t.records = t.histories + 3 * (HISTORY * 4 + 8);
     /* peak, oldest id and age, largest id and size, then the u64 ended_at. */
     t.pool = t.records + 5 * 4 + 8;
@@ -783,7 +790,7 @@ static void test_layout_is_as_documented(void)
         return;
     }
     CHECK(memcmp(t.bytes, "VEREDASV", 8) == 0);
-    CHECK(get_le32(t.bytes + OFF_VERSION) == 33);
+    CHECK(get_le32(t.bytes + OFF_VERSION) == 34);
     CHECK(get_le32(t.bytes + OFF_CONTENT) == 0);
     CHECK(get_le32(t.bytes + OFF_WIDTH) == 8);
     CHECK(get_le32(t.bytes + OFF_HEIGHT) == 8);
@@ -1015,7 +1022,7 @@ static void test_refuses_impossible_creature(void)
     /* Its story: an event's kind picks its text, and a region its name. */
     refuses_byte(&t, c + AT_EVENTS + 4, LIFE_COUNT, "event");
     refuses_byte(&t, c + AT_TALLY_HOME, REGION_COUNT, "region");
-    refuses_u32(&t, c + AT_TALLY + 10 * 4, BITS_NAN, "out of range");
+    refuses_u32(&t, c + AT_TALLY + 13 * 4, BITS_NAN, "out of range");
     /* The table's first entry: its used byte, and its first event's kind. */
     size_t entry = t.free_slot + OFF_SIZE_FREE_SLOT;
     refuses_byte(&t, entry, 2, "chronicle");
@@ -1267,12 +1274,12 @@ static void test_older_versions_refused(void)
     size_t len = 0;
     CHECK(save_to_memory(&a, &mem, &len, err, sizeof(err)));
     if (mem != NULL) {
-        for (unsigned char version = 30; version <= 32; version++) {
+        for (unsigned char version = 30; version <= 33; version++) {
             mem[OFF_VERSION] = version;
             Sim b;
             CHECK(!save_from_memory(&b, mem, len, err, sizeof(err)));
             CHECK(strstr(err, "save version 3") != NULL);
-            CHECK(strstr(err, "reads only version 33") != NULL);
+            CHECK(strstr(err, "reads only version 34") != NULL);
         }
         free(mem);
     }

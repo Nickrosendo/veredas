@@ -8,6 +8,7 @@
 #include "climate.h"
 #include "flora.h"
 #include "plankton.h"
+#include "fish.h"
 #include "terrain.h"
 #include "years.h"
 
@@ -355,6 +356,7 @@ bool sim_reseed(Sim *s, uint64_t seed)
     plant_start(&s->world, &s->rng, &s->set);
     plankton_prepare(&s->world, &s->set); /* draws nothing */
     plankton_start(&s->world);
+    fish_start(&s->world, &s->set); /* draws nothing */
     place_founders(s);
     records_start(s);
     list_callers(s);
@@ -722,6 +724,9 @@ static void accounting(Sim *s)
             story_living(s, c);
         } else {
             DeathCause cause = death_cause(hit_to_death, c);
+            if (cause == DEATH_WOUNDS && creature_habitat(c) == HABITAT_LAND) {
+                s->pool.land_wound_deaths++; /* a measure, read by no rule */
+            }
             story_death(s, c, cause);
             s->brain.on_death(&s->brain, c->id);
             pool_kill(&s->pool, &s->world, i, &s->set, cause);
@@ -795,6 +800,12 @@ void sim_step(Sim *s)
     flora_step(&s->world, &s->rng, &s->set, season);
     if (s->tick % (uint64_t)s->set.plankton_every == 0) {
         plankton_step(&s->world, &s->set, season);
+    }
+    if (s->tick % (uint64_t)s->set.fish_every == 0) {
+        /* The eaters' fear is measured against now, which creatures_act sets
+         * only later in the tick: set it here too, for the fish. */
+        s->pool.now = (uint32_t)s->tick;
+        fish_step(&s->world, &s->pool, &s->set);
     }
     carrion_step(&s->world, &s->set);
     scent_step(&s->world, &s->set);
@@ -894,6 +905,8 @@ static uint64_t hash_creature(uint64_t hash, const Creature *c)
     hash = fnv1a(hash, &c->gut_seed, sizeof(c->gut_seed));
     hash = fnv1a(hash, &c->gut_ticks, sizeof(c->gut_ticks));
     hash = fnv1a(hash, &c->since_meal, sizeof(c->since_meal));
+    hash = fnv1a(hash, &c->fish_meal_at, sizeof(c->fish_meal_at));
+    hash = fnv1a(hash, &c->fish_fed, sizeof(c->fish_fed));
     hash = fnv1a(hash, &c->sleep_ticks, sizeof(c->sleep_ticks));
     hash = fnv1a(hash, &c->hibernating, sizeof(c->hibernating));
     hash = fnv1a(hash, &c->calling, sizeof(c->calling));
@@ -953,6 +966,7 @@ uint64_t sim_checksum(const Sim *s)
     hash = fnv1a(hash, w->snow, n * sizeof(float));
     hash = fnv1a(hash, &w->rain_seed, sizeof(w->rain_seed));
     hash = fnv1a(hash, w->plankton, n * sizeof(float));
+    hash = fnv1a(hash, w->fish, n * sizeof(float));
     hash = fnv1a(hash, w->occupant, n * sizeof(int32_t));
     for (int k = 0; k < SKY_LAYERS; k++) {
         hash = fnv1a(hash, w->sky[k], n * sizeof(int32_t));
@@ -982,6 +996,9 @@ static uint64_t hash_tally(uint64_t hash, const LifeTally *t)
     hash = fnv1a(hash, &t->heavy_wounds, sizeof(t->heavy_wounds));
     hash = fnv1a(hash, &t->kin_lost, sizeof(t->kin_lost));
     hash = fnv1a(hash, &t->moves, sizeof(t->moves));
+    hash = fnv1a(hash, &t->dive_kills, sizeof(t->dive_kills));
+    hash = fnv1a(hash, &t->sea_kills, sizeof(t->sea_kills));
+    hash = fnv1a(hash, &t->fish_meals, sizeof(t->fish_meals));
     hash = fnv1a(hash, &t->max_size, sizeof(t->max_size));
     hash = fnv1a(hash, &t->flags, sizeof(t->flags));
     hash = fnv1a(hash, &t->home_region, sizeof(t->home_region));

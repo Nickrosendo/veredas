@@ -317,6 +317,19 @@ Settings settings_default(void)
         .wings_upkeep = 0.04f,
         .flight_step_cost = 0.15f,
         .birth_per_air = 0.25f,
+        .fish_every = 10,
+        .fish_growth = 0.03f,
+        .fish_cap_share = 0.8f,
+        .fish_graze = 0.2f,
+        .fish_drift = 0.15f,
+        .fish_flee = 0.6f,
+        .fish_fear_ticks = 20,
+        .fish_start_rich = 0.5f,
+        .fish_energy = 40.0f,
+        .fish_yield = 0.6f,
+        .dive_strike_bonus = 3.0f,
+        .aloft_sight = 2.0f,
+        .aloft_scent = 5,
     };
     return s;
 }
@@ -575,6 +588,22 @@ static const SettingInfo TABLE[] = {
     FLOAT_ROW(birth_per_air, 0, BIG, "flyer births slow as flyers alive near "
                                      "this share of the land's and the sea's "
                                      "room together (0: off)"),
+    INT_ROW(fish_every, 1, 65535, "ticks between updates of the fish"),
+    FLOAT_ROW(fish_growth, 0, 1, "share of the way to its cap fish grow at an update"),
+    FLOAT_ROW(fish_cap_share, 0, 1, "fish a cell can hold, as a share of its plankton"),
+    FLOAT_ROW(fish_graze, 0, BIG, "plankton eaten per unit of fish grown"),
+    FLOAT_ROW(fish_drift, 0, 1, "share of a cell's fish moving toward richer plankton at an update"),
+    FLOAT_ROW(fish_flee, 0, 1, "share of a cell's fish moving away from a fish eater at an update"),
+    INT_ROW(fish_fear_ticks, 0, 65535, "ticks after a fish meal that an eater scares fish"),
+    FLOAT_ROW(fish_start_rich, 0.01, 1, "plankton cap from which a new world's deep cells start with fish"),
+    FLOAT_ROW(fish_energy, 0, BIG, "energy in a cell full of fish"),
+    FLOAT_ROW(fish_yield, 0, 1, "share of a fish bite's energy kept before digestion"),
+    FLOAT_ROW(dive_strike_bonus, 0, BIG, "damage a hit from the air adds per unit "
+                                         "of the attacker's size"),
+    FLOAT_ROW(aloft_sight, 1, 100, "a flyer's sight while up, times its sight on "
+                                   "the ground"),
+    INT_ROW(aloft_scent, 1, 16, "cells ahead whose strongest carrion scent a "
+                                "flyer up smells"),
 };
 
 int settings_count(void)

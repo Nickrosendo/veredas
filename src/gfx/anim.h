@@ -22,7 +22,7 @@
 
 /* What a fighter's mouth is doing. The rules have no such bite, so this
  * value belongs to the drawing side, after the rules' own values. */
-enum { POSE_ATTACK = BITE_PLANT + 1 };
+enum { POSE_ATTACK = BITE_FISH + 1 };
 
 /* Where a slot's attack is: none, playing, or playing out after the
  * simulation stopped it (see anim_update). */
@@ -62,6 +62,9 @@ typedef struct {
     bool up;
     bool rise_glide;
     uint64_t up_tick;
+    /* up_tick + 1 of the landing that last splashed (scene.c), 0 for none:
+     * so each glide down splashes once. */
+    uint64_t splash_tick;
 } AnimSlot;
 
 typedef struct {

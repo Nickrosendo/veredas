@@ -98,6 +98,10 @@ typedef struct {
     uint32_t born;       /* the low 32 bits of the tick it was born on */
     uint32_t kills, hunter_kills, children, fights, heavy_wounds, kin_lost,
         moves;
+    /* The livelier hunting design (5.3), for the Documentary camera: kills
+     * struck from the air, kills of a sea animal by a sea animal, and meals
+     * of fish. */
+    uint32_t dive_kills, sea_kills, fish_meals;
     float max_size;
     uint8_t flags;       /* TALLY_ bits */
     /* Regions, as REGION_ values (climate.h), which include -1, so a signed
@@ -167,6 +171,11 @@ typedef struct {
     int32_t meal_x, meal_y;
     uint32_t meal_at;
     uint8_t meal_known;
+    /* The low 32 bits of the tick of its last fish meal, meaningful once
+     * fish_fed is 1. For a while after it (fish_fear_ticks) the fish around it
+     * slide away (fish.h). Saved and hashed. */
+    uint32_t fish_meal_at;
+    uint8_t fish_fed;
     /* A seed from fruit it ate, and the ticks until it drops. While gut_ticks
      * is 0 there is none and gut_seed means nothing. Dying loses it: the slot's
      * next owner starts from zeroes. */
@@ -230,6 +239,18 @@ typedef struct {
  * creature a whole tick. */
 #define MOVE_SLACK 1e-4f
 
+/* A kill worth a hunt notice (the livelier hunting design, 5.3): struck from
+ * the air, or a sea animal killed by a sea animal. */
+enum { HUNT_DIVE, HUNT_SEA, HUNT_KINDS };
+typedef struct {
+    uint64_t tick;
+    uint32_t hunter, prey; /* ids */
+    uint8_t kind;          /* a HUNT_ value */
+    uint8_t prey_habitat;  /* a HABITAT_ value */
+} HuntNote;
+/* How many of the newest hunts the pool keeps for the notices to read. */
+#define HUNTS_KEPT 16
+
 /*
  * Every creature lives in one array of capacity slots, allocated once.
  * A dead slot is free for the next birth. The free slots form a linked
@@ -265,6 +286,18 @@ typedef struct {
     /* Sea animals killed by sea hunters so far: a measure for the sea verdict
      * (balance_report), read by no rule, neither saved nor hashed. */
     uint32_t sea_kills;
+    /* The livelier hunting design's measures (balance_report's HUNT line),
+     * read by no rule, neither saved nor hashed: meat meals by sea bodies
+     * (carrion or fish) and of those fish; fish meals by flyers (also counted
+     * in air_meals_meat); kills struck from the air, and those of walkers;
+     * walkers dead of wounds. */
+    uint32_t sea_meals_meat, sea_meals_fish, air_meals_fish;
+    uint32_t dive_kills, dive_kills_land, land_wound_deaths;
+    /* The newest hunts, for the notices: a ring, the newest at
+     * hunts[(hunts_total - 1) % HUNTS_KEPT]. Read by no rule, neither saved
+     * nor hashed; a loaded world starts it empty. */
+    HuntNote hunts[HUNTS_KEPT];
+    uint32_t hunts_total;
     /* Births that could not happen because every slot was taken. The pool is
      * a safety limit and not a rule of the world, so this should stay 0: it
      * is counted so that reaching the limit is never quiet. */
@@ -372,7 +405,8 @@ void creature_sense(const World *w, const Pool *p, int idx,
 /* What a bite by creature idx would do right now. Reads only, and uses no
  * random numbers, so the drawing side can ask too and show the same thing the
  * simulation does. cell is the food's cell (world_idx), -1 for BITE_NOTHING. */
-enum { BITE_NOTHING, BITE_CARRION, BITE_PLANT };
+/* BITE_FISH: the fish on a deep-water cell, taken as meat (fish.h). */
+enum { BITE_NOTHING, BITE_CARRION, BITE_PLANT, BITE_FISH };
 typedef struct {
     int kind; /* a BITE_ value */
     int cell;
@@ -381,6 +415,10 @@ typedef struct {
      * (plankton.h). Only a sea body's bite reaches it. */
     bool plankton;
 } BiteChoice;
+/* Whether c may bite fish: a sea body, or a flyer standing on deep water (it
+ * came down there to dive). A walker on the shore never takes them, whatever
+ * its bite can reach: fish are no land food. */
+bool creature_fish_eater(const World *w, const Creature *c);
 BiteChoice creature_bite_choice(const World *w, const Pool *p, int idx,
                                 const Settings *s);
 /* The slot of the creature an ACT_ATTACK by creature idx would strike: whoever

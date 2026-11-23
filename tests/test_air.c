@@ -387,6 +387,134 @@ static void test_aloft_senses(void)
     world_free(&w);
 }
 
+/* ---- the air's payoff (the livelier hunting design, 5.2) ---- */
+
+/* A meat-eating flyer up over a stranger standing below it: the flyer's slot
+ * in *f, the prey's returned. */
+static int dive_scene(Pool *p, World *w, Rng *r, const Settings *s, int *f)
+{
+    *f = spawn_winged(p, w, 3, 3, 1.0f);
+    Creature *hawk = &p->items[*f];
+    hawk->genome.g[GENE_LEAF] = 0.0f;
+    hawk->genome.g[GENE_MEAT] = 1.0f;
+    hawk->genome.g[GENE_SIZE] = 1.0f;
+    creature_act(w, p, *f, act(ACT_MOVE), s, r); /* up, at (3, 2) */
+    int prey = spawn_winged(p, w, 3, 2, 0.0f);
+    make_stranger(&p->items[prey]);
+    p->items[prey].genome.g[GENE_ARMOUR] = 0.0f;
+    p->items[prey].genome.g[GENE_WINGS] = 0.0f; /* nothing dodged */
+    return prey;
+}
+
+/* A hit struck from the air takes dive_strike_bonus times the attacker's size
+ * more than the same hit from the ground would. */
+static void test_dive_hits_harder(void)
+{
+    Settings s = settings_default();
+    bool landed = false;
+    for (uint64_t seed = 1; seed < 64 && !landed; seed++) {
+        World w;
+        make_world(&w, 8, 8);
+        Pool p;
+        CHECK(pool_init(&p, 2));
+        Rng r;
+        rng_seed(&r, seed);
+        int f;
+        int prey = dive_scene(&p, &w, &r, &s, &f);
+        p.items[prey].health = 100.0f; /* lives through any hit */
+        creature_act(&w, &p, f, act(ACT_BITE), &s, &r);
+        float taken = 100.0f - p.items[prey].health;
+        if (taken > 0.0f) {
+            landed = true;
+            const Creature *hawk = &p.items[f];
+            float a = creature_size(hawk, &s);
+            float raised = 1.0f + s.weapon_damage * hawk->genome.g[GENE_WEAPON];
+            float ground = s.bite_damage * a * raised;
+            CHECK(fabsf(taken - (ground + s.dive_strike_bonus * a)) < 1e-4f);
+            CHECK(p.dive_kills == 0);
+        }
+        pool_free(&p);
+        world_free(&w);
+    }
+    CHECK(landed);
+}
+
+/* A kill struck from the air is counted, and as a walker's. */
+static void test_dive_kill_counted(void)
+{
+    Settings s = settings_default();
+    bool killed = false;
+    for (uint64_t seed = 1; seed < 64 && !killed; seed++) {
+        World w;
+        make_world(&w, 8, 8);
+        Pool p;
+        CHECK(pool_init(&p, 2));
+        Rng r;
+        rng_seed(&r, seed);
+        int f;
+        int prey = dive_scene(&p, &w, &r, &s, &f);
+        p.items[prey].health = 0.001f;
+        creature_act(&w, &p, f, act(ACT_BITE), &s, &r);
+        if (p.items[prey].health <= 0.0f) {
+            killed = true;
+            CHECK(p.dive_kills == 1 && p.dive_kills_land == 1);
+        }
+        pool_free(&p);
+        world_free(&w);
+    }
+    CHECK(killed);
+}
+
+/* Up, a flyer's view sight is aloft_sight times its sight on the ground. */
+static void test_aloft_sees_farther(void)
+{
+    Settings s = settings_default();
+    World w;
+    make_world(&w, 16, 16);
+    Pool p;
+    CHECK(pool_init(&p, 1));
+    int f = spawn_winged(&p, &w, 8, 8, 1.0f);
+    p.items[f].genome.g[GENE_SIGHT] = 0.5f;
+    float down = creature_view_sight(&p.items[f], 1.0f, &s);
+    Rng r;
+    rng_seed(&r, 1);
+    creature_act(&w, &p, f, act(ACT_MOVE), &s, &r);
+    CHECK(p.items[f].up == 1);
+    float up = creature_view_sight(&p.items[f], 1.0f, &s);
+    CHECK(fabsf(up - down * s.aloft_sight) < 1e-5f);
+    pool_free(&p);
+    world_free(&w);
+}
+
+/* Up, a view reads the strongest scent of the first aloft_scent cells ahead;
+ * down, only the first. */
+static void test_aloft_smells_farther(void)
+{
+    Settings s = settings_default();
+    World w;
+    make_world(&w, 16, 16);
+    Pool p;
+    CHECK(pool_init(&p, 1));
+    p.light = 1.0f;
+    int f = spawn_winged(&p, &w, 8, 9, 1.0f); /* faces north */
+    Rng r;
+    rng_seed(&r, 1);
+    creature_act(&w, &p, f, act(ACT_MOVE), &s, &r); /* up, at (8, 8) */
+    CHECK(p.items[f].up == 1);
+    w.scent[world_idx(&w, 8, 8 - s.aloft_scent)] = 1.0f; /* aloft_scent ahead */
+    Senses in = {0};
+    creature_sense(&w, &p, f, &s, &in);
+    CHECK(in.v[SENSE_VIEWS + VIEW_AHEAD * VIEW_VALUES + VIEW_CARRION] > 0.0f);
+    p.items[f].up = 0; /* the same place, read as from the ground */
+    w.sky[SKY_LOW][world_idx(&w, 8, 8)] = -1;
+    w.occupant[world_idx(&w, 8, 8)] = f;
+    Senses ground = {0};
+    creature_sense(&w, &p, f, &s, &ground);
+    CHECK(ground.v[SENSE_VIEWS + VIEW_AHEAD * VIEW_VALUES + VIEW_CARRION] == 0.0f);
+    pool_free(&p);
+    world_free(&w);
+}
+
 /* ---- births and the brake ---- */
 
 /* Two ready flyers on rock, rock all round: their child is a flyer and is born
@@ -688,6 +816,10 @@ int main(void)
     test_flyer_up_cannot_be_struck();
     test_flyer_dies_up_frees_sky_and_drops_carrion();
     test_aloft_senses();
+    test_dive_hits_harder();
+    test_dive_kill_counted();
+    test_aloft_sees_farther();
+    test_aloft_smells_farther();
     test_flyer_child_born_on_rock();
     test_air_line_set();
     test_air_brake();

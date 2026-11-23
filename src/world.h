@@ -73,6 +73,15 @@ typedef struct {
      * from the terrain and the temperature, which are saved, so it is worked
      * out again after a load instead of being saved itself. */
     float *plankton_cap;
+    /* Fish on deep water, 0..1 a cell (fish.h); 0 on anything else. A food
+     * layer with no genes, like plankton. Saved and hashed. */
+    float *fish;
+    /* fish_step's scratch: the fish as they will be after a drift, and for
+     * each cell the cell of a fish eater close enough to scare its fish (-1
+     * for none). Rewritten on every update before being read, so neither is
+     * saved, hashed or copied. */
+    float *fish_next;
+    int32_t *fish_scare;
     int32_t *occupant;       /* creature index, or -1: the ground grid */
     /* The grids above the ground, one per layer of air, each a creature index
      * or -1 per cell (the air half; the levels design, 5.1). A flyer up is on
