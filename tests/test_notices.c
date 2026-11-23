@@ -285,6 +285,10 @@ static void test_given_trait_spread_and_gone(void)
     int slot = first_living(&s);
     CHECK(actions_give_trait(&s, s.pool.items[slot].id, GENE_SWIM, 0.8f));
     sim_step(&s); /* applies it */
+    /* A sea founder may have eaten fish in that step: not this test's news. */
+    for (int i = 0; i < s.pool.capacity; i++) {
+        s.pool.items[i].fish_fed = 0;
+    }
     /* Pretend it spread: eleven more carry it. */
     int carrying = 0;
     for (int i = 0; i < s.pool.capacity && carrying < NOTICE_GIFT_SPREAD + 1; i++) {
@@ -348,8 +352,115 @@ static void test_ring_keeps_newest(void)
     CHECK(notices_get(&n, NOTICES_KEPT) == NULL);
 }
 
+/* ---- hunts (the livelier hunting design, 5.3) ---- */
+
+/* Writes a hunt into the pool's ring as the rules would, at the sim's tick. */
+static void fake_hunt(Sim *s, uint8_t kind, uint32_t hunter, uint32_t prey)
+{
+    s->pool.hunts[s->pool.hunts_total % HUNTS_KEPT] =
+        (HuntNote){.tick = (uint32_t)s->tick, .hunter = hunter, .prey = prey,
+                   .kind = kind, .prey_habitat = HABITAT_LAND};
+    s->pool.hunts_total++;
+}
+
+/* A started Notices on a fresh world, the hunt clock past the start. */
+static void started(Sim *s, Notices *n)
+{
+    Settings set = settings_default();
+    CHECK(sim_init(s, &set, 3, 48, 32));
+    plain_bodies(s);
+    notices_reset(n);
+    notices_check(n, s);
+    next_sample(s);
+}
+
+static void test_hunt_notice_dive(void)
+{
+    Sim s;
+    Notices n;
+    started(&s, &n);
+    uint32_t id = s.pool.items[first_living(&s)].id;
+    fake_hunt(&s, HUNT_DIVE, id, id + 1);
+    notices_check(&n, &s);
+    CHECK(newest_has(&n, "flyer took a"));
+    CHECK(newest_has(&n, "walker from the air"));
+    CHECK(notices_newest(&n)->creature == id);
+    sim_free(&s);
+}
+
+static void test_hunt_notice_sea(void)
+{
+    Sim s;
+    Notices n;
+    started(&s, &n);
+    fake_hunt(&s, HUNT_SEA, 1, 2);
+    notices_check(&n, &s);
+    CHECK(newest_has(&n, "sea hunter caught a"));
+    sim_free(&s);
+}
+
+/* Fifty dive kills at once: one notice; the next dive within the gap is not
+ * told, and one after the gap is. The first sea kill still shows inside the
+ * gap, being the first of its kind. */
+static void test_hunt_notices_rate_limited(void)
+{
+    Sim s;
+    Notices n;
+    started(&s, &n);
+    for (int k = 0; k < 50; k++) {
+        fake_hunt(&s, HUNT_DIVE, 1, 2);
+    }
+    uint32_t before = n.total;
+    notices_check(&n, &s);
+    CHECK(n.total == before + 1);
+    next_sample(&s);
+    fake_hunt(&s, HUNT_DIVE, 1, 2);
+    notices_check(&n, &s);
+    CHECK(n.total == before + 1);
+    next_sample(&s);
+    fake_hunt(&s, HUNT_SEA, 1, 2);
+    notices_check(&n, &s);
+    CHECK(n.total == before + 2);
+    s.tick += NOTICE_HUNT_GAP;
+    next_sample(&s);
+    fake_hunt(&s, HUNT_DIVE, 1, 2);
+    notices_check(&n, &s);
+    CHECK(n.total == before + 3);
+    sim_free(&s);
+}
+
+/* A family's first fish meal is told once, and hunts already there at the
+ * first check are not news. */
+static void test_fish_family_notice_once(void)
+{
+    Settings set = settings_default();
+    Sim s;
+    CHECK(sim_init(&s, &set, 3, 48, 32));
+    plain_bodies(&s);
+    fake_hunt(&s, HUNT_DIVE, 1, 2);
+    Notices n;
+    notices_reset(&n);
+    notices_check(&n, &s);
+    CHECK(n.total == 0);
+    next_sample(&s);
+    Creature *c = &s.pool.items[first_living(&s)];
+    c->fish_fed = 1;
+    notices_check(&n, &s);
+    CHECK(newest_has(&n, "found the shoals"));
+    uint32_t after = n.total;
+    s.tick += NOTICE_HUNT_GAP;
+    next_sample(&s);
+    notices_check(&n, &s);
+    CHECK(n.total == after);
+    sim_free(&s);
+}
+
 int main(void)
 {
+    test_hunt_notice_dive();
+    test_hunt_notice_sea();
+    test_hunt_notices_rate_limited();
+    test_fish_family_notice_once();
     test_first_check_is_quiet();
     test_unlike_body_once();
     test_small_family_is_quiet();

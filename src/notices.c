@@ -473,6 +473,110 @@ static void check_crossing(Notices *n, const Sim *s, bool air)
     }
 }
 
+/* ---- hunts: the pool's ring, at most one notice a NOTICE_HUNT_GAP ---- */
+
+/* Whether a hunt notice of this first-bit may be told at tick now: always the
+ * first of its kind, else only once the gap since the last one has passed.
+ * Notes it as told when it may. Unsigned subtraction of two low-32-bit ticks:
+ * right across the wrap. */
+static bool hunt_may_tell(Notices *n, unsigned first_bit, uint32_t now)
+{
+    bool first = (n->hunt_firsts & first_bit) == 0;
+    if (!first && n->hunt_told && now - n->hunt_last < NOTICE_HUNT_GAP) {
+        return false;
+    }
+    n->hunt_firsts = (uint8_t)(n->hunt_firsts | first_bit);
+    n->hunt_told = true;
+    n->hunt_last = now;
+    return true;
+}
+
+/* The word for an animal of a habitat: what the window can say without the
+ * drawing code's species names. */
+static const char *habitat_word(int habitat)
+{
+    return habitat == HABITAT_SEA ? "sea animal"
+           : habitat == HABITAT_AIR ? "flyer"
+                                    : "walker";
+}
+
+/* The family name of id, from the creature if alive, else the chronicle; the
+ * id itself (a founder's family name) when neither knows it. */
+static void family_words(const Sim *s, uint32_t id, char *out, size_t len)
+{
+    int slot = life_find_slot(s, id);
+    const NotableLife *life = chronicle_find(&s->chronicle, id);
+    uint32_t lineage = slot >= 0       ? s->pool.items[slot].lineage
+                       : life != NULL ? life->lineage
+                                       : id;
+    name_from_id(lineage, out, len);
+}
+
+/* The hunts noted since the last check, oldest first. Only the newest
+ * HUNTS_KEPT are still in the ring; older ones are past news anyway. A ring
+ * whose count went back (a loaded world starts it again) is taken as it is. */
+static void check_hunts(Notices *n, const Sim *s)
+{
+    const Pool *p = &s->pool;
+    if (p->hunts_total < n->hunts_seen) {
+        n->hunts_seen = p->hunts_total;
+    }
+    uint32_t fresh = p->hunts_total - n->hunts_seen;
+    if (fresh > HUNTS_KEPT) {
+        fresh = HUNTS_KEPT;
+    }
+    for (uint32_t k = fresh; k > 0; k--) {
+        const HuntNote *h = &p->hunts[(p->hunts_total - k) % HUNTS_KEPT];
+        /* The note's tick is the low 32 bits of the tick it happened on. */
+        if (!n->started) {
+            n->hunt_firsts = (uint8_t)(n->hunt_firsts | (1u << h->kind));
+            continue; /* there already: known, not news */
+        }
+        if (!hunt_may_tell(n, 1u << h->kind, (uint32_t)h->tick)) {
+            continue;
+        }
+        char hunter[16], prey[16], text[NOTICE_TEXT];
+        family_words(s, h->hunter, hunter, sizeof(hunter));
+        family_words(s, h->prey, prey, sizeof(prey));
+        if (h->kind == HUNT_DIVE) {
+            snprintf(text, sizeof(text), "a %s flyer took a %s %s from the air", hunter,
+                     prey, habitat_word(h->prey_habitat));
+        } else {
+            snprintf(text, sizeof(text), "a %s sea hunter caught a %s sea animal", hunter,
+                     prey);
+        }
+        notices_add(n, s->tick, h->hunter, text);
+    }
+    n->hunts_seen = p->hunts_total;
+}
+
+/* A living creature that has eaten fish, of a family not told yet: "the X
+ * family found the shoals", the first in the world always, then within the
+ * hunt gap. A family passed over by the gap is told at a later check. */
+static void check_fish(Notices *n, const Sim *s)
+{
+    ToldList list = {n->fish_told, &n->fish_told_total};
+    for (int i = 0; i < s->pool.capacity; i++) {
+        const Creature *c = &s->pool.items[i];
+        if (!c->alive || !c->fish_fed || told(list, c->lineage)) {
+            continue;
+        }
+        if (n->started && !hunt_may_tell(n, NOTICE_FIRST_FISH, (uint32_t)s->tick)) {
+            return; /* not now: the gap has not passed */
+        }
+        list.told[*list.total % NOTICE_SEA_FAMILIES] = c->lineage;
+        (*list.total)++;
+        if (!n->started) {
+            n->hunt_firsts = (uint8_t)(n->hunt_firsts | NOTICE_FIRST_FISH);
+            continue;
+        }
+        char family[16], text[NOTICE_TEXT];
+        name_from_id(c->lineage, family, sizeof(family));
+        snprintf(text, sizeof(text), "the %s family found the shoals", family);
+        notices_add(n, s->tick, c->id, text);
+    }
+}
+
 void notices_check(Notices *n, const Sim *s)
 {
     if (n->started && s->stats.tick == n->last_sample) {
@@ -487,5 +591,7 @@ void notices_check(Notices *n, const Sim *s)
     check_gifts(n, s);
     check_crossing(n, s, false);
     check_crossing(n, s, true);
+    check_hunts(n, s);
+    check_fish(n, s);
     n->started = true;
 }

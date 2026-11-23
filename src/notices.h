@@ -3,7 +3,8 @@
  * player agency design, section 5): a body unlike its family's, the first
  * giant and each new record size, a tactic seen for the first time, a big family gone, a trait the player gave
  * spreading past NOTICE_GIFT_SPREAD carriers or dying out, and a family taking
- * to the sea by evolution.
+ * to the sea by evolution, and hunts from the air and at sea, at most one a
+ * NOTICE_HUNT_GAP.
  *
  * Like the chronicle and the tactic watch, it only reads the world: it takes a
  * const Sim *, draws no random number and allocates nothing, so checking can
@@ -58,6 +59,14 @@ enum { NOTICE_GENES = 9 };
 /* How many families that took to the sea are remembered, so each is told once. */
 #define NOTICE_SEA_FAMILIES 32
 
+/* At most one hunt notice in this many ticks: a minute at the default 2
+ * ticks a second (the livelier hunting design, 5.3). The first of each kind
+ * in a world always shows. */
+#define NOTICE_HUNT_GAP 120u
+/* The first-of-a-kind bits in Notices.hunt_firsts: HUNT_DIVE and HUNT_SEA
+ * (creature.h) as bits 0 and 1, and the first fish meal as bit 2. */
+#define NOTICE_FIRST_FISH (1u << HUNT_KINDS)
+
 /* Notice.creature for a notice about nobody to follow. Not 0: the first
  * creature of a world has id 0. Ids count up from there, one per birth, and
  * a world would need four billion births to reach this one. */
@@ -105,6 +114,16 @@ typedef struct {
     /* The same for families that took to the air. */
     uint32_t air_told[NOTICE_SEA_FAMILIES];
     uint32_t air_told_total;
+    /* Hunts (the pool's ring): how many the last check had seen, the tick of
+     * the last hunt notice (low 32 bits, meaningful once hunt_told is set),
+     * and which kinds have had their first notice. */
+    uint32_t hunts_seen;
+    uint32_t hunt_last;
+    bool hunt_told;
+    uint8_t hunt_firsts;
+    /* Families told to have found the shoals, as for the sea and the air. */
+    uint32_t fish_told[NOTICE_SEA_FAMILIES];
+    uint32_t fish_told_total;
 } Notices;
 
 /* Empty, as for a new world: the next check tells nothing. */
