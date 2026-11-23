@@ -230,8 +230,39 @@ static void test_new_world_drops_copy(void)
     sim_free(&s);
 }
 
+/* A coming dive kill (also a kill) is named as a dive and outscores a plain
+ * first kill; fish meals make a hunt at sea, at most FISH_MOST of them; both
+ * are hunts. */
+static void test_score_dive_and_sea_hunt(void)
+{
+    LifeTally now = {0};
+    LifeTally kill = now, dive = now, sea = now, fish = now, more_fish = now;
+    kill.kills = 1;
+    dive.kills = 1;
+    dive.dive_kills = 1;
+    sea.kills = 1;
+    sea.sea_kills = 1;
+    fish.fish_meals = 20;
+    more_fish.fish_meals = 200;
+    int why = -1;
+    float s_kill = lookahead_score(&now, 100, &kill, 250, &why);
+    float s_dive = lookahead_score(&now, 100, &dive, 250, &why);
+    CHECK(why == LOOK_DIVE);
+    CHECK(strcmp(lookahead_reason_text(why), "a dive coming") == 0);
+    CHECK(s_dive > s_kill);
+    (void)lookahead_score(&now, 100, &sea, 250, &why);
+    CHECK(why == LOOK_SEA_HUNT);
+    float s_fish = lookahead_score(&now, 100, &fish, 250, &why);
+    CHECK(why == LOOK_SEA_HUNT);
+    CHECK(strcmp(lookahead_reason_text(why), "a hunt at sea coming") == 0);
+    CHECK(lookahead_score(&now, 100, &more_fish, 250, &why) == s_fish);
+    CHECK(lookahead_kind(LOOK_DIVE) == LOOK_KIND_HUNT);
+    CHECK(lookahead_kind(LOOK_SEA_HUNT) == LOOK_KIND_HUNT);
+}
+
 int main(void)
 {
+    test_score_dive_and_sea_hunt();
     test_watching_is_free();
     test_copy_is_the_future();
     test_pick_is_alive();

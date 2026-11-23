@@ -275,8 +275,32 @@ static void test_cut_fades(void)
     CHECK(!f.cut_next);
 }
 
+/* The camera's pick for a dive: the cut goes to the surface, where the dive
+ * ends, although the flyer is up; the view waits there while it stays up, and
+ * once it has come down it is followed as any other. */
+static void test_dive_pick_cuts_to_surface(void)
+{
+    LevelFollow f;
+    levels_follow_init(&f);
+    Camera c = camera_at(CAMERA_NORMAL, LEVEL_UNDERWATER);
+    f.cut_next = true;
+    f.cut_level = LEVEL_SURFACE;
+    levels_follow(&f, &c, true, 9, LEVEL_SKY, 0);
+    CHECK(f.fading && f.fade_to == LEVEL_SURFACE);
+    levels_follow(&f, &c, true, 9, LEVEL_SKY, LEVELS_FADE_MS);
+    CHECK(c.level == LEVEL_SURFACE);
+    levels_follow(&f, &c, true, 9, LEVEL_SKY, 10 * LEVELS_SETTLE_MS); /* still up */
+    CHECK(c.level == LEVEL_SURFACE);
+    levels_follow(&f, &c, true, 9, LEVEL_SURFACE, 11 * LEVELS_SETTLE_MS); /* down */
+    CHECK(f.cut_level == -1);
+    levels_follow(&f, &c, true, 9, LEVEL_SKY, 12 * LEVELS_SETTLE_MS); /* up again */
+    levels_follow(&f, &c, true, 9, LEVEL_SKY, 13 * LEVELS_SETTLE_MS);
+    CHECK(c.level == LEVEL_SKY);
+}
+
 int main(void)
 {
+    test_dive_pick_cuts_to_surface();
     test_the_list();
     test_step_stops_at_the_ends();
     test_dive_only_over_water_at_close();

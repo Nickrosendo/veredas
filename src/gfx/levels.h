@@ -71,6 +71,11 @@ typedef struct {
     bool known;     /* id below is the creature followed last frame */
     uint32_t id;
     bool cut_next;  /* set by the caller just before such a follow */
+    /* Set by the caller with cut_next for a camera's pick coming to a dive
+     * (the livelier hunting design, 5.3): the cut goes to this level, where
+     * the dive will end, rather than the creature's own, and the view waits
+     * there until the creature reaches it. -1: none. */
+    int cut_level;
     bool fading;
     bool switched;  /* during a fade: the level has changed already */
     uint64_t fade_start;

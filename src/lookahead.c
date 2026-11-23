@@ -105,6 +105,15 @@ void lookahead_sync_all(Lookahead *l, const Sim *shown)
 #define WORTH_KIN_LOST 2.0f     /* each family member that dies, up to three */
 #define KIN_LOST_MOST 3.0f      /* a die-off would otherwise make every
                                  * member of a big family the best pick */
+/* The livelier hunting design (5.3): the hunts Nicolas asked to see, an eagle
+ * dropping on a hare and a shark in a shoal, are worth more than an ordinary
+ * kill (on top of it: a dive kill is also a kill), and fish meals count
+ * toward a hunt at sea, so a sea animal working a shoal is a watch too. */
+#define WORTH_DIVE 24.0f      /* each kill struck from the air: above a first
+                               * kill (21), so the line names the dive */
+#define WORTH_SEA_KILL 24.0f  /* each sea animal killed by a sea animal */
+#define WORTH_FISH 0.5f       /* each fish meal, up to FISH_MOST of them */
+#define FISH_MOST 20.0f
 
 /* How many more of a count later has than now. Counts only grow, but a
  * subtraction of unsigned numbers that went the other way would wrap round to
@@ -128,6 +137,8 @@ static const char *const REASON_TEXT[LOOK_REASON_COUNT] = {
     "about to kill a hunter",
     "a bad wound coming",
     "about to lose family",
+    "a dive coming",
+    "a hunt at sea coming",
 };
 
 /* The kind of each reason, in the order of LookReason. */
@@ -144,6 +155,8 @@ static const int REASON_KIND[LOOK_REASON_COUNT] = {
     LOOK_KIND_HUNT,   /* hunter kill */
     LOOK_KIND_FIGHT,  /* wound */
     LOOK_KIND_FAMILY, /* kin lost */
+    LOOK_KIND_HUNT,   /* dive */
+    LOOK_KIND_HUNT,   /* sea hunt */
 };
 
 /* Checked by the compiler: a reason added to the enum without a text or a
@@ -207,6 +220,12 @@ float lookahead_score(const LifeTally *now, uint32_t age_now,
              LOOK_HUNTER_KILL, &score, &biggest, why);
     add_part(WORTH_WOUND * more(now->heavy_wounds, later->heavy_wounds),
              LOOK_WOUND, &score, &biggest, why);
+    add_part(WORTH_DIVE * more(now->dive_kills, later->dive_kills), LOOK_DIVE,
+             &score, &biggest, why);
+    float fish = more(now->fish_meals, later->fish_meals);
+    add_part(WORTH_SEA_KILL * more(now->sea_kills, later->sea_kills) +
+                 WORTH_FISH * (fish < FISH_MOST ? fish : FISH_MOST),
+             LOOK_SEA_HUNT, &score, &biggest, why);
     float lost = more(now->kin_lost, later->kin_lost);
     add_part(WORTH_KIN_LOST * (lost < KIN_LOST_MOST ? lost : KIN_LOST_MOST),
              LOOK_KIN_LOST, &score, &biggest, why);

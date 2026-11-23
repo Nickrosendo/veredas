@@ -665,6 +665,7 @@ static void follow_notice(App *a, const Notice *x)
                    ? life_find_slot(&a->sim, x->creature) : -1;
     if (slot >= 0) {
         a->levels.cut_next = true; /* on another level: a cut, with a fade */
+        a->levels.cut_level = -1;
         inspect_follow(&a->inspect, &a->sim, slot);
         a->notices_open = false;
     } else {
@@ -682,6 +683,7 @@ static void jump(App *a)
         int slot = a->page.alive ? life_find_slot(&a->sim, a->page.id) : -1;
         if (slot >= 0) {
             a->levels.cut_next = true;
+            a->levels.cut_level = -1;
             inspect_follow(&a->inspect, &a->sim, slot);
         } else {
             say(a, "that creature is dead", NOTICE_FRAMES);
@@ -1528,6 +1530,9 @@ static void update_look(App *a)
     /* Documentary cutting to its new pick: if it lives on another level, the
      * view fades there (levels.h). */
     a->levels.cut_next = true;
+    /* A dive is seen where it ends, on the ground: the view goes to the
+     * surface and waits there for the flyer to come down. */
+    a->levels.cut_level = reason == LOOK_DIVE ? LEVEL_SURFACE : -1;
     inspect_follow(&a->inspect, &a->sim, life_find_slot(&a->sim, id));
     char line[LOOKAHEAD_WHY + 32];
     snprintf(line, sizeof(line), "camera: %s (f: camera off)", why);

@@ -58,7 +58,7 @@ bool levels_dive(Camera *cam, int steps, bool over_water)
 void levels_follow_init(LevelFollow *f)
 {
     /* A compound literal: every field not named is 0 or false. */
-    *f = (LevelFollow){.fade_to = LEVEL_SURFACE};
+    *f = (LevelFollow){.fade_to = LEVEL_SURFACE, .cut_level = -1};
 }
 
 void levels_key(LevelFollow *f, Camera *cam, int dir, bool following)
@@ -107,11 +107,17 @@ void levels_follow(LevelFollow *f, Camera *cam, bool following, uint32_t id, int
         f->known = false;
         f->held = false;
         f->cut_next = false;
+        f->cut_level = -1;
         f->settling = false;
         return;
     }
     if (!f->known || f->id != id) {
         bool cut = f->cut_next;
+        if (cut && f->cut_level >= 0) {
+            home = f->cut_level; /* where the coming dive ends */
+        } else {
+            f->cut_level = -1; /* only for the pick it was set with */
+        }
         f->known = true;
         f->id = id;
         f->held = false;
@@ -133,6 +139,12 @@ void levels_follow(LevelFollow *f, Camera *cam, bool following, uint32_t id, int
     /* The same creature as before: its level, unless a key holds the view or
      * a fade is already taking it there, and only once it has stayed there
      * LEVELS_SETTLE_MS. */
+    if (f->cut_level >= 0) {
+        if (home != f->cut_level) {
+            return; /* still up: the view waits where the dive will end */
+        }
+        f->cut_level = -1; /* it came down: from now on as any other */
+    }
     if (f->held || f->fading || home == cam->level) {
         f->settling = false;
         return;

@@ -65,6 +65,8 @@ typedef enum {
     LOOK_HUNTER_KILL,
     LOOK_WOUND,    /* a heavy wound coming */
     LOOK_KIN_LOST, /* family members about to die */
+    LOOK_DIVE,     /* a kill struck from the air coming */
+    LOOK_SEA_HUNT, /* a kill at sea, or fish meals, coming */
     LOOK_REASON_COUNT
 } LookReason;
 
@@ -72,7 +74,7 @@ typedef enum {
  * another (lookahead_pick), so a run of picks is not all kills. */
 typedef enum {
     LOOK_KIND_QUIET,
-    LOOK_KIND_HUNT,   /* first kill, more kills, a hunter killed */
+    LOOK_KIND_HUNT,   /* first kill, more kills, a hunter killed, a dive, a sea hunt */
     LOOK_KIND_FIGHT,  /* a fight, a heavy wound */
     LOOK_KIND_FAMILY, /* young, kin lost */
     LOOK_KIND_BODY,   /* growing giant, the largest alive */
