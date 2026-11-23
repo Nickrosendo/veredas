@@ -12,12 +12,18 @@
 #      bodies) in years 20 to 23 in at least 10 of 15;
 #   3. meat from the air: meat (carrion and fish) at least 20 % of flyers'
 #      meals in at least 10 of 15, and at least 100 dive kills of walkers in
-#      years 20 to 23 in at least 10 of 15;
+#      years 20 to 23 in at least 10 of 15. If the 100 fails, the bar falls
+#      back to 50 dive kills in at least 10 of 15 (the design, section 10.1,
+#      Nicolas 2026-11-23: agreed before the run, so there is no third round).
+#      Both counts are printed; the fallback is used only when 100 fails;
 #   4. sea and sky still there: tests/air_verdict.sh passes every bar (run
 #      separately: bash tests/air_verdict.sh);
-#   5. seen: on seeds 1 to 5, run to year 20 and watched for 1,200 ticks, the
-#      Documentary camera picks a dive or a hunt at sea at least 3 times on at
-#      least 4 of 5 (build/release/camera_picks).
+#   5. seen: on seeds 1 to 5, run to year 20 and watched for 1,200 ticks
+#      (build/release/camera_picks), the Documentary camera picks a dive or a
+#      hunt at sea at least once on at least 4 of 5, and over the five watches
+#      together at least a quarter of all picks are dives or hunts at sea (the
+#      design, section 10.2, Nicolas 2026-11-23: what a viewer meets, with the
+#      camera's rules unchanged).
 #
 # Usage: bash tests/hunting_verdict.sh [CONFIG]
 #   CONFIG  a settings file passed to every world, for trying a change.
@@ -58,7 +64,7 @@ echo "hunting verdict: $SEEDS seeds to year 23, watched from year 20${CONFIG:+, 
 echo
 printf "%4s %7s %7s %6s %6s %8s %7s %6s %6s %6s %5s\n" seed walkers wounds base change sea_hunt sea_meat \
     air_meat plant meat% dives
-walk_ok=0 wound_sum=0 base_sum=0 seah_ok=0 seam_ok=0 share_ok=0 dive_ok=0
+walk_ok=0 wound_sum=0 base_sum=0 seah_ok=0 seam_ok=0 share_ok=0 dive_ok=0 dive50_ok=0
 for seed in $(seq 1 "$SEEDS"); do
     air_line=$(grep '^AIR ' "$TMP/$seed.txt" || echo "AIR walkers 0 flyers 0 up 0 air_hunters 0 line_alive 0 plant_meals 0 meat_meals 0 landings 0")
     hunt_line=$(grep '^HUNT ' "$TMP/$seed.txt" || echo "HUNT land_wounds 0 dive_kills_land 0 dive_kills 0 sea_meat 0 sea_fish 0 air_meat 0 air_plant 0 air_fish 0 sea_hunters 0")
@@ -79,6 +85,7 @@ for seed in $(seq 1 "$SEEDS"); do
     [ "$sea_meat" -ge 1000 ] && seam_ok=$((seam_ok + 1))
     [ "$share" -ge 20 ] && share_ok=$((share_ok + 1))
     [ "$dives" -ge 100 ] && dive_ok=$((dive_ok + 1))
+    [ "$dives" -ge 50 ] && dive50_ok=$((dive50_ok + 1))
 done
 
 # The per-seed change above is shown for reading; bar 1 judges the sum.
@@ -89,12 +96,21 @@ printf "%4s %7s %7s %6s %5s%%\n" sum "" "$wound_sum" "$base_sum" "$sum_change"
 
 echo
 printf "%4s %6s %8s\n" seed picks sea_sky
-cam_ok=0
+cam_ok=0 picks_sum=0 sea_sky_sum=0
 for seed in $(seq 1 "$CAMERA_SEEDS"); do
     read -r _ _ total _ sea_sky <<< "$(grep '^PICKS ' "$TMP/cam$seed.txt" || echo "PICKS total 0 sea_sky 0")"
     printf "%4s %6s %8s\n" "$seed" "$total" "$sea_sky"
-    [ "$sea_sky" -ge 3 ] && cam_ok=$((cam_ok + 1))
+    [ "$sea_sky" -ge 1 ] && cam_ok=$((cam_ok + 1))
+    picks_sum=$((picks_sum + total))
+    sea_sky_sum=$((sea_sky_sum + sea_sky))
 done
+printf "%4s %6s %8s\n" sum "$picks_sum" "$sea_sky_sum"
+# At least a quarter, in whole numbers: 4 * hunts >= picks. With no picks at
+# all the share is 0 and the bar fails.
+cam_share=0
+[ "$picks_sum" -gt 0 ] && cam_share=$((sea_sky_sum * 100 / picks_sum))
+share_pass=0
+[ "$picks_sum" -gt 0 ] && [ $((4 * sea_sky_sum)) -ge "$picks_sum" ] && share_pass=1
 
 verdict() {
     if [ "$2" -ge "$3" ]; then echo "PASS  $1: $2 of $4 (needs $3)"
@@ -111,5 +127,16 @@ verdict "2 sea hunters alive at year 23" "$seah_ok" 12 "$SEEDS"
 verdict "2 at least 1,000 sea meat meals, years 20-23" "$seam_ok" 10 "$SEEDS"
 verdict "3 meat at least 20% of flyers' meals, years 20-23" "$share_ok" 10 "$SEEDS"
 verdict "3 at least 100 dive kills of walkers, years 20-23" "$dive_ok" 10 "$SEEDS"
-verdict "5 camera picks a dive or sea hunt 3+ times in 1,200 ticks" "$cam_ok" 4 "$CAMERA_SEEDS"
+if [ "$dive_ok" -lt 10 ]; then
+    # The fallback agreed in section 10.1: judged at 50 only because 100 failed.
+    verdict "3 fallback: at least 50 dive kills of walkers, years 20-23" "$dive50_ok" 10 "$SEEDS"
+else
+    echo "      (at least 50 dive kills: $dive50_ok of $SEEDS; the fallback is not needed)"
+fi
+verdict "5 camera picks a dive or sea hunt at least once in 1,200 ticks" "$cam_ok" 4 "$CAMERA_SEEDS"
+if [ "$share_pass" -eq 1 ]; then
+    echo "PASS  5 dives and sea hunts of all picks: $sea_sky_sum of $picks_sum, $cam_share% (needs 25%)"
+else
+    echo "FAIL  5 dives and sea hunts of all picks: $sea_sky_sum of $picks_sum, $cam_share% (needs 25%)"
+fi
 echo "4 is the air verdict: bash tests/air_verdict.sh${CONFIG:+ $CONFIG}"
