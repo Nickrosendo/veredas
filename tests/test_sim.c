@@ -102,10 +102,9 @@
  * and clang alike: an Ubuntu 24.04 container gives this machine's value, not
  * the runner's, so it cannot stand in. For rules 5 (2026-11-23) read from
  * GitHub run 45168088536's log, gcc and clang alike (rules 4's was never
- * read: it was replaced before a run gave it). For rules 6 (2026-11-23) not
- * read yet: the next GitHub run's log gives it, and until then this pin
- * still holds rules 5's value and fails there. */
-#define SEED_7_AFTER_500_CI 0x454691eb4ae4f55cULL
+ * read: it was replaced before a run gave it). For rules 6 (2026-11-23) read
+ * from GitHub run 45260227360's log, gcc and clang alike. */
+#define SEED_7_AFTER_500_CI 0x40f36572f36ef983ULL
 
 /* One creature in a bare 16x16 world with the scripted brain, resting for a
  * tick, calling or not. Returns the energy it has left. */
