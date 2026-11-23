@@ -112,6 +112,9 @@ typedef struct {
     uint64_t sea_line_births;
     /* The air's measures as they stood at sea_from, for the AIR line. */
     uint32_t air_plant_at_from, air_meat_at_from, air_landings_at_from;
+    /* The hunting measures as they stood at sea_from, for the HUNT line. */
+    uint32_t land_wounds_at_from, dive_land_at_from, dives_at_from, sea_meat_at_from,
+        sea_fish_at_from, air_fish_at_from;
 } Report;
 
 /* The seasons' verdict (the seasons design, section 8) is judged on the whole
@@ -1123,6 +1126,12 @@ static void run(Sim *s, long ticks, Shadow *shadow, Report *rep, Verdict *v)
             rep->air_plant_at_from = s->pool.air_meals_plant;
             rep->air_meat_at_from = s->pool.air_meals_meat;
             rep->air_landings_at_from = s->pool.air_landings;
+            rep->land_wounds_at_from = s->pool.land_wound_deaths;
+            rep->dive_land_at_from = s->pool.dive_kills_land;
+            rep->dives_at_from = s->pool.dive_kills;
+            rep->sea_meat_at_from = s->pool.sea_meals_meat;
+            rep->sea_fish_at_from = s->pool.sea_meals_fish;
+            rep->air_fish_at_from = s->pool.air_meals_fish;
         }
         uint32_t born_from = s->pool.next_id;
         sim_step(s);
@@ -1217,6 +1226,32 @@ static void print_air(const Sim *s, const Report *rep)
            s->pool.air_meals_plant - rep->air_plant_at_from,
            s->pool.air_meals_meat - rep->air_meat_at_from,
            s->pool.air_landings - rep->air_landings_at_from);
+}
+
+/* The HUNT line (with --sea FROM, for the hunting verdict), all since FROM:
+ * walkers dead of wounds other than a dive, dive kills of walkers, all dive
+ * kills, sea bodies' meat meals and fish meals, flyers' meat, plant and fish
+ * meals; and sea hunters alive at the end. */
+static void print_hunt(const Sim *s, const Report *rep)
+{
+    int sea_hunters = 0;
+    for (int i = 0; i < s->pool.capacity; i++) {
+        const Creature *c = &s->pool.items[i];
+        if (c->alive && creature_habitat(c) == HABITAT_SEA && creature_is_hunter(c)) {
+            sea_hunters++;
+        }
+    }
+    uint32_t dive_land = s->pool.dive_kills_land - rep->dive_land_at_from;
+    /* A dive kill of a walker is one of its wound deaths: taken off. */
+    uint32_t wounds = s->pool.land_wound_deaths - rep->land_wounds_at_from - dive_land;
+    printf("HUNT land_wounds %u dive_kills_land %u dive_kills %u sea_meat %u "
+           "sea_fish %u air_meat %u air_plant %u air_fish %u sea_hunters %d\n",
+           wounds, dive_land, s->pool.dive_kills - rep->dives_at_from,
+           s->pool.sea_meals_meat - rep->sea_meat_at_from,
+           s->pool.sea_meals_fish - rep->sea_fish_at_from,
+           s->pool.air_meals_meat - rep->air_meat_at_from,
+           s->pool.air_meals_plant - rep->air_plant_at_from,
+           s->pool.air_meals_fish - rep->air_fish_at_from, sea_hunters);
 }
 
 /* The tactics seen since --tactics' tick: one TACTICS line naming them, then
@@ -1364,6 +1399,7 @@ int main(int argc, char **argv)
     if (sea_from >= 0) {
         print_sea(&sim, &rep);
         print_air(&sim, &rep);
+        print_hunt(&sim, &rep);
     }
     free(shadow);
     sim_free(&sim);

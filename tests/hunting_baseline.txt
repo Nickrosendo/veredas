@@ -1,0 +1,19 @@
+# Land animals (walkers) dead of wounds in years 20 to 23, dives left out,
+# on engine 2123688 (the last before the livelier hunting phase), seeds 1 to 15:
+# balance_report --seed N --ticks 13800 --sea 12000 with a land-only wound count
+# added for this measure. Columns: seed, wound deaths of walkers not by a dive.
+1 3270
+2 2786
+3 2652
+4 3834
+5 2175
+6 2151
+7 2415
+8 1851
+9 3345
+10 3021
+11 4152
+12 2145
+13 2378
+14 2901
+15 1626
