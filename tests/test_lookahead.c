@@ -260,6 +260,58 @@ static void test_score_dive_and_sea_hunt(void)
     CHECK(lookahead_kind(LOOK_SEA_HUNT) == LOOK_KIND_HUNT);
 }
 
+/* The camera re-picks after a while (the livelier hunting design, section
+ * 9): its pick may be left once followed for LOOKAHEAD_REPICK_TICKS and quiet
+ * (nothing coming in the copy); not sooner, not while something is coming,
+ * not before the copy is ready. The copy's tally is set by hand, so what is
+ * coming is known exactly. */
+static void test_repick_when_quiet(void)
+{
+    Settings set = settings_default();
+    Sim s;
+    CHECK(sim_init(&s, &set, 2, 64, 32));
+    for (int t = 0; t < 300; t++) {
+        sim_step(&s);
+    }
+    Lookahead l;
+    lookahead_init(&l, LEAD);
+    lookahead_sync_all(&l, &s);
+    /* One alive on screen and still alive, in the same slot, in the copy. */
+    int slot = -1;
+    for (int i = 0; i < s.pool.capacity && slot < 0; i++) {
+        const Creature *c = &s.pool.items[i];
+        const Creature *later = &l.ahead.pool.items[i];
+        if (c->alive && later->alive && later->id == c->id) {
+            slot = i;
+        }
+    }
+    CHECK(slot >= 0);
+    uint32_t id = s.pool.items[slot].id;
+    Creature *later = &l.ahead.pool.items[slot];
+    /* Nothing coming: the same tally later as now. */
+    later->tally = s.pool.items[slot].tally;
+    CHECK(lookahead_quiet(&l, &s, id));
+    uint64_t now = s.tick;
+    CHECK(!lookahead_repick_due(&l, &s, id, now));
+    CHECK(!lookahead_repick_due(&l, &s, id, now - (LOOKAHEAD_REPICK_TICKS - 1)));
+    CHECK(lookahead_repick_due(&l, &s, id, now - LOOKAHEAD_REPICK_TICKS));
+    /* A pick "made" after the world's tick (a world put back) is not due. */
+    CHECK(!lookahead_repick_due(&l, &s, id, now + 1));
+    /* A kill coming: not quiet, so the camera stays however long it has
+     * followed. */
+    later->tally.kills++;
+    CHECK(!lookahead_quiet(&l, &s, id));
+    CHECK(!lookahead_repick_due(&l, &s, id, now - LOOKAHEAD_REPICK_TICKS));
+    later->tally.kills--;
+    /* Nobody known: no answer, so no re-pick. */
+    CHECK(!lookahead_quiet(&l, &s, LOOKAHEAD_NOBODY));
+    /* No copy ready: nobody knows what is coming. */
+    lookahead_free(&l);
+    CHECK(!lookahead_quiet(&l, &s, id));
+    CHECK(!lookahead_repick_due(&l, &s, id, now - LOOKAHEAD_REPICK_TICKS));
+    sim_free(&s);
+}
+
 int main(void)
 {
     test_score_dive_and_sea_hunt();
@@ -271,5 +323,6 @@ int main(void)
     test_wounds_kin_and_kinds();
     test_tired_kind_turns();
     test_new_world_drops_copy();
+    test_repick_when_quiet();
     TEST_SUMMARY();
 }

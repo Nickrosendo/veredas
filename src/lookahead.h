@@ -101,6 +101,20 @@ float lookahead_score(const LifeTally *now, uint32_t age_now,
 #define LOOKAHEAD_OTHER_WORTH 2.0f
 uint32_t lookahead_pick(const Lookahead *l, const Sim *shown, unsigned tired,
                         int *reason, char *why, size_t len);
+/* Whether creature id, alive on screen, has nothing coming in the copy: its
+ * coming season scores under LOOKAHEAD_OTHER_WORTH (halved, as in a pick,
+ * when it dies within it), or it dies with nothing worth telling. False when
+ * the copy is not ready or id is not alive on screen: then nobody knows. */
+bool lookahead_quiet(const Lookahead *l, const Sim *shown, uint32_t id);
+/* The camera re-picks after a while (the livelier hunting design, section 9):
+ * once it has followed its own pick id, chosen at tick picked_at, for
+ * LOOKAHEAD_REPICK_TICKS or more and that life is quiet, it may pick again.
+ * 240 ticks is two minutes of play at the default 2 ticks a second. The window
+ * (update_look) and tests/camera_picks.c both ask this, so they follow
+ * one rule; whether the player is idle is the window's to know. */
+#define LOOKAHEAD_REPICK_TICKS 240u
+bool lookahead_repick_due(const Lookahead *l, const Sim *shown, uint32_t id,
+                          uint64_t picked_at);
 /* Frees the copy; safe to call twice. The lead is kept. */
 void lookahead_free(Lookahead *l);
 

@@ -3,7 +3,9 @@
  * hunting verdict's fifth bar (the livelier hunting design, section 6). A
  * world is run headless to tick FROM; then, for WATCH ticks, the camera picks
  * by the window's own rule (src/window/window_main.c, update_look): a pick
- * when nobody is followed or the followed creature has died, the look-ahead
+ * when nobody is followed, the followed creature has died, or it has been
+ * followed for LOOKAHEAD_REPICK_TICKS with nothing coming
+ * (lookahead_repick_due, the same function the window asks), the look-ahead
  * copy run to its end first (as the window does for --frames runs), the
  * kinds of the last two picks marking what it is tired of. The player never
  * touches anything, so the camera is never held off by a key.
@@ -67,13 +69,15 @@ int main(int argc, char **argv)
     Lookahead look;
     lookahead_init(&look, (uint64_t)(sim.set.ticks_per_year / 4));
     uint32_t followed = LOOKAHEAD_NOBODY;
+    uint64_t picked_at = 0;
     int last[2] = {LOOK_QUIET, LOOK_QUIET};
     int total = 0, sea_sky = 0;
     for (long t = 0; t < watch && !sim_is_over(&sim); t++) {
         sim_step(&sim);
         lookahead_sync_all(&look, &sim);
-        if (followed != LOOKAHEAD_NOBODY && life_find_slot(&sim, followed) >= 0) {
-            continue; /* still following someone alive */
+        if (followed != LOOKAHEAD_NOBODY && life_find_slot(&sim, followed) >= 0 &&
+            !lookahead_repick_due(&look, &sim, followed, picked_at)) {
+            continue; /* still following someone alive, not yet quiet for long */
         }
         unsigned tired = (1u << lookahead_kind(last[0])) | (1u << lookahead_kind(last[1]));
         int reason;
@@ -84,6 +88,7 @@ int main(int argc, char **argv)
             continue;
         }
         followed = id;
+        picked_at = sim.tick;
         last[1] = last[0];
         last[0] = reason;
         total++;

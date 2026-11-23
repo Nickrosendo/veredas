@@ -351,6 +351,46 @@ uint32_t lookahead_pick(const Lookahead *l, const Sim *shown, unsigned tired,
     return c->id;
 }
 
+bool lookahead_quiet(const Lookahead *l, const Sim *shown, uint32_t id)
+{
+    if (!lookahead_ready(l, shown)) {
+        return false;
+    }
+    for (int i = 0; i < shown->pool.capacity; i++) {
+        const Creature *c = &shown->pool.items[i];
+        if (!c->alive || c->id != id) {
+            continue;
+        }
+        const LifeTally *later;
+        uint32_t age_later;
+        bool alive_later;
+        if (!future_of(&l->ahead, i, id, &later, &age_later, &alive_later)) {
+            return true; /* it dies with nothing worth telling */
+        }
+        int part;
+        float score = lookahead_score(&c->tally, c->age, later, age_later, &part);
+        if (!alive_later) {
+            score *= 0.5f;
+        }
+        return score < LOOKAHEAD_OTHER_WORTH;
+    }
+    return false;
+}
+
+bool lookahead_repick_due(const Lookahead *l, const Sim *shown, uint32_t id,
+                          uint64_t picked_at)
+{
+    /* The time first: it is one subtraction, and the score walks the pool.
+     * A world put back in time (a save opened) can be behind picked_at, and
+     * an unsigned subtraction that goes below 0 wraps round to a huge number,
+     * which would read as "followed for ages": that case is ruled out first. */
+    if (shown->tick < picked_at ||
+        shown->tick - picked_at < LOOKAHEAD_REPICK_TICKS) {
+        return false;
+    }
+    return lookahead_quiet(l, shown, id);
+}
+
 void lookahead_free(Lookahead *l)
 {
     if (l->has) {

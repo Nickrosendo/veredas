@@ -240,6 +240,11 @@ typedef struct {
     /* The camera's last two reasons (LookReason), newest first, so its next
      * pick leans to something else. 0 is LOOK_QUIET, a fine start. */
     int look_last[2];
+    /* The camera's own last pick and the world's tick when it was made, so it
+     * may pick again once that life has been quiet for a while
+     * (lookahead_repick_due); a creature the player chose is never left. */
+    uint32_t look_id;
+    uint64_t look_picked_at;
     int idle_frames;
     bool keys_open; /* the ? page, every key, drawn over the world */
     /* v: the two branches side by side, while split; it opens by itself when
@@ -409,6 +414,7 @@ static void forget_old_world(App *a)
     /* The copy was of the old world; the new one gets picked for at once. */
     lookahead_free(&a->look);
     a->idle_frames = LOOK_IDLE_FRAMES;
+    a->look_id = LOOKAHEAD_NOBODY;
     /* Nobody followed any more; the level shown stays. */
     levels_follow_init(&a->levels);
 }
@@ -1481,12 +1487,23 @@ static bool look_wanted(const App *a)
            !sandbox_skipping(&a->sandbox) && !sim_is_over(&a->sim);
 }
 
-/* Nothing on screen the player is reading that a new pick would change. */
+/* Nothing on screen the player is reading that a new pick would change, and
+ * the player idle (or the followed creature just died). While following, only
+ * the camera's own pick may be left, once it has been quiet for a while (the
+ * livelier hunting design, section 9): one the player chose stays. */
 static bool look_may_pick(const App *a)
 {
-    return !a->paused && !a->page.open && !a->lab_open && !a->notices_open &&
-           a->sandbox.menu == SANDBOX_MENU_NONE && !a->inspect.following &&
-           (a->look_now || a->idle_frames >= LOOK_IDLE_FRAMES);
+    bool idle = !a->paused && !a->page.open && !a->lab_open && !a->notices_open &&
+                a->sandbox.menu == SANDBOX_MENU_NONE &&
+                (a->look_now || a->idle_frames >= LOOK_IDLE_FRAMES);
+    if (!idle) {
+        return false;
+    }
+    if (!a->inspect.following) {
+        return true;
+    }
+    return a->inspect.id == a->look_id &&
+           lookahead_repick_due(&a->look, &a->sim, a->look_id, a->look_picked_at);
 }
 
 /* Keeps the copy a season ahead and, when the camera may, follows the best
@@ -1527,6 +1544,8 @@ static void update_look(App *a)
     a->look_last[1] = a->look_last[0];
     a->look_last[0] = reason;
     a->look_now = false;
+    a->look_id = id;
+    a->look_picked_at = a->sim.tick;
     /* Documentary cutting to its new pick: if it lives on another level, the
      * view fades there (levels.h). */
     a->levels.cut_next = true;
@@ -2335,6 +2354,8 @@ int main(int argc, char **argv)
     /* Counted as idle from the start: the first pick comes as soon as the
      * copy has run its season ahead. */
     app.idle_frames = LOOK_IDLE_FRAMES;
+    /* Not 0, which is a real creature's id: the camera has picked nobody. */
+    app.look_id = LOOKAHEAD_NOBODY;
     uint64_t seed = opt.seed_given ? opt.seed : seed_from_clock();
     int world_w = opt.size_given ? opt.width : DEFAULT_WORLD_W;
     int world_h = opt.size_given ? opt.height : DEFAULT_WORLD_H;
