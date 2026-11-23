@@ -16,6 +16,7 @@
 #include "pose.h"    /* pose_frame, pose_cycle_seconds, pose_eyes */
 #include "palette.h"
 #include "plankton.h" /* PLANKTON_STEP */
+#include "fish.h"     /* FISH_SHOWN */
 #include "years.h"   /* years_season_of */
 
 /* No palette has been made for a pool slot yet. */
@@ -1293,6 +1294,58 @@ static void draw_plankton(const Scene *sc, Canvas *c, const Overlay *o, const Wo
     }
 }
 
+/* Shoals' glitter (the livelier hunting design, 5.3). */
+static const Colour SHOAL_GLINT = {226, 240, 244};
+
+/*
+ * A shoal on one deep cell: one to three bright specks by how much fish it
+ * holds, each at its own hashed place, wandering slowly round the cell and
+ * flashing on and off on the overlays' clock, so a thick shoal twinkles and a
+ * thin one barely shows. Drawn at every tile zoom, Far included, where a
+ * speck is one pixel: the shoals are what a sea hunter is seen to chase.
+ */
+static void draw_shoal(const Scene *sc, Canvas *c, const Overlay *o, float fish, int x, int y,
+                       int sx, int sy)
+{
+    /* 0.1 .. 1 of fish gives 1 .. 3 specks; the int conversion rounds down. */
+    int count = 1 + (int)(fish * 2.5f);
+    count = count > 3 ? 3 : count;
+    int size = o->size;
+    uint32_t colour = to_pixel(SHOAL_GLINT);
+    for (int n = 0; n < count; n++) {
+        float phase = gfx_hash(x, y, 80 + n);
+        if (sine_of(sc, o->t * 3.0f + phase * 6.2831853f) < 0.1f) {
+            continue; /* this speck is between flashes */
+        }
+        float wander = sine_of(sc, o->t * 0.4f + phase * 4.0f);
+        int lx = (int)(phase * (float)(size - 2)) + 1 + round_to_int(wander);
+        int ly = (int)(gfx_hash(x, y, 90 + n) * (float)(size - 2)) + 1;
+        lx = lx < 0 ? 0 : (lx >= size ? size - 1 : lx);
+        overlay_pixel(c, o, sx, sy, lx, ly, colour);
+    }
+}
+
+/* Every visible deep cell's shoal, on the surface or underwater. */
+static void draw_shoals(const Scene *sc, Canvas *c, const Overlay *o, const Camera *cam,
+                        const World *w, int view_x, int view_y)
+{
+    CameraCells v;
+    camera_cells(cam, &v);
+    int ppc = camera_ppc(cam);
+    for (int r = 0; r < v.rows; r++) {
+        int y = (v.first_y + r) % w->h;
+        int sy = view_y + v.screen_y + r * ppc;
+        const float *row = &w->fish[y * w->w];
+        for (int k = 0; k < v.cols; k++) {
+            int x = (v.first_x + k) % w->w;
+            /* Fish are 0 off deep water, so this also skips the land. */
+            if (row[x] >= FISH_SHOWN) {
+                draw_shoal(sc, c, o, row[x], x, y, view_x + v.screen_x + k * ppc, sy);
+            }
+        }
+    }
+}
+
 /* The overlays of the underwater level: light on the floor and plankton, at
  * the two 16-pixel zooms only (at Far they would cost the most and show the
  * least). No glints, foam, grass or rain: those are the surface's. */
@@ -1450,6 +1503,7 @@ static void draw_overlays(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
     };
     if (cam->level == LEVEL_UNDERWATER) {
         draw_sea_overlays(sc, c, &o, cam, s, view_x, view_y);
+        draw_shoals(sc, c, &o, cam, &s->world, view_x, view_y);
         return;
     }
     if (cam->level == LEVEL_SKY) {
@@ -1484,6 +1538,7 @@ static void draw_overlays(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
             }
         }
     }
+    draw_shoals(sc, c, &o, cam, w, view_x, view_y);
 }
 
 /* ---- Trees and bodies, back to front ---- */
@@ -1785,6 +1840,20 @@ static void sea_sway(const Scene *sc, const Creature *cr, uint64_t body_ms, int 
     *dy = round_to_int(SCENE_SWAY_Y * (float)scale * sine_of(sc, 2.0f * two_pi * u + 1.0f));
 }
 
+/* A diving flyer's streak (the livelier hunting design, 5.3): while it
+ * glides down, a faint pale line from where it is in the air down to the
+ * ground, as wide as an art pixel, so a dive reads at Far zoom. lift is how
+ * far above its feet it is drawn, in canvas pixels. */
+static void dive_streak(Canvas *c, const BodyDraw *d, int lift, const WorldArea *area)
+{
+    int dx[9], dy[9];
+    int copies = copy_offsets(area, dx, dy);
+    for (int k = 0; k < copies; k++) {
+        canvas_mix_rect_clip(c, d->foot_x + dx[k], d->foot_y - lift + dy[k], d->scale, lift,
+                             to_pixel(WHITE), SCENE_STREAK_KEEP, area->clip);
+    }
+}
+
 /* One body over what is behind it, and its copies across a whole world's
  * edges; at the World zoom a coloured square on its cell, as before. A sea
  * body is seen through the water and sways. */
@@ -1838,7 +1907,11 @@ static void draw_body(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
     } else if (home == LEVEL_SKY) {
         /* Up in the air: raised over its cell, part way while it glides up
          * or down (the swoop). */
-        d.foot_y -= round_to_int((float)(SCENE_AIR_RISE * d.scale) * sc->poses[it->index].rise);
+        int lift = round_to_int((float)(SCENE_AIR_RISE * d.scale) * sc->poses[it->index].rise);
+        if (cr->up == 0 && lift > 0 && !under) {
+            dive_streak(c, &d, lift, area);
+        }
+        d.foot_y -= lift;
     }
     if (as_shape) {
         for (int k = 0; k < INK_COUNT; k++) {
@@ -2390,6 +2463,32 @@ static void emit_blood(Scene *sc, const Sim *s, int victim, float fx, float fy,
     }
 }
 
+/* Water thrown up by a dive, or dust by a strike on land. */
+static const Colour SPLASH = {200, 228, 240};
+
+/* A flyer touching down from a glide (the livelier hunting design, 5.3): a
+ * ring of drops or dust flying out from its feet, a few cells wide, water on
+ * water and dust on land. */
+static void emit_splash(Scene *sc, const Sim *s, int slot, float fx, float fy)
+{
+    const Creature *cr = &s->pool.items[slot];
+    int cell = cr->y * s->world.w + cr->x;
+    int terrain = s->world.terrain[cell];
+    bool wet = terrain == TERRAIN_WATER || terrain == TERRAIN_SHALLOW;
+    Particles *ps = &sc->particles;
+    for (int k = 0; k < SCENE_SPLASH_DROPS; k++) {
+        /* Evenly round a circle, each drop a little off its place. */
+        float angle = 6.2831853f * ((float)k + particles_random(ps) * 0.5f) /
+                      (float)SCENE_SPLASH_DROPS;
+        float speed = 30.0f + particles_random(ps) * 20.0f;
+        Particle p = particle_at(fx, fy - 1.0f, wet ? SPLASH : DUST, 0.5f);
+        p.vx = speed * sine_of(sc, angle + 1.5707963f); /* cos as a shifted sine */
+        p.vy = speed * 0.5f * sine_of(sc, angle) - (wet ? 12.0f : 4.0f);
+        p.grav = wet ? 0.8f : 0.2f;
+        particles_add(ps, &p);
+    }
+}
+
 /* Whether a body item's feet are inside the view: only creatures that show
  * send up particles. */
 static bool feet_in_view(const SceneItem *it, const Camera *cam, int view_x, int view_y)
@@ -2411,6 +2510,13 @@ static void emit_for(Scene *sc, const Sim *s, int slot, uint64_t since, uint64_t
     float fx = (p->x + 0.5f) * ART_CELL;
     float fy = p->y * ART_CELL + ART_FOOT;
     float face = p->flip ? -1.0f : 1.0f;
+    /* A flyer near the end of a glide down: one splash per landing. The
+     * landing is told apart by the tick it began on (up_tick). */
+    if (!under && m->rise_glide && !m->up && p->rise > 0.0f &&
+        p->rise < SCENE_SPLASH_AT && m->splash_tick != m->up_tick + 1) {
+        m->splash_tick = m->up_tick + 1; /* + 1: 0 stays "none yet" */
+        emit_splash(sc, s, slot, fx, fy);
+    }
     /* Underwater no dust, leaves or z's (the surface's); blood still shows. */
     if (under) {
         /* Nothing: skips to the bite below. */

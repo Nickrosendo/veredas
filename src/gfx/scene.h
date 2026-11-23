@@ -74,6 +74,12 @@
 #define SCENE_SKY_DIM 0.5f
 #define SCENE_AIR_RISE 10
 #define SCENE_AIR_SHADOW_KEEP 212
+/* The livelier hunting design (5.3): a diving flyer's streak keeps this many
+ * 256ths of white over what is under it; a glide down splashes when its rise
+ * falls under SCENE_SPLASH_AT, with SCENE_SPLASH_DROPS drops. */
+#define SCENE_STREAK_KEEP 96
+#define SCENE_SPLASH_AT 0.3f
+#define SCENE_SPLASH_DROPS 10
 #define SCENE_CLOUD_SHARE 0.02f
 #define SCENE_CLOUD_KEEP 110
 /* The clouds' wind and rain (the air half's talk, 2026-11-21): they drift

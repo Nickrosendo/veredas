@@ -547,10 +547,12 @@ static void test_known_world_pixels(void)
          * Re-pinned for the air (rules 3, 2026-11-21): the wing gene and four
          * more senses re-roll every genome, flyers go up and are drawn
          * raised over everything with a small shadow; every level moves.
-         * Written out (VEREDAS_WRITE_PICTURES) and looked at. */
+         * Written out (VEREDAS_WRITE_PICTURES) and looked at. Re-pinned
+         * for fish (rules 4, 2026-11-22): another world, and shoals glitter
+         * on deep water; old and new written out and compared side by side. */
         static const uint64_t EXPECTED[CAMERA_ZOOMS] = {
-            0x6ca8d3c611dbef35u, 0xf8369f53e3c26f72u,
-            0xa9122a580b90bcbbu, 0x853705c901b743edu,
+            0x7e321fd17eda29c9u, 0x05a3f2dd9cdcd364u,
+            0x35e0d33c938a8199u, 0x1041665eba6e9ecdu,
         };
         if (pinned && hashes[level] != EXPECTED[level]) {
             printf("level %d: 0x%llxu\n", level,
@@ -1592,9 +1594,11 @@ static void test_underwater_pixels(void)
     /* Linux only, as test_known_world_pixels. Pinned 2026-11-20 (levels step
      * 2), after the three pictures were written out and looked at. Re-pinned
      * for the air (rules 3, 2026-11-21): another world, flyers up not drawn
-     * from underwater; written out and looked at. */
+     * from underwater; written out and looked at. Re-pinned for fish
+     * (rules 4, 2026-11-22): another world, shoals glittering underwater;
+     * old and new compared side by side. */
     static const uint64_t EXPECTED[3] = {
-        0x5144c60529f96bbdu, 0xa733250f1d6331bcu, 0x676c78bd765b8d9bu,
+        0x3eea1cd035902b01u, 0xcc750a8a48560eedu, 0x5a31458cdefe6cffu,
     };
     for (int zoom = 0; zoom < 3; zoom++) {
         if (pinned && hashes[zoom] != EXPECTED[zoom]) {
@@ -2760,9 +2764,10 @@ static void test_sky_pixels(void)
     /* Pinned 2026-11-21 (levels step 3), after the three pictures were
      * written out and looked at; re-pinned the same day for the sky's
      * finish (clouds of four puffs drifting with the wind, a bird gliding
-     * down drawn in the air), old and new pictures compared side by side. */
+     * down drawn in the air), old and new pictures compared side by side.
+     * Re-pinned for fish (rules 4, 2026-11-22): another world. */
     static const uint64_t EXPECTED[3] = {
-        0x0e987c71442f15d4u, 0x79733b2ac51f1af6u, 0xdd1f4a97d733c048u,
+        0x696dbb274be96a5eu, 0x917748c8478510a0u, 0xb958aba17def93c6u,
     };
     for (int zoom = 0; zoom < 3; zoom++) {
         if (pinned && hashes[zoom] != EXPECTED[zoom]) {
@@ -2778,8 +2783,57 @@ static void test_sky_pixels(void)
     sim_free(&s);
 }
 
+/* Shoals glitter (the livelier hunting design, 5.3): on a sea full of fish
+ * there are bright specks a sea without fish lacks, at every zoom with tiles,
+ * on the surface and underwater; drawing them changes nothing in the world. */
+static void test_fish_glitter_drawn(void)
+{
+    Settings set = day_settings();
+    set.start_share = 0.0f;
+    set.founders_per_sea_cell = 0.0f;
+    Sim s;
+    CHECK(sim_init(&s, &set, 1, 64, 64));
+    for (int i = 0; i < 64 * 64; i++) {
+        s.world.terrain[i] = TERRAIN_WATER;
+        s.world.fish[i] = 0.0f;
+    }
+    Scene sc;
+    CHECK(scene_init(&sc, &s));
+    Canvas c;
+    CHECK(canvas_init(&c, VIEW_W, VIEW_H));
+    Camera cam;
+    camera_init(&cam, 64, 64, VIEW_W, VIEW_H);
+    uint64_t world = sim_checksum(&s);
+    int levels[2] = {LEVEL_SURFACE, LEVEL_UNDERWATER};
+    for (int l = 0; l < 2; l++) {
+        cam.level = levels[l];
+        for (int zoom = CAMERA_CLOSE; zoom <= CAMERA_FAR; zoom++) {
+            cam.zoom = zoom;
+            int bright[2];
+            for (int full = 0; full <= 1; full++) {
+                for (int i = 0; i < 64 * 64; i++) {
+                    s.world.fish[i] = full ? 1.0f : 0.0f;
+                }
+                scene_reset(&sc);
+                scene_draw_world(&sc, &c, &cam, &s, 0.0f, 5000, 5000, 0, 0);
+                float mean;
+                bright[full] = white_pixels(&c, &mean);
+            }
+            CHECK(bright[1] > bright[0] + 20);
+        }
+    }
+    for (int i = 0; i < 64 * 64; i++) {
+        s.world.fish[i] = 0.0f;
+    }
+    CHECK(sim_checksum(&s) == world);
+    canvas_free(&c);
+    scene_free(&sc);
+    sim_free(&s);
+}
+
 int main(void)
 {
+    test_fish_glitter_drawn();
     /* Tests register this one themselves: the real program never has it. */
     CHECK(brain_register(&BRAIN_SCRIPT));
     test_drawing_changes_nothing();
