@@ -48,6 +48,9 @@ void platform_present(const Canvas *c);
 void platform_error(const char *message);
 /* Milliseconds from a fixed but arbitrary starting point. */
 uint64_t platform_now_ms(void);
+/* Microseconds, from another fixed starting point: for timing parts of a
+ * frame (--frame-log), where a millisecond is too coarse. */
+uint64_t platform_now_us(void);
 /*
  * Calls frame(arg) over and over, frames_per_second times a second, until
  * platform_stop; with 0, as fast as it can. The only loop in the program,

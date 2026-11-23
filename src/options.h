@@ -64,6 +64,9 @@ typedef struct {
     /* --playlog: a file the window writes a record of the sitting to on
      * leaving (playlog.h). Points into argv. */
     const char *playlog_path;
+    /* --frame-log: a file the window writes each frame's times to, one line
+     * a frame (frame_log.h), for finding stutter. Points into argv. */
+    const char *frame_log_path;
     /* --keys: keys pressed one a frame during the last frames of --frames, so
      * a test or a screenshot can open the L page. Points into argv. */
     const char *keys;

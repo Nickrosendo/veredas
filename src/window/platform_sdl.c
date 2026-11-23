@@ -184,6 +184,17 @@ uint64_t platform_now_ms(void)
     return SDL_GetTicks64();
 }
 
+uint64_t platform_now_us(void)
+{
+    /* The performance counter ticks counter_hz times a second, a rate that
+     * differs between computers (often 1e9 on Linux). Whole seconds and the
+     * rest are converted apart, so the multiplication by a million cannot
+     * overflow a uint64_t however long the computer has been on. */
+    uint64_t count = SDL_GetPerformanceCounter();
+    uint64_t counter_hz = SDL_GetPerformanceFrequency();
+    return count / counter_hz * 1000000u + count % counter_hz * 1000000u / counter_hz;
+}
+
 void platform_stop(void)
 {
     stop_requested = true;

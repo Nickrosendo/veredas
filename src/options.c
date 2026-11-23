@@ -133,6 +133,7 @@ enum {
     OPT_SANDBOX,
     OPT_CODE,
     OPT_PLAYLOG,
+    OPT_FRAME_LOG,
     OPT_ANCESTORS,
     OPT_HITS,
     OPT_WINDOW,
@@ -167,6 +168,7 @@ static const struct option LONG_OPTIONS[] = {
     {"sandbox", no_argument, NULL, OPT_SANDBOX},
     {"code", required_argument, NULL, OPT_CODE},
     {"playlog", required_argument, NULL, OPT_PLAYLOG},
+    {"frame-log", required_argument, NULL, OPT_FRAME_LOG},
     {"ancestors", required_argument, NULL, OPT_ANCESTORS},
     {"hits", no_argument, NULL, OPT_HITS},
     {"window", required_argument, NULL, OPT_WINDOW},
@@ -214,6 +216,9 @@ static bool take_value(int opt, const char *value, Options *o, char *err,
         return true;
     case OPT_PLAYLOG:
         o->playlog_path = value;
+        return true;
+    case OPT_FRAME_LOG:
+        o->frame_log_path = value;
         return true;
     case OPT_HITS:
         o->hits = true;

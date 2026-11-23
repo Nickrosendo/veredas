@@ -20,6 +20,7 @@
 #include "cells_canvas.h"
 #include "family.h"
 #include "fps.h"
+#include "frame_log.h"
 #include "font.h"
 #include "inspect.h"
 #include "lab.h"
@@ -119,6 +120,9 @@ static const char WINDOW_USAGE[] =
     "  --playlog PATH    on leaving, write a record of the sitting there: time in\n"
     "                    each mode and how often each key was used (for playtests;\n"
     "                    nothing about the world, and nothing is sent anywhere)\n"
+    "  --frame-log PATH  write each frame's times there, one line a frame: how\n"
+    "                    long the ticks, the camera's look-ahead, drawing and\n"
+    "                    showing took (for finding stutter)\n"
     "  --keys TEXT       with --frames: press these keys, one a frame, in the\n"
     "                    last frames (\"l\" shows the life story page, \"b\" the\n"
     "                    species lab, \"~\" presses nothing for a frame)\n"
@@ -252,6 +256,7 @@ typedef struct {
     bool compare_open;
     bool was_skipping;
     Playlog playlog; /* counted always, written only with --playlog */
+    FrameLog frame_log; /* off unless --frame-log */
     /* The one-time hints already given this run, as HINT_ bits: each is said
      * once, the first time it would help. */
     unsigned hints;
@@ -2050,6 +2055,8 @@ static void app_frame(void *arg)
     App *a = arg; /* in C, void * converts to any pointer without a cast */
     /* The frame's work starts here; platform_run's wait comes after it. */
     uint64_t work_start = platform_now_ms();
+    frame_log_begin(&a->frame_log, platform_now_us());
+    uint64_t tick_before = a->sim.tick;
     playlog_frame(&a->playlog, platform_now_ms(), a->sandbox.on);
     Event e;
     while (platform_poll(&e)) {
@@ -2110,6 +2117,7 @@ static void app_frame(void *arg)
             a->redraw = true;  /* the frame that shows the screen */
         }
     }
+    frame_log_part(&a->frame_log, FRAME_PART_WORLD, platform_now_us());
     /* The world behind the one on screen keeps level with it: the ticks the
      * shown world ran this frame, or as many as half a frame allows. */
     if (!branch_caught_up(&a->branches, &a->sim)) {
@@ -2123,7 +2131,22 @@ static void app_frame(void *arg)
         a->compare_open = true;
     }
     a->was_skipping = skipping;
+    frame_log_part(&a->frame_log, FRAME_PART_OTHER, platform_now_us());
+    /* What the look-ahead copy was before, so the frame log can tell how far
+     * it ran and whether it was made afresh. */
+    bool look_had = a->look.has;
+    uint64_t look_tick = look_had ? a->look.ahead.tick : 0;
+    uint64_t look_copied_at = a->look.copied_at;
     update_look(a);
+    FrameFacts facts = {.zoom = a->camera.zoom, .prelude = a->prelude.active};
+    facts.camera_copied = a->look.has && (!look_had || a->look.copied_at != look_copied_at);
+    if (a->look.has) {
+        /* From the copy's first tick when new, else from where it stood. The
+         * cast: a frame runs a handful of ticks, far below INT_MAX. */
+        uint64_t from = facts.camera_copied ? a->look.copied_at : look_tick;
+        facts.camera_ticks = (int)(a->look.ahead.tick - from);
+    }
+    frame_log_part(&a->frame_log, FRAME_PART_CAMERA, platform_now_us());
     /* Counted up to the wait and no further: an int that kept growing would
      * pass INT_MAX after about two years of frames, and signed overflow is
      * undefined behaviour, not a wrap round. */
@@ -2146,10 +2169,18 @@ static void app_frame(void *arg)
         /* Only for a frame that is drawn: nothing else reads the motion.
          * Running, every frame is drawn, so this changes nothing there;
          * paused, it saves two updates in three. */
+        frame_log_part(&a->frame_log, FRAME_PART_OTHER, platform_now_us());
+        long tiles_before = a->scene.tiles.builds;
+        long sprites_before = a->scene.sprites.builds;
         scene_update(&a->scene, &a->sim, APP_SPEEDS[a->speed], body_before);
         float fraction = (float)a->ticks_due / (float)FRAMES_PER_SECOND;
         draw_frame(a, fraction);
+        frame_log_part(&a->frame_log, FRAME_PART_DRAW, platform_now_us());
+        facts.tile_builds = a->scene.tiles.builds - tiles_before;
+        facts.sprite_builds = a->scene.sprites.builds - sprites_before;
         platform_present(&a->canvas);
+        frame_log_part(&a->frame_log, FRAME_PART_PRESENT, platform_now_us());
+        facts.drawn = true;
         /* Counted when a picture is shown, so a paused window, which draws
          * five times a second, reads 5. A --frames run counts on its fixed
          * clock, with no work: the counter, if a test ever turns it on, then
@@ -2161,6 +2192,12 @@ static void app_frame(void *arg)
             fps_frame(&a->fps, now, now - work_start);
         }
     }
+
+    /* The cast: the ticks of one frame, at most a speed's worth or a
+     * prelude's 28 ms of them, far below INT_MAX. */
+    facts.ticks = (int)(a->sim.tick - tick_before);
+    frame_log_part(&a->frame_log, FRAME_PART_OTHER, platform_now_us());
+    frame_log_end(&a->frame_log, platform_now_us(), &facts);
 
     /* --record: every frame, drawn this time or not, so the video keeps
      * time: a paused frame shows the last picture again. */
@@ -2431,12 +2468,20 @@ int main(int argc, char **argv)
     }
     app.last_ms = opt.frames > 0 ? 0 : platform_now_ms();
     playlog_init(&app.playlog);
+    frame_log_init(&app.frame_log);
+    if (opt.frame_log_path != NULL &&
+        !frame_log_open(&app.frame_log, opt.frame_log_path, err, sizeof(err))) {
+        platform_error(err);
+        platform_close();
+        return EXIT_FAILED;
+    }
     /* "wb": binary, as for a screenshot. Opened last, once nothing else can
      * fail before the frames, so no early return leaves it open. */
     if (opt.record_path != NULL) {
         app.record = fopen(opt.record_path, "wb");
         if (app.record == NULL) {
             platform_error("--record: could not open the file to write");
+            frame_log_close(&app.frame_log);
             platform_close();
             return EXIT_FAILED;
         }
@@ -2445,6 +2490,7 @@ int main(int argc, char **argv)
     platform_run(app_frame, &app, opt.frames > 0 ? 0 : FRAMES_PER_SECOND);
 
     int result = app_leave(&app);
+    frame_log_close(&app.frame_log);
     platform_close();
     canvas_free(&app.canvas);
     family_free(&app.families);
