@@ -549,10 +549,13 @@ static void test_known_world_pixels(void)
          * raised over everything with a small shadow; every level moves.
          * Written out (VEREDAS_WRITE_PICTURES) and looked at. Re-pinned
          * for fish (rules 4, 2026-11-22): another world, and shoals glitter
-         * on deep water; old and new written out and compared side by side. */
+         * on deep water; old and new written out and compared side by side.
+         * Re-pinned for the strike from the air that reaches ahead (rules 5,
+         * 2026-11-23): another world, the same drawing; 4 to 9 % of pixels
+         * moved, old and new compared side by side. */
         static const uint64_t EXPECTED[CAMERA_ZOOMS] = {
-            0x7e321fd17eda29c9u, 0x05a3f2dd9cdcd364u,
-            0x35e0d33c938a8199u, 0x1041665eba6e9ecdu,
+            0x93d8caa003c98f9au, 0x3f1d8cbccda79c0cu,
+            0x03cd92b1069af47fu, 0x25ce44a2b61a69fdu,
         };
         if (pinned && hashes[level] != EXPECTED[level]) {
             printf("level %d: 0x%llxu\n", level,
@@ -1596,9 +1599,11 @@ static void test_underwater_pixels(void)
      * for the air (rules 3, 2026-11-21): another world, flyers up not drawn
      * from underwater; written out and looked at. Re-pinned for fish
      * (rules 4, 2026-11-22): another world, shoals glittering underwater;
-     * old and new compared side by side. */
+     * old and new compared side by side. Re-pinned for the strike from the
+     * air that reaches ahead (rules 5, 2026-11-23): another world, so the
+     * view centres on another place; compared side by side. */
     static const uint64_t EXPECTED[3] = {
-        0x3eea1cd035902b01u, 0xcc750a8a48560eedu, 0x5a31458cdefe6cffu,
+        0xcaa48a8c53cef9a8u, 0xd0d67ad4d0f26df1u, 0x24eaf0f95fb954e8u,
     };
     for (int zoom = 0; zoom < 3; zoom++) {
         if (pinned && hashes[zoom] != EXPECTED[zoom]) {
@@ -2765,9 +2770,11 @@ static void test_sky_pixels(void)
      * written out and looked at; re-pinned the same day for the sky's
      * finish (clouds of four puffs drifting with the wind, a bird gliding
      * down drawn in the air), old and new pictures compared side by side.
-     * Re-pinned for fish (rules 4, 2026-11-22): another world. */
+     * Re-pinned for fish (rules 4, 2026-11-22): another world. Re-pinned
+     * for the strike from the air that reaches ahead (rules 5, 2026-11-23):
+     * another world, another place; old and new compared side by side. */
     static const uint64_t EXPECTED[3] = {
-        0x696dbb274be96a5eu, 0x917748c8478510a0u, 0xb958aba17def93c6u,
+        0xf61736cadabd1295u, 0x35256bf47b36d036u, 0xeace27b809d19a86u,
     };
     for (int zoom = 0; zoom < 3; zoom++) {
         if (pinned && hashes[zoom] != EXPECTED[zoom]) {

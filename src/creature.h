@@ -422,7 +422,8 @@ bool creature_fish_eater(const World *w, const Creature *c);
 BiteChoice creature_bite_choice(const World *w, const Pool *p, int idx,
                                 const Settings *s);
 /* The slot of the creature an ACT_ATTACK by creature idx would strike: whoever
- * stands on the cell ahead, unless an earlier hit this tick has already taken it
+ * stands on the cell ahead (for a creature up in the air: on the ground right
+ * below, or else on the ground of the cell ahead), unless an earlier hit this tick has already taken it
  * to 0, or it is a close relative (genome_kinship at family_peace or above), or
  * of a similar colour (closer than colour_peace on the colour wheel). -1 for
  * nobody. Reads only, for the drawing side too. */

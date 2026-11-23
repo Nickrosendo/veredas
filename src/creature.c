@@ -1190,30 +1190,47 @@ static void act_move(World *w, Creature *c, int idx, const Settings *s, Rng *r)
     c->y = to / w->w;
 }
 
-int creature_attack_target(const World *w, const Pool *p, int idx,
-                           const Settings *s)
+/* Whether the creature in slot other may be struck by c: someone there, not c
+ * itself, not already taken to 0 this tick, not a close relative and not of a
+ * similar colour. */
+static bool may_strike(const Pool *p, const Creature *c, int idx, int other,
+                       const Settings *s)
 {
-    const Creature *c = &p->items[idx];
-    /* From the air a strike aims at whoever is on the ground right below. */
-    int aim = c->up > 0 ? world_idx(w, c->x, c->y)
-                        : cell_towards(w, c->x, c->y, c->heading);
-    int other = w->occupant[aim];
     /* other == idx only in a world one cell across, where ahead wraps to itself. */
     if (other < 0 || other == idx || p->items[other].health <= 0.0f) {
-        return -1;
+        return false;
     }
     /* Close relatives are not struck. The swing is still paid for, so choosing
      * to attack beside them costs energy and selection can act on that. */
     const Genome *theirs = &p->items[other].genome;
     if (genome_kinship(&c->genome, theirs) >= s->family_peace) {
-        return -1;
+        return false;
     }
     /* Nor is anyone of a similar colour: what a creature looks like is what can be
      * seen on screen, and two who look alike can be distant by their genes. */
     if (hue_distance(c->genome.g[GENE_HUE], theirs->g[GENE_HUE]) < s->colour_peace) {
-        return -1;
+        return false;
     }
-    return other;
+    return true;
+}
+
+int creature_attack_target(const World *w, const Pool *p, int idx,
+                           const Settings *s)
+{
+    const Creature *c = &p->items[idx];
+    int ahead = cell_towards(w, c->x, c->y, c->heading);
+    if (c->up > 0) {
+        /* From the air a strike aims at whoever is on the ground right below,
+         * or else at whoever is on the ground of the cell ahead (the livelier
+         * hunting design, section 9): a reach, as a ground strike reaches the
+         * cell ahead. Whether to strike at all is still the brain's choice. */
+        int below = w->occupant[world_idx(w, c->x, c->y)];
+        if (may_strike(p, c, idx, below, s)) {
+            return below;
+        }
+    }
+    int other = w->occupant[ahead];
+    return may_strike(p, c, idx, other, s) ? other : -1;
 }
 
 /* Adds a hit to the target's ring, over its oldest once the ring is full. */
@@ -2184,8 +2201,8 @@ static void land_beside(World *w, Pool *p, Creature *c, int idx, int prey)
 }
 
 /* What action a does to a creature up in the air (the water and air design,
- * 5.4). A bite or an attack aims at the ground below: a hunter's strike there
- * brings it down beside its prey, and a plain bite brings it down to eat.
+ * 5.4). A bite or an attack aims at the ground: a hunter's strike (at the
+ * animal below, or else at the one ahead) brings it down beside its prey, and a plain bite brings it down to eat.
  * Mating, resting and sleeping bring it down. Where it cannot come down, mating
  * fails, and resting or sleeping is a rest whose brain chooses again next tick:
  * nothing sleeps in the air. Returns true when the tick is used up here, false

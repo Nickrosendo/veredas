@@ -465,6 +465,90 @@ static void test_dive_kill_counted(void)
     CHECK(killed);
 }
 
+/* A strike from the air reaches around (the livelier hunting design, section
+ * 9): it aims at the animal right below, or else at the one on the ground of
+ * the cell ahead; never at one beside or behind. */
+static void test_air_strike_reaches_ahead(void)
+{
+    Settings s = settings_default();
+    World w;
+    make_world(&w, 8, 8);
+    Pool p;
+    CHECK(pool_init(&p, 8));
+    Rng r;
+    rng_seed(&r, 1);
+    int f = spawn_winged(&p, &w, 3, 3, 1.0f);
+    creature_act(&w, &p, f, act(ACT_MOVE), &s, &r); /* up, at (3, 2) */
+    CHECK(p.items[f].up > 0);
+    p.items[f].heading = HEADING_NORTH;
+    /* Nobody below or ahead: nothing to strike. */
+    CHECK(creature_attack_target(&w, &p, f, &s) == -1);
+    /* One beside (east) and one behind (south): still nothing. */
+    int beside = spawn_winged(&p, &w, 4, 2, 0.0f);
+    make_stranger(&p.items[beside]);
+    int behind = spawn_winged(&p, &w, 3, 3, 0.0f);
+    make_stranger(&p.items[behind]);
+    CHECK(creature_attack_target(&w, &p, f, &s) == -1);
+    /* One on the ground of the cell ahead (north, at (3, 1)): struck. */
+    int ahead = spawn_winged(&p, &w, 3, 1, 0.0f);
+    make_stranger(&p.items[ahead]);
+    CHECK(creature_attack_target(&w, &p, f, &s) == ahead);
+    /* Turned to face the one beside, that one is ahead now. */
+    p.items[f].heading = HEADING_EAST;
+    CHECK(creature_attack_target(&w, &p, f, &s) == beside);
+    p.items[f].heading = HEADING_NORTH;
+    /* One right below as well: below comes first. */
+    int below = spawn_winged(&p, &w, 3, 2, 0.0f);
+    make_stranger(&p.items[below]);
+    CHECK(creature_attack_target(&w, &p, f, &s) == below);
+    /* A close relative below (all-zero genes, like the flyer's weights) is not
+     * struck, so the reach goes on to the stranger ahead. */
+    Genome kin = p.items[f].genome;
+    p.items[below].genome = kin;
+    CHECK(creature_attack_target(&w, &p, f, &s) == ahead);
+    pool_free(&p);
+    world_free(&w);
+}
+
+/* A dive at the animal ahead lands, and brings the flyer down beside it. */
+static void test_dive_at_the_cell_ahead(void)
+{
+    Settings s = settings_default();
+    bool killed = false;
+    for (uint64_t seed = 1; seed < 64 && !killed; seed++) {
+        World w;
+        make_world(&w, 8, 8);
+        Pool p;
+        CHECK(pool_init(&p, 2));
+        Rng r;
+        rng_seed(&r, seed);
+        int f = spawn_winged(&p, &w, 3, 3, 1.0f);
+        Creature *hawk = &p.items[f];
+        hawk->genome.g[GENE_LEAF] = 0.0f;
+        hawk->genome.g[GENE_MEAT] = 1.0f;
+        hawk->genome.g[GENE_SIZE] = 1.0f;
+        creature_act(&w, &p, f, act(ACT_MOVE), &s, &r); /* up, at (3, 2) */
+        p.items[f].heading = HEADING_NORTH;
+        int prey = spawn_winged(&p, &w, 3, 1, 0.0f);
+        make_stranger(&p.items[prey]);
+        p.items[prey].genome.g[GENE_ARMOUR] = 0.0f;
+        p.items[prey].health = 0.001f;
+        creature_act(&w, &p, f, act(ACT_BITE), &s, &r);
+        if (p.items[prey].health <= 0.0f) {
+            killed = true;
+            CHECK(p.dive_kills == 1 && p.dive_kills_land == 1);
+            const Creature *down = &p.items[f];
+            CHECK(down->up == 0);
+            int dx = abs(down->x - 3);
+            int dy = abs(down->y - 1);
+            CHECK(dx <= 1 && dy <= 1 && (dx + dy) > 0);
+        }
+        pool_free(&p);
+        world_free(&w);
+    }
+    CHECK(killed);
+}
+
 /* Up, a flyer's view sight is aloft_sight times its sight on the ground. */
 static void test_aloft_sees_farther(void)
 {
@@ -818,6 +902,8 @@ int main(void)
     test_aloft_senses();
     test_dive_hits_harder();
     test_dive_kill_counted();
+    test_air_strike_reaches_ahead();
+    test_dive_at_the_cell_ahead();
     test_aloft_sees_farther();
     test_aloft_smells_farther();
     test_flyer_child_born_on_rock();
