@@ -42,6 +42,16 @@ void lookahead_init(Lookahead *l, uint64_t lead);
 /* The copy exists, is still the shown world's future, and has run its lead
  * ahead (or its world has ended, so there is nothing more to run). */
 bool lookahead_ready(const Lookahead *l, const Sim *shown);
+/* The copy was made from this world and is still its future: nothing done to
+ * it since, not put back in time. Reads only the Lookahead's own fields, never
+ * the copy itself, so the window may ask it while the copy is being stepped
+ * on another thread (lookthread.h). */
+bool lookahead_is_future(const Lookahead *l, const Sim *shown);
+/* A fresh copy of shown, if there is none, it is no longer the future, or it
+ * has fallen behind the shown world; otherwise the copy is kept as it is.
+ * False, with a one-line message, when memory ran out; the Lookahead is empty
+ * then. */
+bool lookahead_copy(Lookahead *l, const Sim *shown, char *err, size_t len);
 /* Makes a fresh copy if there is none or it is no longer the future, then
  * steps the copy towards shown->tick + lead until budget_ms by now_ms has
  * passed. False, with a one-line message, only when a copy could not be made

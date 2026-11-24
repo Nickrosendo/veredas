@@ -125,7 +125,7 @@ typedef struct {
 bool tiles_cache_init(TileCache *c, int entries);
 /* Frees the table and empties *c; safe to call twice. */
 void tiles_cache_free(TileCache *c);
-/* Forgets every tile (on a zoom change and scene_reset). builds keeps counting. */
+/* Forgets every tile (scene_reset: a new world). builds keeps counting. */
 void tiles_cache_reset(TileCache *c);
 /* The tile of this key at this size, built now if it is not kept. NULL only on
  * a cache that failed to initialise. */

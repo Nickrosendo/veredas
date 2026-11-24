@@ -14,7 +14,7 @@ void lookahead_init(Lookahead *l, uint64_t lead)
 /* The copy was made from this world, nothing has been done to it since, and
  * it has not been put back in time (a load, or a new world at the same tick
  * would also change the seed or the tick). */
-static bool still_the_future(const Lookahead *l, const Sim *shown)
+bool lookahead_is_future(const Lookahead *l, const Sim *shown)
 {
     return l->has && shown->seed == l->seed && shown->tick >= l->copied_at &&
            shown->actions.count == l->actions_seen;
@@ -22,20 +22,18 @@ static bool still_the_future(const Lookahead *l, const Sim *shown)
 
 bool lookahead_ready(const Lookahead *l, const Sim *shown)
 {
-    if (!still_the_future(l, shown)) {
+    if (!lookahead_is_future(l, shown)) {
         return false;
     }
     return l->ahead.tick >= shown->tick + l->lead || sim_is_over(&l->ahead);
 }
 
-/* A fresh copy of shown, if the old one is gone or wrong. False when memory
- * ran out; the Lookahead is empty then. */
-static bool make_copy(Lookahead *l, const Sim *shown, char *err, size_t len)
+bool lookahead_copy(Lookahead *l, const Sim *shown, char *err, size_t len)
 {
     /* A copy fallen behind the shown world (a fast speed it could not keep
      * up with) is still right, but a new copy (about 30 ms on a window-sized
      * world) is quicker than running it up to where the shown world is. */
-    if (still_the_future(l, shown) && l->ahead.tick >= shown->tick) {
+    if (lookahead_is_future(l, shown) && l->ahead.tick >= shown->tick) {
         return true;
     }
     lookahead_free(l);
@@ -60,7 +58,7 @@ static bool far_enough(const Lookahead *l, const Sim *shown)
 bool lookahead_sync(Lookahead *l, const Sim *shown, uint64_t (*now_ms)(void),
                     uint64_t budget_ms, char *err, size_t len)
 {
-    if (!make_copy(l, shown, err, len)) {
+    if (!lookahead_copy(l, shown, err, len)) {
         return false;
     }
     uint64_t start = now_ms();
@@ -77,7 +75,7 @@ bool lookahead_sync(Lookahead *l, const Sim *shown, uint64_t (*now_ms)(void),
 void lookahead_sync_all(Lookahead *l, const Sim *shown)
 {
     char err[160];
-    if (!make_copy(l, shown, err, sizeof(err))) {
+    if (!lookahead_copy(l, shown, err, sizeof(err))) {
         return;
     }
     while (!far_enough(l, shown)) {
@@ -109,9 +107,14 @@ void lookahead_sync_all(Lookahead *l, const Sim *shown)
  * dropping on a hare and a shark in a shoal, are worth more than an ordinary
  * kill (on top of it: a dive kill is also a kill), and fish meals count
  * toward a hunt at sea, so a sea animal working a shoal is a watch too. */
-#define WORTH_DIVE 24.0f      /* each kill struck from the air: above a first
-                               * kill (21), so the line names the dive */
-#define WORTH_SEA_KILL 24.0f  /* each sea animal killed by a sea animal */
+/* Section 11 of that design (Nicolas, 2026-11-23): a coming dive or hunt at
+ * sea outranks a coming land kill of a hunter inside the hunt kind. A hunter
+ * killed on land is WORTH_HUNTER_KILL + WORTH_KILL = 31; a dive or sea kill is
+ * its own worth + WORTH_KILL, so anything above 25 wins, kill for kill. 32 is
+ * also above WORTH_HUNTER_KILL alone, so a dive that kills a hunter is named
+ * a dive (its biggest part), not "about to kill a hunter". */
+#define WORTH_DIVE 32.0f      /* each kill struck from the air */
+#define WORTH_SEA_KILL 32.0f  /* each sea animal killed by a sea animal */
 #define WORTH_FISH 0.5f       /* each fish meal, up to FISH_MOST of them */
 #define FISH_MOST 20.0f
 

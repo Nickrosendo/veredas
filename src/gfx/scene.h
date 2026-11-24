@@ -148,10 +148,9 @@ typedef struct {
     Particles particles;
     uint16_t rain[2][TILE_VARIANTS][TILE_RAIN_FRAMES][16];
     uint8_t bones[2][TILE_VARIANTS][TILE_MAX * TILE_MAX];
-    /* The ground's autotiles, built as their keys are first seen, and the
-     * zoom step they were built for: a new zoom starts the cache afresh. */
+    /* The ground's autotiles, built as their keys are first seen, of every
+     * size the zoom steps use, kept until the cache needs their room. */
     TileCache tiles;
-    int tiles_zoom;
     /* Each visible cell's colours, plus a ring of one cell around the view,
      * since a tile's ragged edge shows its neighbours' ground. Worked out on a
      * whole redraw, and at most once a SCENE_COLOUR_MS after; the blocks grow

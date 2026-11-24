@@ -18,6 +18,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y clang
       - name: Tests, before SDL is installed, since they must not need it
         run: make test CC=${{ matrix.cc }}
+      # The thread checker cannot map its shadow memory when the kernel spreads
+      # programs over the full address range (newer Ubuntu kernels do), so the
+      # spread is narrowed for this step's machine first.
+      - name: The camera's thread, under the thread checker
+        run: sudo sysctl vm.mmap_rnd_bits=28 && make test-threads CC=${{ matrix.cc }}
       - name: Install SDL, for the window program only
         run: sudo apt-get update && sudo apt-get install -y libsdl2-dev
       - name: The window program, on SDL's dummy video driver

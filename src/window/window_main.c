@@ -27,6 +27,7 @@
 #include "levels.h"
 #include "lifepage.h"
 #include "lookahead.h"
+#include "lookthread.h"
 #include "menus.h"
 #include "notices.h"
 #include "options.h"
@@ -234,11 +235,12 @@ typedef struct {
      * split, and a second x keeps the world shown. */
     Branches branches;
     bool keep_asked;
-    /* The look-ahead camera (lookahead.h): a copy a season ahead, and whether
-     * the camera may pick who to follow. On by default in Documentary, off in
-     * Sandbox; f switches it. idle_frames counts frames with no key or mouse;
-     * look_now asks for a pick at once (the followed creature died). */
-    Lookahead look;
+    /* The look-ahead camera (lookahead.h): a copy a season ahead, stepped on
+     * a thread of its own (lookthread.h), and whether the camera may pick who
+     * to follow. On by default in Documentary, off in Sandbox; f switches it.
+     * idle_frames counts frames with no key or mouse; look_now asks for a
+     * pick at once (the followed creature died). */
+    LookThread look;
     bool look_on;
     bool look_now;
     /* The camera's last two reasons (LookReason), newest first, so its next
@@ -416,8 +418,9 @@ static void forget_old_world(App *a)
     a->keep_asked = false;
     a->compare_open = false;
     sandbox_weather_forget(&a->sandbox);
-    /* The copy was of the old world; the new one gets picked for at once. */
-    lookahead_free(&a->look);
+    /* The copy was of the old world; the new one gets picked for at once.
+     * Waits for the worker's step, at most one tick. */
+    lookthread_reset(&a->look, a->look.look.lead);
     a->idle_frames = LOOK_IDLE_FRAMES;
     a->look_id = LOOKAHEAD_NOBODY;
     /* Nobody followed any more; the level shown stays. */
@@ -617,7 +620,7 @@ static bool open_code_text(App *a, const char *text, char *err, size_t len)
                 a->layout.view_h);
     a->camera.zoom = zoom;
     a->camera.level = level;
-    lookahead_init(&a->look, (uint64_t)(a->sim.set.ticks_per_year / 4));
+    lookthread_reset(&a->look, (uint64_t)(a->sim.set.ticks_per_year / 4));
     app_prelude_replay(&a->prelude, &a->sim, until);
     if (a->opt->frames > 0) {
         app_prelude_finish(&a->prelude, &a->sim);
@@ -1498,7 +1501,7 @@ static bool look_wanted(const App *a)
  * the player idle (or the followed creature just died). While following, only
  * the camera's own pick may be left, once it has been quiet for a while (the
  * livelier hunting design, section 9): one the player chose stays. */
-static bool look_may_pick(const App *a)
+static bool look_may_pick(const App *a, const Lookahead *look)
 {
     bool idle = !a->paused && !a->page.open && !a->lab_open && !a->notices_open &&
                 a->sandbox.menu == SANDBOX_MENU_NONE &&
@@ -1510,31 +1513,52 @@ static bool look_may_pick(const App *a)
         return true;
     }
     return a->inspect.id == a->look_id &&
-           lookahead_repick_due(&a->look, &a->sim, a->look_id, a->look_picked_at);
+           lookahead_repick_due(look, &a->sim, a->look_id, a->look_picked_at);
 }
 
 /* Keeps the copy a season ahead and, when the camera may, follows the best
  * coming life. The copy only reads a->sim, so the world shown is the same with
  * the camera on or off. */
+/* Declared ahead of its definition, below update_look, which calls it: C
+ * reads a file top to bottom and needs a function's type before its first
+ * call. */
+static void pick_from(App *a, const Lookahead *look);
+
 static void update_look(App *a)
 {
     if (!look_wanted(a)) {
         /* Its memory back: a whole second world is not small. */
-        lookahead_free(&a->look);
+        lookthread_drop(&a->look);
         a->look_now = false;
         return;
     }
     char err[160];
     if (a->opt->frames > 0) {
-        /* Tests and screenshots: to the end, so each run is the same. */
-        lookahead_sync_all(&a->look, &a->sim);
-    } else if (!lookahead_sync(&a->look, &a->sim, platform_now_ms,
-                               APP_PRELUDE_FRAME_MS / 2, err, sizeof(err))) {
+        /* Tests and screenshots: to the end, so each run is the same. No
+         * worker was started for these runs, so the copy is this thread's. */
+        lookahead_sync_all(&a->look.look, &a->sim);
+    } else if (!lookthread_sync(&a->look, &a->sim, platform_now_ms,
+                                APP_PRELUDE_FRAME_MS / 2, err, sizeof(err))) {
         a->look_on = false;
         say(a, "camera off: no memory for its copy of the world", NOTICE_FRAMES);
         return;
     }
-    if (!look_may_pick(a)) {
+    /* The copy to read, unless the worker is stepping it: then the pick
+     * waits for a later frame. The copy cannot be ready meanwhile anyway when
+     * the worker is stepping towards a new target. */
+    const Lookahead *look = lookthread_borrow(&a->look);
+    if (look == NULL) {
+        return;
+    }
+    pick_from(a, look);
+    lookthread_return(&a->look);
+}
+
+/* The pick itself, from a copy the worker is not touching (update_look holds
+ * the lock while this runs). */
+static void pick_from(App *a, const Lookahead *look)
+{
+    if (!look_may_pick(a, look)) {
         return;
     }
     char why[LOOKAHEAD_WHY];
@@ -1543,8 +1567,7 @@ static void update_look(App *a)
     unsigned tired = (1u << lookahead_kind(a->look_last[0])) |
                      (1u << lookahead_kind(a->look_last[1]));
     int reason;
-    uint32_t id =
-        lookahead_pick(&a->look, &a->sim, tired, &reason, why, sizeof(why));
+    uint32_t id = lookahead_pick(look, &a->sim, tired, &reason, why, sizeof(why));
     if (id == LOOKAHEAD_NOBODY) {
         return; /* not ready yet: look_now stays, and a later frame picks */
     }
@@ -2161,17 +2184,21 @@ static void app_frame(void *arg)
     frame_log_part(&a->frame_log, FRAME_PART_OTHER, platform_now_us());
     /* What the look-ahead copy was before, so the frame log can tell how far
      * it ran and whether it was made afresh. */
-    bool look_had = a->look.has;
-    uint64_t look_tick = look_had ? a->look.ahead.tick : 0;
-    uint64_t look_copied_at = a->look.copied_at;
+    bool look_had, look_has;
+    uint64_t look_copied_at, look_tick, copied_at_now, tick_now;
+    lookthread_progress(&a->look, &look_had, &look_copied_at, &look_tick);
     update_look(a);
+    lookthread_progress(&a->look, &look_has, &copied_at_now, &tick_now);
     FrameFacts facts = {.zoom = a->camera.zoom, .prelude = a->prelude.active};
-    facts.camera_copied = a->look.has && (!look_had || a->look.copied_at != look_copied_at);
-    if (a->look.has) {
+    facts.camera_copied = look_has && (!look_had || copied_at_now != look_copied_at);
+    /* Only ticks of the copy run on this thread, in this frame's own time:
+     * with the worker thread (a->look.started) they run beside the frames,
+     * and the report must not put a late frame down to them. */
+    if (look_has && !a->look.started) {
         /* From the copy's first tick when new, else from where it stood. The
          * cast: a frame runs a handful of ticks, far below INT_MAX. */
-        uint64_t from = facts.camera_copied ? a->look.copied_at : look_tick;
-        facts.camera_ticks = (int)(a->look.ahead.tick - from);
+        uint64_t from = facts.camera_copied ? copied_at_now : look_tick;
+        facts.camera_ticks = tick_now >= from ? (int)(tick_now - from) : 0;
     }
     frame_log_part(&a->frame_log, FRAME_PART_CAMERA, platform_now_us());
     /* Counted up to the wait and no further: an int that kept growing would
@@ -2431,7 +2458,15 @@ int main(int argc, char **argv)
     rng_seed(&app.seed_source, app.sim.seed);
     /* A season ahead. The cast: ticks_per_year is an int, the lead a tick
      * count (uint64_t); settings keep it positive, so nothing is lost. */
-    lookahead_init(&app.look, (uint64_t)(app.sim.set.ticks_per_year / 4));
+    lookthread_init(&app.look, (uint64_t)(app.sim.set.ticks_per_year / 4));
+    /* The copy's ticks on a thread of their own, so they never land on the
+     * frames that tick the shown world. Not with --frames: tests and
+     * screenshots run the copy to its end on this thread (update_look), the
+     * same on every run. When no thread can be had (the browser build), the
+     * copy runs here, within a budget, as it always did. */
+    if (opt.frames == 0) {
+        (void)lookthread_start(&app.look);
+    }
     /* With --frames (tests and screenshots) the prelude runs whole before the
      * first frame, and only when --ancestors asks for it: a picture must come
      * out the same every time, which a prelude cut by a clock would not. */
@@ -2524,7 +2559,7 @@ int main(int argc, char **argv)
     scene_free(&app.scene);
     sandbox_free(&app.sandbox);
     branch_free(&app.branches);
-    lookahead_free(&app.look);
+    lookthread_stop(&app.look);
     sim_free(&app.sim);
     return result;
 }
