@@ -260,6 +260,37 @@ static void test_score_dive_and_sea_hunt(void)
     CHECK(lookahead_kind(LOOK_SEA_HUNT) == LOOK_KIND_HUNT);
 }
 
+/* Inside the hunt kind a coming dive or hunt at sea outranks a coming land
+ * kill of a hunter (the livelier hunting design, section 11): one of each,
+ * from a life with no kills yet (each side gets the first kill's worth) and
+ * from one with kills behind it. A dive that kills a hunter is named a dive. */
+static void test_dive_and_sea_beat_hunter_kill(void)
+{
+    for (uint32_t before = 0; before <= 5; before += 5) {
+        LifeTally now = {.kills = before};
+        LifeTally hunter = now, dive = now, sea = now, dive_hunter = now;
+        hunter.kills = before + 1;
+        hunter.hunter_kills = 1;
+        dive.kills = before + 1;
+        dive.dive_kills = 1;
+        sea.kills = before + 1;
+        sea.sea_kills = 1;
+        dive_hunter = hunter;
+        dive_hunter.dive_kills = 1;
+        int why = -1;
+        float s_hunter = lookahead_score(&now, 100, &hunter, 250, &why);
+        CHECK(why == LOOK_HUNTER_KILL);
+        float s_dive = lookahead_score(&now, 100, &dive, 250, &why);
+        CHECK(why == LOOK_DIVE);
+        float s_sea = lookahead_score(&now, 100, &sea, 250, &why);
+        CHECK(why == LOOK_SEA_HUNT);
+        CHECK(s_dive > s_hunter);
+        CHECK(s_sea > s_hunter);
+        (void)lookahead_score(&now, 100, &dive_hunter, 250, &why);
+        CHECK(why == LOOK_DIVE);
+    }
+}
+
 /* The camera re-picks after a while (the livelier hunting design, section
  * 9): its pick may be left once followed for LOOKAHEAD_REPICK_TICKS and quiet
  * (nothing coming in the copy); not sooner, not while something is coming,
@@ -315,6 +346,7 @@ static void test_repick_when_quiet(void)
 int main(void)
 {
     test_score_dive_and_sea_hunt();
+    test_dive_and_sea_beat_hunter_kill();
     test_watching_is_free();
     test_copy_is_the_future();
     test_pick_is_alive();
