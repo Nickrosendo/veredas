@@ -21,7 +21,8 @@ static uint32_t px_of(Colour k)
 
 /* The menu's box with its title and, when closable, the close button; returns
  * the y of the first row under the title. The setup screen has its own way
- * out, "Keep this world", which presses the same Escape. */
+ * out, "Keep this world" ("Start unchanged" before the world has started),
+ * which presses the same Escape. */
 static int frame(Ui *u, Canvas *c, int x, int y, int h, const char *title,
                  bool closable)
 {
@@ -183,7 +184,10 @@ static void check_row(Ui *u, Canvas *c, int x, int y, int i, bool checked)
 static void draw_setup(Ui *u, Canvas *c, int x, int y, const Sandbox *b)
 {
     int h = menu_height(SANDBOX_MENU_SETUP);
-    int row = frame(u, c, x, y, h, "A new start: how bodies change", false);
+    int row = frame(u, c, x, y, h,
+                    b->before_start ? "Before the world starts: how bodies change"
+                                    : "A new start: how bodies change",
+                    false);
     char text[64];
     int at = x + PAD;
     at += word_button(u, c, at, row, "-", "less wild (,)", ',', false) + 4;
@@ -210,6 +214,15 @@ static void draw_setup(Ui *u, Canvas *c, int x, int y, const Sandbox *b)
     }
     row += ROW / 2;
     at = x + PAD;
+    if (b->before_start) {
+        /* Nothing has run yet: both start the world, with these rules or
+         * with the ones it had. */
+        at += word_button(u, c, at, row, "Start", "start the world with these "
+                          "rules (Enter)", '\r', false) + 6;
+        word_button(u, c, at, row, "Start unchanged", "start the world with "
+                    "nature's own rules (Esc)", KEY_ESCAPE, false);
+        return;
+    }
     at += word_button(u, c, at, row, "Start again", "start again from the first tick "
                       "(Enter)", '\r', false) + 6;
     word_button(u, c, at, row, "Keep this world", "keep this world (Esc)", KEY_ESCAPE,

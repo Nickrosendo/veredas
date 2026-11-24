@@ -75,7 +75,8 @@ typedef struct Chronicle {
     NotableLife *lives; /* CHRONICLE_NOTABLE entries, allocated once */
     /* How many creatures have grown to giant size in this world, and the id of
      * the newest: what the notices watch (notices.h). Not saved, so they
-     * start again from 0 after a load; the notices start afresh too. */
+     * start again from 0 after a load; the notices start afresh too. A
+     * branch's copy takes them over from the world it split from (branch.c). */
     uint32_t giants;
     uint32_t newest_giant;
 } Chronicle;

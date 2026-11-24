@@ -3,6 +3,7 @@
 #include <string.h> /* strstr, strcmp, strlen */
 
 #include "actions.h"
+#include "branch.h"
 #include "compare.h"
 #include "genome.h"
 #include "save.h" /* sim_copy */
@@ -104,6 +105,68 @@ static void test_gift_and_catching_up(void)
     sim_free(&b);
 }
 
+/* The creatures on screen now, against the world's last sample. */
+static int sampled(const Sim *s)
+{
+    int n = 0;
+    for (int k = 0; k < BAND_COUNT; k++) {
+        n += s->stats.by_level[k];
+    }
+    return n;
+}
+
+/* Split between two samples, as a player splits at any moment: the world on
+ * screen still holds its last sample while the copy was measured as it was
+ * made, and the giants so far are not in the save format. The two are the
+ * same world all the same, so every row reads "same", and the plant- and
+ * meat-eaters add up to the creatures counted beside them. */
+static void test_split_between_samples_reads_same(void)
+{
+    Settings set = settings_default();
+    Sim a;
+    CHECK(sim_init(&a, &set, 17, 64, 32));
+    /* On to a tick whose sample no longer matches the creatures alive, so the
+     * old way of reading the samples would show it. */
+    int steps = 0;
+    do {
+        sim_step(&a);
+        steps++;
+    } while (sampled(&a) == a.pool.count && steps < 5000);
+    CHECK(sampled(&a) != a.pool.count);
+    a.chronicle.giants = 7; /* as if seven had grown before the split */
+    Branches br = {0};
+    char err[128];
+    CHECK(branch_make(&br, &a, err, sizeof(err)));
+    CHECK(br.other.chronicle.giants == 7);
+    static char lines[COMPARE_LINES][COMPARE_COLS];
+    int n = compare_lines(&a, 'A', &br.other, 'B', br.split_at, lines,
+                          COMPARE_LINES);
+    const char *rows[] = {"creatures", "plant-eaters", "meat-eaters",
+                          "planted cells", "families", "giants ever"};
+    for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++) {
+        /* The row's two numbers, A's then B's, right after its label. */
+        int in_a = -1, in_b = -2;
+        for (int j = 0; j < n; j++) {
+            const char *at = strstr(lines[j], rows[i]);
+            if (at != NULL && at == lines[j] + 2) {
+                sscanf(at + strlen(rows[i]), "%d %d", &in_a, &in_b);
+                break;
+            }
+        }
+        CHECK(in_a >= 0 && in_a == in_b);
+    }
+    int plant = -1, meat = -1, alive = -1;
+    for (int i = 0; i < n; i++) {
+        sscanf(lines[i], " creatures %d", &alive);
+        sscanf(lines[i], " plant-eaters %d", &plant);
+        sscanf(lines[i], " meat-eaters %d", &meat);
+    }
+    CHECK(alive == a.pool.count);
+    CHECK(plant >= 0 && meat >= 0 && plant + meat == alive);
+    branch_free(&br);
+    sim_free(&a);
+}
+
 /* Too little room for the table: nothing rather than half of it. */
 static void test_no_room_no_lines(void)
 {
@@ -120,5 +183,6 @@ int main(void)
     test_equal_worlds_read_same();
     test_gift_and_catching_up();
     test_no_room_no_lines();
+    test_split_between_samples_reads_same();
     TEST_SUMMARY();
 }

@@ -75,6 +75,11 @@ typedef struct {
     int jump_genes;
     WeatherWatch weather;
     int did;          /* a SANDBOX_DID_ value, for the last key only */
+    /* The setup screen is holding a world that has not started: its
+     * ancestors wait for it (--sandbox, or m while they evolve). The window
+     * sets it each frame, and the screen then offers to start the world, not
+     * to start it again. */
+    bool before_start;
 } Sandbox;
 
 /* Opens the setup screen at the values set has now (the nearest steps). */

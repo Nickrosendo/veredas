@@ -16,6 +16,12 @@ bool branch_make(Branches *b, const Sim *shown, char *err, size_t len)
     if (!sim_copy(&b->other, shown, err, len)) {
         return false;
     }
+    /* The save format leaves out the giants counted so far (chronicle.h),
+     * but the years before the split belong to both branches: without this
+     * the copy would count from 0 and compare's "giants ever" would say the
+     * two worlds differ by every giant before the split. */
+    b->other.chronicle.giants = shown->chronicle.giants;
+    b->other.chronicle.newest_giant = shown->chronicle.newest_giant;
     b->split = true;
     b->shown = 0;
     b->split_at = shown->tick;

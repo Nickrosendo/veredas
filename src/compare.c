@@ -195,7 +195,20 @@ int compare_lines(const Sim *a, char name_a, const Sim *b, char name_b,
     }
     snprintf(lines[n++], COMPARE_COLS, "  %-18s %8c %8c   %c against %c", "", name_a,
              name_b, name_b, name_a);
-    const Stats *sa = &a->stats, *sb = &b->stats;
+    /* Counted afresh, not the worlds' own last samples: those are up to
+     * stats_every ticks old, and in spring hundreds are born in that time,
+     * so a sample would not match the creatures counted now beside it. A copy
+     * just split off was measured as it was made (sim_copy) and the world on
+     * screen was not, so the two samples would also differ from each other
+     * while the worlds are the same. The histories, for the charts, are kept.
+     * static: kept off the small web stack. The scratch is free between ticks
+     * (stats.h), and drawing never runs inside one. */
+    static Stats fresh_a, fresh_b;
+    fresh_a = a->stats;
+    fresh_b = b->stats;
+    stats_measure(&fresh_a, &a->world, &a->pool, a->tick, a->scratch);
+    stats_measure(&fresh_b, &b->world, &b->pool, b->tick, b->scratch);
+    const Stats *sa = &fresh_a, *sb = &fresh_b;
     count_row(lines[n++], "creatures", a->pool.count, b->pool.count);
     count_row(lines[n++], "plant-eaters", sa->by_level[BAND_PLANT],
               sb->by_level[BAND_PLANT]);

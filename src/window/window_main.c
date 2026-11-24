@@ -449,9 +449,11 @@ static void new_world(App *a)
  * new start can be told apart from the old by the settings alone. */
 static void restart_with_setup(App *a)
 {
+    bool first = a->prelude.active; /* the setup screen held the start */
     sandbox_setup_apply(&a->sandbox, &a->sim.set);
     start_world(a, a->sim.seed);
-    say(a, "a new start: the same seed, with the bodies' new rules",
+    say(a, first ? "the world starts, with the bodies' new rules"
+                 : "a new start: the same seed, with the bodies' new rules",
         2 * NOTICE_FRAMES);
 }
 
@@ -1750,6 +1752,20 @@ static void draw_prelude(App *a)
      * words stay still while the dots come and go. */
     const char *doing = a->prelude.replay ? "Replaying the world code"
                                           : "Growing a new world";
+    if (a->sandbox.before_start) {
+        /* Held by the setup screen: no ring and no bar, since nothing is
+         * being worked on, and a line on what starts it. */
+        const char *wait = "Waiting to start";
+        const char *how = "choose how bodies change, then Start (Enter) or "
+                          "Start unchanged (Esc)";
+        text_draw(&a->canvas, x + (w - text_width(wait)) / 2, top + 2 * FONT_H,
+                  wait, colour_pixel(PALETTE_TEXT));
+        text_draw(&a->canvas, x + (w - text_width(how)) / 2, top + 4 * FONT_H, how,
+                  colour_faded(PALETTE_TEXT, 170));
+        lab_draw_parade(&a->scene.sprites, &a->canvas, ms, x, top + 6 * FONT_H, w,
+                        y + h - (top + 6 * FONT_H));
+        return;
+    }
     char line[64];
     snprintf(line, sizeof(line), "%s...", doing);
     int spinner_w = 16 + 10; /* the ring and the gap after it */
@@ -1800,12 +1816,19 @@ static void draw_frame(App *a, float fraction)
         return;
     }
     const Layout *l = &a->layout;
-    if (a->prelude.active && a->sandbox.menu != SANDBOX_MENU_SETUP) {
+    /* Before the world has started, the setup screen stands over the
+     * prelude's screen, not over a still map that would look stuck. */
+    a->sandbox.before_start =
+        a->prelude.active && a->sandbox.menu == SANDBOX_MENU_SETUP;
+    if (a->prelude.active) {
         draw_prelude(a);
         draw_keys(a);
         draw_title(a, followed);
         draw_panel(a, followed);
         draw_bottom(a);
+        if (a->sandbox.before_start) {
+            draw_sandbox(a);
+        }
         ui_tip(&a->ui, &a->canvas, platform_now_ms());
         ui_end(&a->ui);
         return;
@@ -2081,8 +2104,12 @@ static void app_frame(void *arg)
         a->idle_frames = LOOK_IDLE_FRAMES - 5 * FRAMES_PER_SECOND;
     }
     if (a->prelude.active && a->sandbox.menu == SANDBOX_MENU_SETUP) {
-        /* The setup screen holds the ancestors: Enter starts them again. */
-        a->notice[0] = '\0';
+        /* The setup screen holds the ancestors: Enter starts them with its
+         * rules, Esc as they were. Said on the top line, every frame, so the
+         * world is not taken for stuck. */
+        snprintf(a->notice, sizeof(a->notice),
+                 "the world waits for you to start it: Enter or Esc");
+        a->notice_frames = 0;
     } else if (a->prelude.active) {
         /* As many prelude ticks as fit in 28 ms of the frame's 33, so the
          * window and the keys still keep up; pausing does not hold it. */

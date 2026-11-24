@@ -18,7 +18,9 @@ enum { COMPARE_COLS = 192, COMPARE_LINES = 20, COMPARE_CHART_COLS = 32 };
 /*
  * Fills lines with the comparison of world a, named name_a ('A' or 'B'), and
  * world b, named name_b, which split at tick split_at, and returns how many
- * lines it used (at most max). a is the one on screen. When b is behind a
+ * lines it used (at most max). a is the one on screen. The counts are taken
+ * from both worlds as they are now, not from their last samples, so they agree
+ * with the creatures counted beside them. When b is behind a
  * (it is still catching up), its numbers are from its own tick, and the
  * heading says so.
  */
