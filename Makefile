@@ -35,6 +35,20 @@ OUT = build/web-objects
 CFLAGS += -DVEREDAS_DEMO
 endif
 
+# The camera's look-ahead runs on a thread of its own (lookthread.h): -pthread
+# compiles and links with POSIX threads. Not in the browser, which has none.
+ifneq ($(PLATFORM), web)
+CFLAGS += -pthread
+endif
+
+# make test-threads: the thread checker (ThreadSanitizer) in place of the
+# memory checkers, which it cannot run beside. It watches every memory access
+# from two threads and reports any pair not ordered by a lock (a data race).
+ifeq ($(MODE), tsan)
+SANITIZE = -fsanitize=thread
+CFLAGS += -O1
+endif
+
 ifeq ($(MODE), release)
 CFLAGS += -O2
 else
@@ -199,6 +213,18 @@ run-tests: $(TEST_BIN) $(WTEST_BIN)
 	for t in $(TEST_BIN) $(WTEST_BIN); do ./$$t || failed=1; done; \
 	exit $$failed
 
+# The threaded tests again under the thread checker, which is slower and
+# cannot run with the memory checkers, so it has a build of its own.
+THREAD_TESTS = $(OUT)/tests/test_lookthread$(EXE)
+
+test-threads:
+	$(MAKE) MODE=tsan run-thread-tests
+
+run-thread-tests: $(THREAD_TESTS)
+	@failed=0; \
+	for t in $(THREAD_TESTS); do ./$$t || failed=1; done; \
+	exit $$failed
+
 test-slow:
 	$(MAKE) MODE=test run-slow-tests
 
@@ -253,5 +279,5 @@ clean:
 # else; a bare .SECONDARY: keeps them, so objects survive between runs.
 .SECONDARY:
 
-.PHONY: all release balance speed camera window web test-window run-window-smoke test run-tests test-slow run-slow-tests install uninstall \
+.PHONY: all release balance speed camera window web test-window run-window-smoke test run-tests test-threads run-thread-tests test-slow run-slow-tests install uninstall \
 	clean
