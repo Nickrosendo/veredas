@@ -186,7 +186,6 @@ bool scene_init(Scene *sc, const Sim *s)
     sc->ground_tiled = false;
     sc->sea_clear = false;
     sc->ground_colours_pending = false;
-    sc->tiles_zoom = -1;
     /* Allocated by the first frame that draws tiles. */
     sc->cell_ramps = NULL;
     sc->cell_pixels = NULL;
@@ -823,10 +822,12 @@ static bool draw_terrain(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
         draw_flat_cells(c, cam, s, &v, view_x, view_y);
         return false;
     }
-    if (sc->tiles_zoom != cam->zoom) {
-        tiles_cache_reset(&sc->tiles);
-        sc->tiles_zoom = cam->zoom;
-    }
+    /* The tiles are kept across zoom changes: a tile is the same picture for
+     * the same key and size at any zoom (Close and Normal even share their
+     * 16-pixel tiles), and the cache tells sizes apart. Emptying it on each
+     * zoom change made every zoom step build its tiles again (115-300 ms of
+     * drawing, measured 2026-11-23); the cache's own oldest-first eviction
+     * makes room when a zoom needs more. */
     int ppc = camera_ppc(cam);
     GroundCell g = {
         .size = size,
