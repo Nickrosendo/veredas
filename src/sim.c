@@ -759,6 +759,12 @@ bool sim_is_over(const Sim *s)
     return s->pool.count == 0;
 }
 
+void sim_stats_now(const Sim *s, Stats *out)
+{
+    *out = s->stats; /* the histories; stats_measure keeps them */
+    stats_measure(out, &s->world, &s->pool, s->tick, s->scratch);
+}
+
 /* After a step: dates the end the first time the world is found empty. A world
  * nobody ever lived in has no end to date. A floor from a settings file can bring
  * a world back, and then it has not ended after all. True on the tick it ended. */

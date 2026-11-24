@@ -364,7 +364,12 @@ void tactics_list(const Sim *s, char *out, size_t size)
 
 void panel_draw(const Sim *s, int col, int row0, int rows)
 {
-    const Stats *st = &s->stats;
+    /* As the world is now (sim_stats_now), not its last sample, so the
+     * creatures here match the count on the title line and the eaters add up
+     * to them. static: kept off the small web stack. */
+    static Stats now;
+    sim_stats_now(s, &now);
+    const Stats *st = &now;
     ColourGroup groups[PANEL_GROUP_LINES];
     int n_groups = panel_colour_groups(s, groups, PANEL_GROUP_LINES);
 

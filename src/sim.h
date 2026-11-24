@@ -125,6 +125,13 @@ void sim_step(Sim *s);
  * programs stop stepping such a world and show its game over screen. Stepping it
  * anyway is safe: its plants would carry on. */
 bool sim_is_over(const Sim *s);
+/* The world's statistics as they are now, into out: the counts measured
+ * afresh, the histories (for the charts) from the last sample. s->stats is
+ * only sampled every stats_every ticks, and in spring hundreds are born in
+ * that time, so what a reader shows beside a live count (the panel, the
+ * branch comparison) comes from here. Changes nothing in the world; uses its
+ * scratch, which holds nothing between ticks. */
+void sim_stats_now(const Sim *s, Stats *out);
 /* Whether a tick falls in the mating season, which is spring (years.h). Pure
  * arithmetic on the tick, so the drawing side can ask too without touching the
  * world. */

@@ -175,6 +175,34 @@ static void test_sampled_every_n_ticks(void)
     sim_free(&sim);
 }
 
+/* Between samples the world's own stats lag behind it; sim_stats_now counts
+ * it as it is, keeps the sampled histories, and changes nothing. */
+static void test_stats_now_between_samples(void)
+{
+    Settings set = settings_default();
+    Sim s;
+    CHECK(sim_init(&s, &set, 17, 64, 32));
+    int steps = 0;
+    do {
+        sim_step(&s);
+        steps++;
+    } while (s.stats.creatures == s.pool.count && steps < 5000);
+    CHECK(s.stats.creatures != s.pool.count); /* a lagging sample to test on */
+    uint64_t before = sim_checksum(&s);
+    Stats sampled = s.stats;
+    Stats now;
+    sim_stats_now(&s, &now);
+    CHECK(now.creatures == s.pool.count);
+    CHECK(now.by_level[BAND_PLANT] + now.by_level[BAND_MEAT] +
+              now.by_level[BAND_TOP] == s.pool.count);
+    CHECK(now.tick == s.tick);
+    CHECK(now.hist_plant_eaters.len == sampled.hist_plant_eaters.len);
+    CHECK(now.hist_plant_eaters.pos == sampled.hist_plant_eaters.pos);
+    CHECK(s.stats.creatures == sampled.creatures); /* the world's own untouched */
+    CHECK(sim_checksum(&s) == before);
+    sim_free(&s);
+}
+
 int main(void)
 {
     CHECK(brain_register(&BRAIN_SCRIPT));
@@ -184,5 +212,6 @@ int main(void)
     test_sample_by_hand();
     test_sampled_while_running();
     test_sampled_every_n_ticks();
+    test_stats_now_between_samples();
     TEST_SUMMARY();
 }
