@@ -283,6 +283,11 @@ void scene_draw_sample(Scene *sc, Canvas *c, const FamilySample *sample,
  * at most SCENE_STRIP_LINES lines. Nothing when the family has no record. */
 void scene_draw_strip(Scene *sc, Canvas *c, const Families *f, uint32_t lineage,
                       int x, int y, int w);
+/* The same strip from samples already taken out of the records
+ * (family_strip's n samples), for a screen that may not read the records
+ * while another thread updates them (the window during the ancestors' years). */
+void scene_draw_strip_samples(Scene *sc, Canvas *c, const FamilySample *samples,
+                              int n, uint32_t lineage, int x, int y, int w);
 /* A click at world point (wx, wy): follows the nearest creature within two
  * cells, going round the world's edges, or lets go when there is none. */
 void scene_click(Inspect *in, const Sim *s, float wx, float wy);
