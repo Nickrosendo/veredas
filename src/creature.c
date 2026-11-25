@@ -4,6 +4,7 @@
 #include <stdlib.h> /* malloc, free */
 #include <string.h> /* memset */
 
+#include "bigmem.h" /* bigmem_alloc */
 #include "chronicle.h" /* chronicle_note, LIFE_ kinds */
 #include "climate.h" /* climate_region, climate_region_hue */
 #include "flora.h"
@@ -28,8 +29,8 @@ bool pool_init(Pool *p, int capacity)
     }
     /* sizeof(*p->items) is the size of one Creature, worked out by the
      * compiler from the pointer's type; it stays right if the type of
-     * items ever changes. */
-    p->items = malloc((size_t)capacity * sizeof(*p->items));
+     * items ever changes. bigmem_alloc is malloc in large pages (bigmem.h). */
+    p->items = bigmem_alloc((size_t)capacity * sizeof(*p->items));
     if (p->items == NULL) {
         return false;
     }
