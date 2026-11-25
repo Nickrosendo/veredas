@@ -1,6 +1,6 @@
 # 2026-11-25: A cheaper tick: the same world, about a quarter faster
 
-Commits: `142faf5` (the measuring tool), `702fc98`, `f5d7053`, `1f267b8`, `47a9f63`, `3773279`, `0e7321f`, `adba5e2` (the speed-ups), `fdfdf2f` (the equivalence test), on top of `5f8f6d3`.
+Commits: `142faf5` (the measuring tool), `702fc98`, `f5d7053`, `1f267b8`, `47a9f63`, `3773279`, `0e7321f`, `adba5e2` (the speed-ups), `fdfdf2f` (the equivalence test), and this doc, on top of `5f8f6d3`.
 Run it: `make release && make ticks && build/release/veredas --once --seed 4 --size 256x144 --ancestors 8 --ticks 0 --save world.save && build/release/tick_report world.save 300`
 Reading time: about 45 minutes.
 
@@ -39,12 +39,12 @@ The numbers (medians of alternating runs, the before program built from
 
 | measure | before | after | change |
 |---|---|---|---|
-| one tick of the grown seed-4 world, 256x144, 1,027 -> 1,656 animals (`tick_report world.save 300`) | {{TICK_BEFORE}} ms | {{TICK_AFTER}} ms | {{TICK_CHANGE}} |
+| one tick of the grown seed-4 world, 256x144, 1,027 -> 1,656 animals (`tick_report world.save 300`) | 18.2 ms | 12.9 ms | -29% |
 | instructions in `sim_step` per tick (callgrind, 30 ticks of the same world) | 81.9 M | 66.8 M | -18% |
-| `speed_report` (seconds per million creature-ticks, seed 1, 10 years) | {{SPEED_BEFORE}} | {{SPEED_AFTER}} | {{SPEED_CHANGE}} |
-| window on that world: frames a second | {{FPS_BEFORE}} | {{FPS_AFTER}} | |
-| window: late frames a second (a gap over 40 ms) | {{LATE_BEFORE}} | {{LATE_AFTER}} | |
-| window: the gap after a tick frame (median / p90) | {{GAP_BEFORE}} | {{GAP_AFTER}} | |
+| `speed_report` (seconds per million creature-ticks, seed 1, 10 years) | 9.09 s | 6.59 s | -27% |
+| window on that world: frames a second | 30.0 | 30.0 | |
+| window: late frames a second (a gap over 40 ms) | 0.1 (8 in 80 s) | 0.04 (3 in 80 s) | |
+| window: the gap after a tick frame (median / p90) | 34.1 / 37.4 ms, worst 86 ms | 33.1 / 33.6 ms, worst 53 ms | |
 
 What each step gave: each row is the program before that step against the
 program after it, alternated, the median of the runs' medians. The machine
@@ -62,15 +62,38 @@ noise is about plus or minus 3%: the small ones are estimates.
 | 5b. `kin_hit_near` without division (`0e7321f`) | 13.3 -> 13.0 ms (-2.5%) | 68.4 M |
 | 6. rounding without `lroundf` (`adba5e2`) | 13.8 -> 13.5 ms (-2%, within noise) | 66.8 M |
 
+The window numbers need a word: this machine is faster than Nicolas's, so
+its tick (18 ms) already fitted in a 33 ms frame before, and the window was
+nearly smooth either way (300 frames skipped at the start, 80 s of play, the
+dummy video driver). What shows is the tail: the world's slowest ticks in the
+window went from 26.5 to 20.5 ms (p99) and from 79 to 46 ms (worst), so fewer
+frames were late and the worst gap after a tick frame fell from 86 to 53 ms.
+On a machine where a tick is longer than a frame, the same 29% is the
+difference between late and on time.
+
 Nicolas measured 38-42 ms a tick on his machine. If his machine gains as this
-one did, that becomes about {{NICOLAS_ESTIMATE}} ms, under the 33 ms a frame
+one did, that becomes about 27-30 ms, under the 33 ms a frame
 has. Without large pages (macOS, Windows, or a Linux with transparent huge
 pages turned off) the gain is about six points less.
 
 ## 2. Map of the change
 
 ```
-{{DIFF_STAT}}
+ Makefile                         |  10 +-
+ src/bigmem.c                     |  34 ++
+ src/bigmem.h                     |  25 ++
+ src/creature.c                   |  88 ++++-
+ src/genome.c                     |  13 -
+ src/genome.h                     |  22 +-
+ src/world.c                      |  10 -
+ src/world.h                      |  33 +-
+ study/2026-11-25-cheaper-tick.md | 694 +++++++++++++++++++++++++++++++++++++++
+ tests/same_world.h               |  78 +++++
+ tests/slow_same_world.c          |  34 ++
+ tests/test_same_world.c          |  34 ++
+ tests/test_world.c               |  20 ++
+ tests/tick_report.c              |  86 +++++
+ 14 files changed, 1138 insertions(+), 43 deletions(-)
 ```
 
 Reading order:
@@ -464,13 +487,41 @@ The top of the profile before (`perf record -F 4000`, 300 ticks, checksums
 off; `creature_sense` is the senses with `sense_view` inlined):
 
 ```
-{{PROFILE_BEFORE}}
+    30.17%  tick_report           [.] creature_sense
+    12.01%  tick_report           [.] hidden_layer
+     5.15%  tick_report           [.] world_idx
+     4.81%  tick_report           [.] genome_kinship
+     4.66%  libm.so.6             [.] __expm1f
+     4.26%  tick_report           [.] pool_kinship
+     3.98%  tick_report           [.] sim_step
+     3.03%  tick_report           [.] flora_step
+     2.38%  tick_report           [.] net_hidden_weight
+     2.12%  libm.so.6             [.] __lroundf
+     2.12%  tick_report           [.] chances_from_hidden
+     1.89%  tick_report           [.] climate_region
+     1.74%  tick_report           [.] hear_one
+     1.70%  tick_report           [.] sight_reach
+     1.68%  tick_report           [.] creature_bite_choice
 ```
 
 and after:
 
 ```
-{{PROFILE_AFTER}}
+    39.97%  tick_report           [.] sense_all
+     5.80%  libm.so.6             [.] __expm1f
+     4.82%  tick_report           [.] pool_kinship
+     4.81%  tick_report           [.] genome_kinship
+     4.46%  tick_report           [.] flora_step
+     3.90%  tick_report           [.] hidden_layer
+     3.41%  tick_report           [.] sim_step
+     2.45%  tick_report           [.] creature_bite_choice
+     2.26%  tick_report           [.] climate_region
+     2.23%  tick_report           [.] chances_from_hidden
+     2.19%  tick_report           [.] hear_one
+     2.01%  tick_report           [.] net_learn
+     1.81%  tick_report           [.] plant_mass
+     1.69%  tick_report           [.] sight_reach
+     1.66%  libm.so.6             [.] __tanhf
 ```
 
 The senses are now a larger share of a smaller tick. What is left there is
