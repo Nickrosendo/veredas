@@ -618,8 +618,8 @@ static bool kin_hit_near(const World *w, const Pool *p, const Creature *c,
     enum { SIDE = 2 * KIN_NEAR + 1 };
     int cols[SIDE], rows[SIDE];
     for (int k = 0; k < SIDE; k++) {
-        cols[k] = ((c->x + k - KIN_NEAR) % w->w + w->w) % w->w;
-        rows[k] = ((c->y + k - KIN_NEAR) % w->h + w->h) % w->h;
+        cols[k] = world_wrap(c->x + k - KIN_NEAR, w->w);
+        rows[k] = world_wrap(c->y + k - KIN_NEAR, w->h);
     }
     for (int i = 0; i < SIDE; i++) {
         for (int j = 0; j < SIDE; j++) {
