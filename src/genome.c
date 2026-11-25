@@ -265,16 +265,3 @@ float genome_body_likeness(const Genome *a, const Genome *b)
     return total / (float)GENE_TRAITS;
 }
 
-/* The weights start after the traits: first every hidden value's NET_IN
- * + 1 weights, one row per hidden value, then every output's NET_HIDDEN +
- * 1 weights. A matrix stored row after row in a flat array, as the grid
- * is. */
-int net_hidden_weight(int h, int i)
-{
-    return GENE_TRAITS + h * (NET_IN + 1) + i;
-}
-
-int net_out_weight(int o, int j)
-{
-    return GENE_TRAITS + NET_HIDDEN * (NET_IN + 1) + o * (NET_HIDDEN + 1) + j;
-}

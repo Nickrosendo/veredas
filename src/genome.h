@@ -125,8 +125,24 @@ int genome_instinct(int *index, float *value, int max);
 
 /* Where a weight sits in Genome.g. From input i (NET_IN for the constant
  * 1, the bias) into hidden value h; from hidden value j (NET_HIDDEN for
- * the bias) into output o. */
-int net_hidden_weight(int h, int i);
-int net_out_weight(int o, int j);
+ * the bias) into output o. The weights start after the traits: first every
+ * hidden value's NET_IN + 1 weights, one row per hidden value, then every
+ * output's NET_HIDDEN + 1 weights. A matrix stored row after row in a flat
+ * array, as the grid is.
+ *
+ * static inline in the header, not a function in genome.c: the brain looks up
+ * a weight about 800 times a creature a tick, and a call into another file
+ * cannot be inlined (each .c file is compiled alone), so every lookup was a
+ * real call and return round one addition. Here each file that includes this
+ * gets its own copy, which the compiler folds into the index it computes. */
+static inline int net_hidden_weight(int h, int i)
+{
+    return GENE_TRAITS + h * (NET_IN + 1) + i;
+}
+
+static inline int net_out_weight(int o, int j)
+{
+    return GENE_TRAITS + NET_HIDDEN * (NET_IN + 1) + o * (NET_HIDDEN + 1) + j;
+}
 
 #endif
