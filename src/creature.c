@@ -999,9 +999,7 @@ static int squares_in_reach(int v, int reach, int n, int count, int *out)
 {
     int found = 0;
     for (int d = -reach; d <= reach; d++) {
-        /* ((v + d) % n + n) % n: C's % keeps the sign of the left side, so -1 % n
-         * is -1, and adding n once puts it back on the map. */
-        int cell = ((v + d) % n + n) % n;
+        int cell = world_wrap(v + d, n);
         int square = cell / CALL_BLOCK;
         bool seen = false;
         for (int k = 0; k < found; k++) {
