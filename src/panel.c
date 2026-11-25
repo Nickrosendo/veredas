@@ -362,16 +362,32 @@ void tactics_list(const Sim *s, char *out, size_t size)
     }
 }
 
-void panel_draw(const Sim *s, int col, int row0, int rows)
+void panel_facts(const Sim *s, PanelFacts *out)
 {
     /* As the world is now (sim_stats_now), not its last sample, so the
      * creatures here match the count on the title line and the eaters add up
-     * to them. static: kept off the small web stack. */
-    static Stats now;
-    sim_stats_now(s, &now);
-    const Stats *st = &now;
-    ColourGroup groups[PANEL_GROUP_LINES];
-    int n_groups = panel_colour_groups(s, groups, PANEL_GROUP_LINES);
+     * to them. */
+    sim_stats_now(s, &out->now);
+    out->n_groups = panel_colour_groups(s, out->groups, PANEL_GROUP_LINES);
+    out->ticks_per_year = s->set.ticks_per_year;
+    out->births_refused = s->pool.births_refused;
+    tactics_list(s, out->tactics, sizeof(out->tactics));
+}
+
+void panel_draw(const Sim *s, int col, int row0, int rows)
+{
+    /* static: kept off the small web stack (a PanelFacts holds the
+     * histories). Only the window's thread and the terminal draw. */
+    static PanelFacts facts;
+    panel_facts(s, &facts);
+    panel_draw_facts(&facts, col, row0, rows);
+}
+
+void panel_draw_facts(const PanelFacts *f, int col, int row0, int rows)
+{
+    const Stats *st = &f->now;
+    const ColourGroup *groups = f->groups;
+    int n_groups = f->n_groups;
 
     /* Built line by line, because how many there are depends on how many
      * colour groups exist this frame. Each line is a whole PanelLine
@@ -408,21 +424,18 @@ void panel_draw(const Sim *s, int col, int row0, int rows)
     /* Outlives the line that points at it: both last until the end of this
      * function, where the lines have been drawn. */
     char oldest[32];
-    years_format(oldest, sizeof(oldest), st->oldest_age, s->set.ticks_per_year);
+    years_format(oldest, sizeof(oldest), st->oldest_age, f->ticks_per_year);
     PanelLine oldest_line = count_line("oldest", 0);
     oldest_line.value = oldest;
     add_line(lines, &n, oldest_line);
     /* Only when it has happened: a full pool must never be quiet. */
-    if (s->pool.births_refused > 0) {
-        add_line(lines, &n, count_line("refused", s->pool.births_refused));
+    if (f->births_refused > 0) {
+        add_line(lines, &n, count_line("refused", f->births_refused));
     }
     /* The tactics some living family shows now, by name, or none. After the
-     * rows that can be clicked (panel.h), so they stay where they are.
-     * Outlives its line, like oldest above. */
-    char tactics[PANEL_LINE_BYTES];
-    tactics_list(s, tactics, sizeof(tactics));
+     * rows that can be clicked (panel.h), so they stay where they are. */
     PanelLine tactics_line = count_line("tactics", 0);
-    tactics_line.value = tactics;
+    tactics_line.value = f->tactics;
     add_line(lines, &n, tactics_line);
     add_line(lines, &n, heading(""));
     add_line(lines, &n, heading(" map"));
