@@ -674,6 +674,51 @@ static int wrap_near(int v, int n)
     return v >= n ? v - n : v;
 }
 
+/* The fan of fine lines a creature's views are walked along: each line's
+ * slope, and each line's sideways offset at each step, worked out once for
+ * all three views of one creature. The offsets are the same in every view
+ * (only the heading differs), and rounding one is a call into the maths
+ * library, which also makes the compiler save and restore every float it
+ * holds around the call: in the walk itself that was paid at every step of
+ * every line (the cheaper tick study, 2026-11-25). A row is filled the first
+ * time a view reaches that step; steps past FAN_STEPS, only for a very long
+ * sight, are rounded as they come. */
+#define FAN_STEPS 48
+typedef struct {
+    int lines;
+    float slope[VIEW_LINES_MAX];
+    int filled; /* rows 1 .. filled of offset are worked out */
+    int16_t offset[FAN_STEPS + 1][VIEW_LINES_MAX];
+} Fan;
+
+static void fan_start(Fan *f, int lines)
+{
+    f->lines = lines;
+    for (int j = 0; j < lines; j++) {
+        f->slope[j] = lines == 1 ? 0.0f : -0.75f + 1.5f * (float)j / (float)(lines - 1);
+    }
+    f->filled = 0;
+}
+
+/* Line j's offset at step d: round(slope_j * d), halves away from zero. */
+static int fan_offset(Fan *f, int d, int j)
+{
+    if (d > FAN_STEPS) {
+        return (int)lroundf(f->slope[j] * (float)d);
+    }
+    while (f->filled < d) {
+        int row = f->filled + 1;
+        for (int k = 0; k < f->lines; k++) {
+            /* lroundf rounds half away from zero, the same on both sides, so
+             * the fan is symmetric; it returns a long, cast to int16_t: at most
+             * 0.75 * FAN_STEPS cells. */
+            f->offset[row][k] = (int16_t)lroundf(f->slope[k] * (float)row);
+        }
+        f->filled = row;
+    }
+    return f->offset[d][j];
+}
+
 /* The creature a view sees most clearly, while the view is walked. */
 typedef struct {
     float clarity; /* 0 while none is seen */
@@ -719,7 +764,7 @@ static void describe_seen(const World *w, const Pool *p, const Creature *c,
  */
 static void sense_view(const World *w, const Pool *p, const Creature *c,
                        uint8_t heading, bool looks_down, const Settings *s,
-                       float *out)
+                       Fan *fan, float *out)
 {
     int first = cell_towards(w, c->x, c->y, heading);
     /* The scent on that first cell, squashed into 0..1: half at one bite's
@@ -739,15 +784,13 @@ static void sense_view(const World *w, const Pool *p, const Creature *c,
     /* ceilf rounds up: the last step at which clarity can still be above 0. */
     int reach = (int)ceilf(VIEW_REACH * sight);
     uint8_t side = turned(heading, 1); /* the step to its right */
-    int lines = s->view_lines;
+    int lines = fan->lines;
     /* A variable-length array would work here too, but its size would be set
      * only when the program runs, and nothing would stop a huge one from
      * overflowing the stack: a fixed top is safer. */
     bool open[VIEW_LINES_MAX];
-    float slope[VIEW_LINES_MAX];
     for (int j = 0; j < lines; j++) {
         open[j] = true;
-        slope[j] = lines == 1 ? 0.0f : -0.75f + 1.5f * (float)j / (float)(lines - 1);
     }
     /* The farthest a line goes from the looker along either axis is reach
      * cells (ahead) or 0.75 reach rounded (to the side). On a map at least that
@@ -786,9 +829,7 @@ static void sense_view(const World *w, const Pool *p, const Creature *c,
             if (!open[j]) {
                 continue;
             }
-            /* lroundf rounds half away from zero, the same on both sides, so
-             * the fan is symmetric; it returns a long, cast to int (a few cells). */
-            int offset = (int)lroundf(slope[j] * (float)d);
+            int offset = fan_offset(fan, d, j);
             bool repeat = last_valid && offset == last_offset;
             last_offset = offset;
             last_valid = true;
@@ -1143,12 +1184,16 @@ static void sense_all(const World *w, const Pool *p, int idx,
     /* The directions of the three views, in VIEW_ order. */
     const uint8_t view_heading[VIEW_COUNT] = {
         c->heading, turned(c->heading, 3), turned(c->heading, 1)};
+    /* One fan for the three views (Fan, above): no row worked out yet. */
+    Fan fan;
+    fan_start(&fan, s->view_lines);
     for (int view = 0; view < VIEW_COUNT; view++) {
         /* A pointer into the middle of the array: the view's first slot.
          * sense_view writes out[0] .. out[VIEW_VALUES - 1] from there. */
         float *slots = &out->v[SENSE_VIEWS + view * VIEW_VALUES];
         /* Only the view ahead, the way a strike goes, looks down as well. */
-        sense_view(w, p, c, view_heading[view], view == VIEW_AHEAD, s, slots);
+        sense_view(w, p, c, view_heading[view], view == VIEW_AHEAD, s, &fan,
+                   slots);
     }
 }
 
