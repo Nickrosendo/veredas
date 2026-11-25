@@ -87,17 +87,15 @@ jobs:
           path: build/web
 
   # The browser page, on every push to main that passes. Pages serves it at
-  # https://nickrosendo.github.io/veredas/.
-  pages:
+  # https://nickrosendo.github.io/veredas/. Two jobs, as GitHub's own Pages
+  # template has them: one packs the page, the next deploys it. In one job the
+  # deploy step looked the package up seconds after it was uploaded and, three
+  # pushes in a row (2026-11-22 to 11-24), GitHub's artifact list did not show
+  # it yet ("No artifacts named github-pages were found").
+  pages-pack:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [test, windows, web]
     runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -106,6 +104,17 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
+
+  pages:
+    needs: pages-pack
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
       - id: deploy
         uses: actions/deploy-pages@v4
 
