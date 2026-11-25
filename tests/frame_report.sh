@@ -13,6 +13,12 @@
 #   camera  the camera's look-ahead copy ran on, or was made afresh
 #   draw    drawing alone took more than 25 ms
 #   other   none of these (another program, the system, a wait)
+# With the ancestors' years on their own thread (preludethread.h), a prelude
+# frame's ticks are how far the world moved while it waited, not ticks this
+# frame ran, so "tick" there only says the world moved.
+# The last line is the prelude (the ancestors' years): how many ticks it ran
+# and how long it took, from the first frame to the first one after it, or
+# "still on" when the log ends first.
 LOG=$1
 SKIP=${2:-0}
 [ -f "$LOG" ] || { echo "usage: frame_report.sh LOG [SKIP]" >&2; exit 2; }
@@ -59,3 +65,14 @@ echo "world (ms)    $(percentiles 4)"
 echo "camera (ms)   $(percentiles 5)"
 echo "draw (ms)     $(percentiles 7)"
 echo "present (ms)  $(percentiles 8)"
+# The prelude: frames with the prelude flag (column 13), and the first frame
+# after them, whose gap and ticks are the prelude's last.
+awk -v skip="$SKIP" 'NR > 1 && $1 >= skip {
+    if ($13 == 1) { frames++; ms += $2; ticks += $9 }
+    else if (frames > 0 && !ended) { ended = 1; ms += $2; ticks += $9 }
+}
+END {
+    if (frames == 0) { print "prelude: none"; exit }
+    printf "prelude: %d ticks in %.1f s, %d frames%s\n", ticks, ms / 1000, frames,
+        ended ? "" : " (still on when the log ends)"
+}' "$LOG"
