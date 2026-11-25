@@ -92,6 +92,14 @@ void app_prelude_finish(Prelude *p, Sim *sim);
 void app_prelude_stop(Prelude *p);
 /* "evolving ancestors: year 12 of 30, any key to stop" */
 void app_prelude_text(const Prelude *p, const Sim *sim, char *out, size_t size);
+/* The same line from a tick and the year's length alone, for a screen that
+ * may not read the world while another thread steps it (preludethread.h). */
+void app_prelude_line(const Prelude *p, uint64_t tick, int ticks_per_year,
+                      char *out, size_t size);
+/* Ends the prelude when sim has reached its end or died: after the world
+ * comes back from the thread that ran it, the same rule as after each tick
+ * on this one. */
+void app_prelude_settle(Prelude *p, const Sim *sim);
 
 int app_game_over_lines(const Sim *sim, char lines[][APP_OVER_COLS]);
 
