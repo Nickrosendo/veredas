@@ -414,7 +414,11 @@ void bar_top_draw(Ui *u, Canvas *c, int w, const TopState *st)
     } else if (st->paused) {
         drawn = top_box(c, x, ICON_PAUSE, "paused", yellow, right - x);
     } else {
-        snprintf(text, sizeof(text), "%d/s", st->speed);
+        if (st->real_speed > 0) {
+            snprintf(text, sizeof(text), "%d/s (only %d)", st->speed, st->real_speed);
+        } else {
+            snprintf(text, sizeof(text), "%d/s", st->speed);
+        }
         drawn = top_box(c, x, -1, text, plain, right - x);
     }
     x += drawn > 0 ? drawn + BUTTON_GAP : 0;

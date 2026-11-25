@@ -299,10 +299,40 @@ static void test_top_line_fps(void)
     canvas_free(&without);
 }
 
+/* A world that cannot keep up says so in its speed box, "120/s (only 59)":
+ * the line changes, and stays inside however narrow. When it keeps up
+ * (real_speed 0) the box is the plain "120/s". */
+static void test_top_line_real_speed(void)
+{
+    Canvas keeps, behind;
+    CHECK(canvas_init(&keeps, 840, UI_BAR_H));
+    CHECK(canvas_init(&behind, 840, UI_BAR_H));
+    TopState st;
+    top_state(&st);
+    st.speed = 120;
+    canvas_fill(&keeps, 0xFF000000u);
+    bar_top_draw(&u, &keeps, 800, &st);
+    st.real_speed = 59;
+    canvas_fill(&behind, 0xFF000000u);
+    bar_top_draw(&u, &behind, 800, &st);
+    CHECK(!inked_from(&behind, 800));
+    int differs = 0;
+    for (int i = 0; i < behind.w * behind.h; i++) {
+        differs |= behind.px[i] != keeps.px[i];
+    }
+    CHECK(differs);
+    canvas_fill(&behind, 0xFF000000u);
+    bar_top_draw(&u, &behind, 170, &st);
+    CHECK(!inked_from(&behind, 170));
+    canvas_free(&keeps);
+    canvas_free(&behind);
+}
+
 int main(void)
 {
     test_top_line();
     test_top_line_fps();
+    test_top_line_real_speed();
     ui_init(&u);
     test_documentary();
     test_sandbox();

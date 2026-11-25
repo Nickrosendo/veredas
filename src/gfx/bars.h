@@ -40,6 +40,9 @@ typedef struct {
     int64_t year;
     int season;               /* a SEASON_ value (years.h) */
     int animals, speed;
+    /* The ticks a second the world really runs when it cannot keep up with
+     * speed, for "120/s (only 64)"; 0 when it keeps up. */
+    int real_speed;
     int weather_kind;         /* a WEATHER_ value; WEATHER_NONE for no box */
     float weather_left;       /* 1 at the event's start, 0 at its end */
     char weather_label[48];   /* "drought, ends in summer" */
