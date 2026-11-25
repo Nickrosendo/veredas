@@ -101,7 +101,18 @@ bool world_init(World *w, int width, int height);
 void world_clear(World *w);
 /* Frees every layer and sets the pointers to NULL; safe to call twice. */
 void world_free(World *w);
-int world_idx(const World *w, int x, int y); /* wraps both axes */
+/* The cell at x, y, both axes wrapped. In C, % keeps the sign of the left
+ * operand: -1 % 8 is -1. Adding the width and taking % again maps -1 to
+ * w - 1. Correct for any x >= -w, enough for neighbours one or a few steps
+ * away. static inline here rather than a function in world.c: it is called
+ * tens of millions of times a run from other files, and a call into another
+ * file cannot be inlined (the cheaper tick study, 2026-11-25). */
+static inline int world_idx(const World *w, int x, int y)
+{
+    int wrapped_x = ((x % w->w) + w->w) % w->w;
+    int wrapped_y = ((y % w->h) + w->h) % w->h;
+    return wrapped_y * w->w + wrapped_x;
+}
 /* Whether a land body can stand on this ground at all: soil or shallow water. */
 bool world_walkable(const World *w, int cell);
 /* The same for either body: a sea body (sea true) stands on deep or shallow
