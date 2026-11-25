@@ -302,8 +302,22 @@ static int chosen_kind(const Best best[LOOK_KIND_COUNT], unsigned tired)
     return other >= 0 ? other : top;
 }
 
+/* The line for a life with a dive or a hunt at sea coming, whatever its
+ * biggest part (the livelier hunting design, section 12): the one it has more
+ * kills of, a dive when even, so the counted reason and the line agree. 0
+ * (LOOK_QUIET) when it has neither. */
+static int sea_sky_reason(const LifeTally *now, const LifeTally *later)
+{
+    float dives = more(now->dive_kills, later->dive_kills);
+    float sea = more(now->sea_kills, later->sea_kills);
+    if (dives == 0.0f && sea == 0.0f) {
+        return LOOK_QUIET;
+    }
+    return dives >= sea ? LOOK_DIVE : LOOK_SEA_HUNT;
+}
+
 uint32_t lookahead_pick(const Lookahead *l, const Sim *shown, unsigned tired,
-                        int *reason, char *why, size_t len)
+                        bool sea_sky_last, int *reason, char *why, size_t len)
 {
     why[0] = '\0';
     *reason = LOOK_QUIET;
@@ -314,6 +328,10 @@ uint32_t lookahead_pick(const Lookahead *l, const Sim *shown, unsigned tired,
     for (int k = 0; k < LOOK_KIND_COUNT; k++) {
         best[k] = (Best){.slot = -1};
     }
+    /* The best life with a dive kill or a sea kill coming, whatever kind its
+     * biggest part is of: the hunt kind offers it instead of its own best
+     * unless the last hunt pick was already one (section 12, "Alternate"). */
+    Best sea_sky = {.slot = -1};
     for (int i = 0; i < shown->pool.capacity; i++) {
         const Creature *c = &shown->pool.items[i];
         if (!c->alive) {
@@ -338,6 +356,14 @@ uint32_t lookahead_pick(const Lookahead *l, const Sim *shown, unsigned tired,
         if (b->slot < 0 || score > b->score) {
             *b = (Best){.slot = i, .score = score, .why = part};
         }
+        int dive_or_sea = sea_sky_reason(&c->tally, later);
+        if (dive_or_sea != LOOK_QUIET &&
+            (sea_sky.slot < 0 || score > sea_sky.score)) {
+            sea_sky = (Best){.slot = i, .score = score, .why = dive_or_sea};
+        }
+    }
+    if (!sea_sky_last && sea_sky.slot >= 0) {
+        best[LOOK_KIND_HUNT] = sea_sky;
     }
     int k = chosen_kind(best, tired);
     if (k < 0) {
@@ -352,6 +378,14 @@ uint32_t lookahead_pick(const Lookahead *l, const Sim *shown, unsigned tired,
              lookahead_reason_text(best[k].why));
     *reason = best[k].why;
     return c->id;
+}
+
+bool lookahead_sea_sky_last(bool sea_sky_last, int reason)
+{
+    if (lookahead_kind(reason) != LOOK_KIND_HUNT) {
+        return sea_sky_last;
+    }
+    return reason == LOOK_DIVE || reason == LOOK_SEA_HUNT;
 }
 
 bool lookahead_quiet(const Lookahead *l, const Sim *shown, uint32_t id)

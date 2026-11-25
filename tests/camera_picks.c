@@ -7,7 +7,9 @@
  * followed for LOOKAHEAD_REPICK_TICKS with nothing coming
  * (lookahead_repick_due, the same function the window asks), the look-ahead
  * copy run to its end first (as the window does for --frames runs), the
- * kinds of the last two picks marking what it is tired of. The player never
+ * kinds of the last two picks marking what it is tired of, and whether the
+ * last hunt pick was a dive or a hunt at sea (false at the watch's start, "no
+ * hunt pick yet") so hunt picks alternate. The player never
  * touches anything, so the camera is never held off by a key.
  *
  * Prints a PICK line per pick (tick, reason number, the reason's words) and a
@@ -71,6 +73,7 @@ int main(int argc, char **argv)
     uint32_t followed = LOOKAHEAD_NOBODY;
     uint64_t picked_at = 0;
     int last[2] = {LOOK_QUIET, LOOK_QUIET};
+    bool sea_sky_last = false; /* a new watch: no hunt pick yet */
     int total = 0, sea_sky = 0;
     for (long t = 0; t < watch && !sim_is_over(&sim); t++) {
         sim_step(&sim);
@@ -82,11 +85,13 @@ int main(int argc, char **argv)
         unsigned tired = (1u << lookahead_kind(last[0])) | (1u << lookahead_kind(last[1]));
         int reason;
         char why[LOOKAHEAD_WHY];
-        uint32_t id = lookahead_pick(&look, &sim, tired, &reason, why, sizeof(why));
+        uint32_t id = lookahead_pick(&look, &sim, tired, sea_sky_last, &reason, why,
+                                     sizeof(why));
         if (id == LOOKAHEAD_NOBODY) {
             followed = LOOKAHEAD_NOBODY;
             continue;
         }
+        sea_sky_last = lookahead_sea_sky_last(sea_sky_last, reason);
         followed = id;
         picked_at = sim.tick;
         last[1] = last[0];

@@ -49,7 +49,7 @@ static uint32_t thread_pick(LookThread *t, const Sim *s, unsigned tired, int *re
     uint32_t id = LOOKAHEAD_NOBODY;
     if (l != NULL) {
         CHECK(lookahead_ready(l, s));
-        id = lookahead_pick(l, s, tired, reason, why, len);
+        id = lookahead_pick(l, s, tired, false, reason, why, len);
         lookthread_return(t);
     }
     return id;
@@ -81,7 +81,7 @@ static void test_same_picks_as_sync_all(bool threaded)
         lookahead_sync_all(&plain, &s);
         int r1, r2;
         char why1[LOOKAHEAD_WHY], why2[LOOKAHEAD_WHY];
-        uint32_t a = lookahead_pick(&plain, &s, 0, &r1, why1, sizeof(why1));
+        uint32_t a = lookahead_pick(&plain, &s, 0, false, &r1, why1, sizeof(why1));
         uint32_t b = thread_pick(&t, &s, 0, &r2, why2, sizeof(why2));
         CHECK(a == b);
         CHECK(r1 == r2);

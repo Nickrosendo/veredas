@@ -246,6 +246,11 @@ typedef struct {
     /* The camera's last two reasons (LookReason), newest first, so its next
      * pick leans to something else. 0 is LOOK_QUIET, a fine start. */
     int look_last[2];
+    /* Whether the camera's last hunt pick was a dive or a hunt at sea, so the
+     * next hunt pick alternates (lookahead_pick). false, "no hunt pick yet",
+     * is the start: the static App starts as zeros, and forget_old_world sets
+     * it again for a new world. */
+    bool look_sea_sky_last;
     /* The camera's own last pick and the world's tick when it was made, so it
      * may pick again once that life has been quiet for a while
      * (lookahead_repick_due); a creature the player chose is never left. */
@@ -423,6 +428,7 @@ static void forget_old_world(App *a)
     lookthread_reset(&a->look, a->look.look.lead);
     a->idle_frames = LOOK_IDLE_FRAMES;
     a->look_id = LOOKAHEAD_NOBODY;
+    a->look_sea_sky_last = false; /* a new watch: no hunt pick yet */
     /* Nobody followed any more; the level shown stays. */
     levels_follow_init(&a->levels);
 }
@@ -1567,10 +1573,12 @@ static void pick_from(App *a, const Lookahead *look)
     unsigned tired = (1u << lookahead_kind(a->look_last[0])) |
                      (1u << lookahead_kind(a->look_last[1]));
     int reason;
-    uint32_t id = lookahead_pick(look, &a->sim, tired, &reason, why, sizeof(why));
+    uint32_t id = lookahead_pick(look, &a->sim, tired, a->look_sea_sky_last,
+                                 &reason, why, sizeof(why));
     if (id == LOOKAHEAD_NOBODY) {
         return; /* not ready yet: look_now stays, and a later frame picks */
     }
+    a->look_sea_sky_last = lookahead_sea_sky_last(a->look_sea_sky_last, reason);
     a->look_last[1] = a->look_last[0];
     a->look_last[0] = reason;
     a->look_now = false;

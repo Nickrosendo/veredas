@@ -107,10 +107,20 @@ float lookahead_score(const LifeTally *now, uint32_t age_now,
  * (and an empty why) when the copy is not ready or nobody is alive.
  * tired: the kinds of the last picks, bit k for LookKind k. When the best
  * season is of a tired kind and another kind's best has something coming
- * (a score of LOOKAHEAD_OTHER_WORTH or more), that one is picked instead. */
+ * (a score of LOOKAHEAD_OTHER_WORTH or more), that one is picked instead.
+ * sea_sky_last: whether the camera's last hunt pick (its last pick of
+ * LOOK_KIND_HUNT, however long ago) was a dive or a hunt at sea; false before
+ * any hunt pick. When false, the best life with a dive kill or a sea kill
+ * coming is the hunt kind's best, over any life without one, and is named
+ * "a dive coming" or "a hunt at sea coming"; when true, the hunt kind's best
+ * is its best score (the livelier hunting design, section 12). The caller
+ * keeps it, as it keeps tired: lookahead_sea_sky_last says what it becomes. */
 #define LOOKAHEAD_OTHER_WORTH 2.0f
 uint32_t lookahead_pick(const Lookahead *l, const Sim *shown, unsigned tired,
-                        int *reason, char *why, size_t len);
+                        bool sea_sky_last, int *reason, char *why, size_t len);
+/* What sea_sky_last becomes after a pick for reason: unchanged by a pick of
+ * another kind than the hunt, else whether reason is a dive or a sea hunt. */
+bool lookahead_sea_sky_last(bool sea_sky_last, int reason);
 /* Whether creature id, alive on screen, has nothing coming in the copy: its
  * coming season scores under LOOKAHEAD_OTHER_WORTH (halved, as in a pick,
  * when it dies within it), or it dies with nothing worth telling. False when
