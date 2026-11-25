@@ -38,7 +38,7 @@ static void test_watching_is_free(void)
     for (int t = 0; t < 200; t++) {
         lookahead_sync_all(&l, &watched);
         int reason;
-        (void)lookahead_pick(&l, &watched, 0, &reason, why, sizeof(why));
+        (void)lookahead_pick(&l, &watched, 0, false, &reason, why, sizeof(why));
         sim_step(&watched);
         sim_step(&plain);
     }
@@ -85,10 +85,10 @@ static void test_pick_is_alive(void)
     lookahead_init(&l, LEAD);
     char why[LOOKAHEAD_WHY];
     int reason;
-    CHECK(lookahead_pick(&l, &s, 0, &reason, why, sizeof(why)) ==
+    CHECK(lookahead_pick(&l, &s, 0, false, &reason, why, sizeof(why)) ==
           LOOKAHEAD_NOBODY);
     lookahead_sync_all(&l, &s);
-    uint32_t id = lookahead_pick(&l, &s, 0, &reason, why, sizeof(why));
+    uint32_t id = lookahead_pick(&l, &s, 0, false, &reason, why, sizeof(why));
     CHECK(id != LOOKAHEAD_NOBODY);
     CHECK(life_find_slot(&s, id) >= 0);
     CHECK(strlen(why) > 0);
@@ -199,10 +199,10 @@ static void test_tired_kind_turns(void)
     lookahead_sync_all(&l, &s);
     char why[LOOKAHEAD_WHY];
     int first, second;
-    uint32_t a = lookahead_pick(&l, &s, 0, &first, why, sizeof(why));
+    uint32_t a = lookahead_pick(&l, &s, 0, false, &first, why, sizeof(why));
     CHECK(a != LOOKAHEAD_NOBODY);
     unsigned tired = 1u << lookahead_kind(first);
-    uint32_t b = lookahead_pick(&l, &s, tired, &second, why, sizeof(why));
+    uint32_t b = lookahead_pick(&l, &s, tired, false, &second, why, sizeof(why));
     CHECK(b != LOOKAHEAD_NOBODY);
     CHECK(lookahead_kind(second) != lookahead_kind(first) || b == a);
     lookahead_free(&l);
@@ -291,6 +291,101 @@ static void test_dive_and_sea_beat_hunter_kill(void)
     }
 }
 
+/* The first two lives alive on screen and alive, in the same slot, in the
+ * copy: their slots in *a and *b. False when the world has fewer. */
+static bool two_kept(const Sim *s, const Lookahead *l, int *a, int *b)
+{
+    *a = -1;
+    *b = -1;
+    for (int i = 0; i < s->pool.capacity; i++) {
+        const Creature *c = &s->pool.items[i];
+        const Creature *later = &l->ahead.pool.items[i];
+        if (!c->alive || !later->alive || later->id != c->id) {
+            continue;
+        }
+        if (*a < 0) {
+            *a = i;
+        } else {
+            *b = i;
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Hunt picks alternate (the livelier hunting design, section 12): a land
+ * hunter with many kills coming (six, three of them hunters: about 111) against
+ * a life with fewer (six kills, one of them a dive or a sea kill: 68 to 83,
+ * its biggest part its kills). The life with the dive or sea kill
+ * is picked, and named for it, when the last hunt pick was not one or there
+ * was none; the land hunter when the last hunt pick was a dive or a sea hunt.
+ * Every other life kept in the copy is given its tally of now: nothing
+ * coming. The copy's tallies are set by hand, so what is coming is known. */
+static void test_hunt_picks_alternate(void)
+{
+    for (int sea = 0; sea <= 1; sea++) {
+        Settings set = settings_default();
+        Sim s;
+        CHECK(sim_init(&s, &set, 2, 64, 32));
+        for (int t = 0; t < 300; t++) {
+            sim_step(&s);
+        }
+        Lookahead l;
+        lookahead_init(&l, LEAD);
+        lookahead_sync_all(&l, &s);
+        for (int i = 0; i < s.pool.capacity; i++) {
+            Creature *later = &l.ahead.pool.items[i];
+            if (s.pool.items[i].alive && later->alive &&
+                later->id == s.pool.items[i].id) {
+                later->tally = s.pool.items[i].tally;
+            }
+        }
+        int land, other;
+        CHECK(two_kept(&s, &l, &land, &other));
+        LifeTally *hunter = &l.ahead.pool.items[land].tally;
+        hunter->kills += 6;
+        hunter->hunter_kills += 3;
+        LifeTally *diver = &l.ahead.pool.items[other].tally;
+        diver->kills += 6;
+        if (sea) {
+            diver->sea_kills += 1;
+        } else {
+            diver->dive_kills += 1;
+        }
+        int expected = sea ? LOOK_SEA_HUNT : LOOK_DIVE;
+        uint32_t land_id = s.pool.items[land].id;
+        uint32_t diver_id = s.pool.items[other].id;
+        /* Its biggest part alone is its kills ("more kills to come", or
+         * "first kill soon" for a life with none yet), not the dive or the sea
+         * kill: the pick names the dive or the sea kill instead, so the
+         * counted reason and the line agree. */
+        int part;
+        (void)lookahead_score(&s.pool.items[other].tally, s.pool.items[other].age,
+                              diver, l.ahead.pool.items[other].age, &part);
+        CHECK(part == LOOK_MORE_KILLS || part == LOOK_FIRST_KILL);
+        char why[LOOKAHEAD_WHY];
+        int reason;
+        /* No hunt pick yet, or the last one a land kill: the same false. */
+        uint32_t id = lookahead_pick(&l, &s, 0, false, &reason, why, sizeof(why));
+        CHECK(id == diver_id);
+        CHECK(reason == expected);
+        CHECK(strstr(why, lookahead_reason_text(expected)) != NULL);
+        /* The state the callers keep: a land kill pick leaves it false, a
+         * dive or sea pick sets it, a pick of another kind leaves it. */
+        CHECK(!lookahead_sea_sky_last(true, LOOK_HUNTER_KILL));
+        CHECK(!lookahead_sea_sky_last(false, LOOK_MORE_KILLS));
+        CHECK(lookahead_sea_sky_last(false, expected));
+        CHECK(lookahead_sea_sky_last(true, LOOK_YOUNG));
+        CHECK(!lookahead_sea_sky_last(false, LOOK_GIANT));
+        /* The last hunt pick was a dive or a sea hunt: the best score wins. */
+        id = lookahead_pick(&l, &s, 0, true, &reason, why, sizeof(why));
+        CHECK(id == land_id);
+        CHECK(reason == LOOK_HUNTER_KILL);
+        lookahead_free(&l);
+        sim_free(&s);
+    }
+}
+
 /* The camera re-picks after a while (the livelier hunting design, section
  * 9): its pick may be left once followed for LOOKAHEAD_REPICK_TICKS and quiet
  * (nothing coming in the copy); not sooner, not while something is coming,
@@ -354,6 +449,7 @@ int main(void)
     test_score_order();
     test_wounds_kin_and_kinds();
     test_tired_kind_turns();
+    test_hunt_picks_alternate();
     test_new_world_drops_copy();
     test_repick_when_quiet();
     TEST_SUMMARY();
