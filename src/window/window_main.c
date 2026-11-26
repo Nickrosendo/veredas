@@ -1724,7 +1724,8 @@ static void draw_notices(App *a)
                        '1' + r, tip);
         const Notice *n = notices_get(&a->notices, (uint32_t)r);
         char line[NOTICE_TEXT + 32];
-        int year = years_whole(n->tick, a->sim.set.ticks_per_year) + 1;
+        /* Counted as the title line counts, from year 0. */
+        int year = years_whole(n->tick, a->sim.set.ticks_per_year);
         snprintf(line, sizeof(line), "%d  y%-4d %s%s", r + 1, year, n->text,
                  n->creature != NOTICE_NOBODY && life_find_slot(&a->sim, n->creature) < 0
                      ? " (dead)" : "");

@@ -76,6 +76,8 @@ static void test_skip_same_as_stepping(void)
     int n = skip_summary_lines(&k, &a, lines, SKIP_LINES);
     CHECK(n >= 3);
     CHECK(any_line_has(lines, n, "While you were away: 1 year "));
+    /* A year on from year 0 is year 1, as the title line counts. */
+    CHECK(any_line_has(lines, n, "(now year 1)"));
     CHECK(any_line_has(lines, n, "Each column a season:"));
     /* A season a column, and the world now is the last sample: 5 blocks. */
     const char *chart = chart_of(lines, n, "creatures ");
@@ -124,7 +126,7 @@ static void test_world_dies_during_skip(void)
     CHECK(s.tick < 20u * (uint64_t)set.ticks_per_year);
     char lines[SKIP_LINES][SKIP_COLS];
     int n = skip_summary_lines(&k, &s, lines, SKIP_LINES);
-    CHECK(any_line_has(lines, n, "The last creature died"));
+    CHECK(any_line_has(lines, n, "The last creature died in year 0."));
     /* Nothing to skip in a dead world. */
     CHECK(!skip_start(&k, &s, 1));
     skip_free(&k);
