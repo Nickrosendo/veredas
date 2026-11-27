@@ -104,6 +104,8 @@ void skip_cancel(Skip *k)
     }
 }
 
+/* The year tick falls in, counted from year 0, as the title line, the life
+ * stories and the comparison count. */
 static int year_of(uint64_t tick, const Sim *s)
 {
     return (int)(tick / (uint64_t)s->set.ticks_per_year);
@@ -266,11 +268,11 @@ int skip_summary_lines(const Skip *k, const Sim *s, char lines[][SKIP_COLS],
     if (n < max && k->cancelled) {
         snprintf(lines[n++], SKIP_COLS,
                  "Stopped after %d of %d years (now year %d).", years_done,
-                 years_asked, year_of(s->tick, s) + 1);
+                 years_asked, year_of(s->tick, s));
     } else if (n < max) {
         snprintf(lines[n++], SKIP_COLS,
                  "While you were away: %d %s (now year %d).", years_done,
-                 years_done == 1 ? "year" : "years", year_of(s->tick, s) + 1);
+                 years_done == 1 ? "year" : "years", year_of(s->tick, s));
     }
     int most = s->pool.count;
     for (int i = 0; i < k->n_samples; i++) {
@@ -286,7 +288,7 @@ int skip_summary_lines(const Skip *k, const Sim *s, char lines[][SKIP_COLS],
     n += chart_lines(k, s, lines + n, max - n);
     if (n < max && sim_is_over(s)) {
         snprintf(lines[n++], SKIP_COLS, "The last creature died in year %d.",
-                 year_of(s->records.ended_at, s) + 1);
+                 year_of(s->records.ended_at, s));
     }
     if (n < max) {
         snprintf(lines[n++], SKIP_COLS, "Families: %d then, %d now.",

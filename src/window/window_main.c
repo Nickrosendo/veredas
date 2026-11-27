@@ -56,6 +56,22 @@
 /* A --frames run's clock moves this many milliseconds a frame (a thirtieth of
  * a second, rounded down), so its pictures are the same every run. */
 #define FIXED_FRAME_MS (1000 / FRAMES_PER_SECOND)
+/* The longest a frame should take, in microseconds. A frame is 33 ms at 30
+ * a second; the odd one of 38 looks no different (the next is shown on time),
+ * while gaps over 40 are what reads as a stutter (tests/frame_report.sh). The
+ * shown world's ticks get what is left of the 38 once the rest of the frame's
+ * work (drawing, showing, the keys, measured as it goes) is set aside, which
+ * lets two ticks of about 10 ms share a frame: measured 2026-11-25 at 60 ticks
+ * a second on seed 4, 56 ticks a second at 30 frames, against 49 with a 33 ms
+ * aim and, before any budget, 58 ticks at 29 frames with 2 gaps a second over
+ * 40 ms. A tick costs about 10 ms with a thousand creatures, so at 120 ticks a
+ * second (four a frame) the world cannot keep up on one core whatever is done:
+ * past the budget the ticks wait for the next frame, and the world runs slower
+ * than asked while the picture stays smooth (the top line says how fast it
+ * really runs). Ticks are the world's own clock, so how they are spread over
+ * frames changes nothing in it. --frames runs ignore the budget: their
+ * pictures must be the same on every computer. */
+#define FRAME_TARGET_US 38000u
 /* --until: the moments that can be waited for, and how long to wait at most:
  * half an hour of frames, then the run gives up. */
 enum { UNTIL_NONE, UNTIL_POUNCE, UNTIL_GIANT };
@@ -224,6 +240,21 @@ typedef struct {
     Rng seed_source;
     int speed;
     int ticks_due; /* ticks owed, in thirtieths, as in the terminal program */
+    /* What a tick of the shown world has been costing, in microseconds, a
+     * running average: whether one more still fits in the frame. */
+    uint64_t tick_us;
+    /* When this frame began, the ticks' share of it, and a running average
+     * of the frame's other work, all in microseconds of platform_now_us. */
+    uint64_t frame_start_us, ticks_spent_us, rest_us;
+    /* The ticks the shown world really ran over the last whole second, and
+     * the count and start of the second under way; ticks_rate is 0 until a
+     * second has been counted. */
+    int ticks_rate, rate_ticks;
+    uint64_t rate_start_ms;
+    /* The speed the rate is being counted at, and when ticks last ran: a new
+     * speed, or a gap (paused, a menu, a skip), starts the count afresh. */
+    int rate_speed;
+    uint64_t rate_last_ms;
     bool paused, running, failed;
     bool redraw;    /* while paused: something happened that would show */
     int last_ambient; /* the scenery's step in the last frame drawn, paused or running */
@@ -541,6 +572,70 @@ static void start_world(App *a, uint64_t seed)
 static void new_world(App *a)
 {
     start_world(a, rng_next(&a->seed_source));
+}
+
+/* The shown world's ticks owed this frame, within what the frame has left
+ * (FRAME_TARGET_US): at least one, so the world always moves, and then more
+ * only while the next is expected to fit. What does not fit waits for the
+ * next frame, but no more than a frame's worth is kept waiting: a world that
+ * cannot keep up runs slower than asked, rather than ever further behind. */
+static void run_due_ticks(App *a)
+{
+    bool budgeted = a->opt->frames == 0;
+    uint64_t start = platform_now_us();
+    /* The frame's end, less its other work. Unsigned: a frame whose other
+     * work alone fills it leaves the deadline at its start. */
+    uint64_t room = a->rest_us < FRAME_TARGET_US ? FRAME_TARGET_US - a->rest_us : 0;
+    uint64_t deadline = a->frame_start_us + room;
+    int ran = 0;
+    /* Checked on every tick: at high speed a frame runs several, and the
+     * world may end during the first. */
+    while (a->ticks_due >= FRAMES_PER_SECOND && !sim_is_over(&a->sim)) {
+        uint64_t before = platform_now_us();
+        if (budgeted && ran > 0 && before + a->tick_us > deadline) {
+            break;
+        }
+        sim_step(&a->sim);
+        a->ticks_due -= FRAMES_PER_SECOND;
+        ran++;
+        uint64_t took = platform_now_us() - before;
+        /* A quarter of each new tick: steady, yet a crowding world shows
+         * within a few frames. */
+        a->tick_us = a->tick_us == 0 ? took : (3u * a->tick_us + took) / 4u;
+    }
+    a->ticks_spent_us = platform_now_us() - start;
+    /* A frame's worth on top of the part of a tick on its way: at 2 a second
+     * the part alone takes 15 frames to grow into a tick, and must not be
+     * cut. */
+    int keep = APP_SPEEDS[a->speed] + FRAMES_PER_SECOND - 1;
+    if (a->ticks_due > keep) {
+        a->ticks_due = keep;
+    }
+    /* The real rate, counted over whole seconds of wall clock. */
+    uint64_t now = platform_now_ms();
+    if (a->rate_speed != a->speed || now - a->rate_last_ms > 250u) {
+        a->rate_speed = a->speed;
+        a->ticks_rate = 0;
+        a->rate_ticks = 0;
+        a->rate_start_ms = 0;
+    }
+    a->rate_last_ms = now;
+    a->rate_ticks += ran;
+    if (a->rate_start_ms == 0) {
+        a->rate_start_ms = now;
+    } else if (now - a->rate_start_ms >= 1000u) {
+        a->ticks_rate = (int)((uint64_t)a->rate_ticks * 1000u / (now - a->rate_start_ms));
+        a->rate_ticks = 0;
+        a->rate_start_ms = now;
+    }
+}
+
+/* How far the drawing is into the next tick, 0 to just under 1. A world that
+ * is behind owes more than a tick; it is drawn as far as a tick goes. */
+static float tick_fraction(const App *a)
+{
+    int due = a->ticks_due < FRAMES_PER_SECOND ? a->ticks_due : FRAMES_PER_SECOND - 1;
+    return (float)due / (float)FRAMES_PER_SECOND;
 }
 
 /* The setup screen's Enter: the same seed again, with its settings, so the
@@ -1255,6 +1350,15 @@ static void draw_title(App *a, const Creature *followed)
     st.season = years_season_of(w.tick, tpy);
     st.animals = w.animals;
     st.speed = APP_SPEEDS[a->speed];
+    /* Said only when the world falls clearly short of the speed asked, and
+     * while it is running: a tenth under is the clock's own wobble. Never in
+     * a --frames run, whose frames are not paced by the clock: its pictures
+     * must be the same on every computer. */
+    if (a->opt->frames == 0 && a->ticks_rate > 0 && !a->paused &&
+        platform_now_ms() - a->rate_last_ms <= 250u &&
+        a->ticks_rate * 10 < st.speed * 9) {
+        st.real_speed = a->ticks_rate;
+    }
     if (weather_active(&w.weather, w.tick)) {
         st.weather_kind = w.weather.kind;
         /* An event lasts a season (actions.c). The cast: ticks_per_year is a
@@ -1731,7 +1835,8 @@ static void draw_notices(App *a)
                        '1' + r, tip);
         const Notice *n = notices_get(&a->notices, (uint32_t)r);
         char line[NOTICE_TEXT + 32];
-        int year = years_whole(n->tick, a->sim.set.ticks_per_year) + 1;
+        /* Counted as the title line counts, from year 0. */
+        int year = years_whole(n->tick, a->sim.set.ticks_per_year);
         snprintf(line, sizeof(line), "%d  y%-4d %s%s", r + 1, year, n->text,
                  n->creature != NOTICE_NOBODY && life_find_slot(&a->sim, n->creature) < 0
                      ? " (dead)" : "");
@@ -2177,7 +2282,7 @@ static void check_stop(App *a)
         }
         /* + 0.5f: the middle of its cell, not the corner. */
         camera_centre_on(&a->camera, (float)m->x + 0.5f, (float)m->y + 0.5f);
-        draw_frame(a, (float)a->ticks_due / (float)FRAMES_PER_SECOND);
+        draw_frame(a, tick_fraction(a));
         /* The frame count, to say how long the wait was; the same command
          * stops on the same frame again. */
         printf("until frame %ld\n", a->frames_done);
@@ -2258,6 +2363,8 @@ static void app_frame(void *arg)
     App *a = arg; /* in C, void * converts to any pointer without a cast */
     /* The frame's work starts here; platform_run's wait comes after it. */
     uint64_t work_start = platform_now_ms();
+    a->frame_start_us = platform_now_us();
+    a->ticks_spent_us = 0;
     frame_log_begin(&a->frame_log, platform_now_us());
     uint64_t tick_before = world_top(a).tick;
     playlog_frame(&a->playlog, platform_now_ms(), a->sandbox.on);
@@ -2304,12 +2411,7 @@ static void app_frame(void *arg)
         a->redraw = true;
     } else if (!a->paused && !sim_is_over(&a->sim)) {
         a->ticks_due += APP_SPEEDS[a->speed];
-        /* Checked on every tick: at high speed a frame runs several, and the
-         * world may end during the first. */
-        while (a->ticks_due >= FRAMES_PER_SECOND && !sim_is_over(&a->sim)) {
-            sim_step(&a->sim);
-            a->ticks_due -= FRAMES_PER_SECOND;
-        }
+        run_due_ticks(a);
         if (sim_is_over(&a->sim)) {
             a->ticks_due = 0;  /* nothing is on its way any more */
             a->redraw = true;  /* the frame that shows the screen */
@@ -2384,8 +2486,7 @@ static void app_frame(void *arg)
         if (!world_away(a)) {
             scene_update(&a->scene, &a->sim, APP_SPEEDS[a->speed], body_before);
         }
-        float fraction = (float)a->ticks_due / (float)FRAMES_PER_SECOND;
-        draw_frame(a, fraction);
+        draw_frame(a, tick_fraction(a));
         frame_log_part(&a->frame_log, FRAME_PART_DRAW, platform_now_us());
         facts.tile_builds = a->scene.tiles.builds - tiles_before;
         facts.sprite_builds = a->scene.sprites.builds - sprites_before;
@@ -2401,6 +2502,10 @@ static void app_frame(void *arg)
         } else {
             uint64_t now = platform_now_ms();
             fps_frame(&a->fps, now, now - work_start);
+            /* The frame's work apart from the ticks, for the next frame's
+             * tick budget (run_due_ticks): a quarter of each new frame. */
+            uint64_t rest = platform_now_us() - a->frame_start_us - a->ticks_spent_us;
+            a->rest_us = a->rest_us == 0 ? rest : (3u * a->rest_us + rest) / 4u;
         }
     }
 
