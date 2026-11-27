@@ -42,9 +42,15 @@ static void hidden_layer(const Genome *g, const Senses *in,
                          float hidden[NET_HIDDEN])
 {
     for (int h = 0; h < NET_HIDDEN; h++) {
-        float sum = g->g[net_hidden_weight(h, NET_IN)]; /* the bias */
+        /* A hidden value's weights lie in a row (net_hidden_weight), the bias
+         * last: a pointer to the row's start reads them in turn, instead of
+         * asking genome.c where each one is, a call per weight (about a
+         * million a tick on a crowded world). The sum is the same, added in
+         * the same order. */
+        const float *row = &g->g[net_hidden_weight(h, 0)];
+        float sum = row[NET_IN]; /* the bias */
         for (int i = 0; i < NET_IN; i++) {
-            sum += g->g[net_hidden_weight(h, i)] * in->v[i];
+            sum += row[i] * in->v[i];
         }
         hidden[h] = tanhf(sum);
     }
@@ -54,9 +60,10 @@ static void hidden_layer(const Genome *g, const Senses *in,
  * squashing it. */
 static float output(const Genome *g, const float hidden[NET_HIDDEN], int o)
 {
-    float sum = g->g[net_out_weight(o, NET_HIDDEN)];
+    const float *row = &g->g[net_out_weight(o, 0)]; /* a row too, the bias last */
+    float sum = row[NET_HIDDEN];
     for (int j = 0; j < NET_HIDDEN; j++) {
-        sum += g->g[net_out_weight(o, j)] * hidden[j];
+        sum += row[j] * hidden[j];
     }
     return sum;
 }

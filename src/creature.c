@@ -1,6 +1,6 @@
 #include "creature.h"
 
-#include <math.h>   /* powf, floorf, ceilf, lroundf, sqrtf */
+#include <math.h>   /* powf, floorf, ceilf, sqrtf */
 #include <stdlib.h> /* malloc, free */
 #include <string.h> /* memset */
 
@@ -716,6 +716,22 @@ static void describe_seen(const World *w, const Pool *p, const Creature *c,
  * same offset as the line before. With looks_down, a flyer up also sees the
  * creature on the ground of its own cell, at step 0.
  */
+/*
+ * v rounded to the nearest whole number, halves away from zero: what lroundf
+ * gives, for the few cells a line of sight leans by. lroundf is a call into
+ * the maths library, made for every cell of every line each tick (about 4% of
+ * a tick); this is a few instructions. For a number this small, (int) cuts
+ * the fraction off exactly, and a - whole is exact too (it needs fewer bits
+ * than a has), so the comparison with 0.5 decides exactly as lroundf does.
+ */
+static int round_half_away(float v)
+{
+    float a = v < 0.0f ? -v : v;
+    int whole = (int)a;
+    int r = whole + (a - (float)whole >= 0.5f ? 1 : 0);
+    return v < 0.0f ? -r : r;
+}
+
 static void sense_view(const World *w, const Pool *p, const Creature *c,
                        uint8_t heading, bool looks_down, const Settings *s,
                        float *out)
@@ -785,9 +801,9 @@ static void sense_view(const World *w, const Pool *p, const Creature *c,
             if (!open[j]) {
                 continue;
             }
-            /* lroundf rounds half away from zero, the same on both sides, so
-             * the fan is symmetric; it returns a long, cast to int (a few cells). */
-            int offset = (int)lroundf(slope[j] * (float)d);
+            /* Rounded half away from zero, the same on both sides, so the
+             * fan is symmetric. */
+            int offset = round_half_away(slope[j] * (float)d);
             bool repeat = last_valid && offset == last_offset;
             last_offset = offset;
             last_valid = true;
