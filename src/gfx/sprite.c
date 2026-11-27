@@ -349,19 +349,37 @@ static int store_take(SpriteStore *st)
     return oldest;
 }
 
+/* Empties the standing measures: every key KEY_NONE, which no body has. */
+static void standing_reset(SpriteCache *c)
+{
+    for (int i = 0; i < SPRITE_STANDING_ENTRIES; i++) {
+        c->standing[i].key = KEY_NONE;
+    }
+}
+
+/* The place body key `key` is kept in. & (SPRITE_STANDING_ENTRIES - 1) keeps
+ * the hash's low bits, as bucket_of does. */
+static SpriteStanding *standing_slot(SpriteCache *c, uint64_t key)
+{
+    uint32_t h = gfx_mix((uint32_t)key ^ gfx_mix((uint32_t)(key >> 32)));
+    return &c->standing[h & (SPRITE_STANDING_ENTRIES - 1)];
+}
+
 bool sprite_cache_init(SpriteCache *c, int entries, int detail_entries)
 {
     *c = (SpriteCache){0}; /* every pointer NULL: free is safe on a half-made cache */
     c->art = true;
     c->raster = malloc(sizeof(SkeletonRaster));
+    c->standing = malloc(SPRITE_STANDING_ENTRIES * sizeof(SpriteStanding));
     int whole = entries / 6 < 1 ? 1 : entries / 6;
-    if (c->raster == NULL ||
+    if (c->raster == NULL || c->standing == NULL ||
         !store_init(&c->trimmed, entries, SPRITE_TRIMMED_BYTES) ||
         !store_init(&c->small, whole, SKELETON_W * SKELETON_H) ||
         !store_init(&c->large, detail_entries, SKELETON_DETAIL_W * SKELETON_DETAIL_H)) {
         sprite_cache_free(c);
         return false;
     }
+    standing_reset(c);
     return true;
 }
 
@@ -372,6 +390,8 @@ void sprite_cache_free(SpriteCache *c)
     store_free(&c->large);
     free(c->raster);
     c->raster = NULL;
+    free(c->standing);
+    c->standing = NULL;
 }
 
 void sprite_cache_reset(SpriteCache *c)
@@ -384,6 +404,9 @@ void sprite_cache_reset(SpriteCache *c)
     }
     if (c->large.heads != NULL) {
         store_reset(&c->large);
+    }
+    if (c->standing != NULL) {
+        standing_reset(c);
     }
 }
 
@@ -434,20 +457,45 @@ static void draw_raster(SpriteCache *c, const SpriteBody *b, int action, int fra
 {
     species_anatomy(a, b->species, &b->traits, sprite_k(b));
     const ArtClip *clip = c->art ? art_clip(b->species, action, &b->traits) : NULL;
-    SpritePose pose;
+    SkeletonRaster *r = c->raster;
     /* With drawn frames, the skeleton still draws the body standing first:
      * its width, middle, lowest row and shadow say how big and where the
-     * frames go, so the genes keep deciding the size. */
-    pose_at(&pose, b, clip != NULL ? ACTION_REST : action, clip != NULL ? 0 : frame);
-    skeleton_raster(c->raster, a, &pose, b->base != SPRITE_BASE_FAR,
-                    b->base == SPRITE_BASE_DETAIL);
-    if (clip == NULL) {
-        return;
+     * frames go, so the genes keep deciding the size. That is the same for
+     * every pose, so it is drawn once a body and its measures kept
+     * (SpriteStanding); a later picture of the body takes them from there.
+     * Any action and pose give the body's key: ACTION_REST, pose 0. */
+    uint64_t body_key = key_of(b, ACTION_REST, 0);
+    SpriteStanding *st = clip != NULL ? standing_slot(c, body_key) : NULL;
+    if (st != NULL && st->key == body_key) {
+        r->w = st->w;
+        r->h = st->h;
+        r->ox = st->ox;
+        r->oy = st->oy;
+        r->x0 = st->x0;
+        r->y0 = st->y0;
+        r->x1 = st->x1;
+        r->y1 = st->y1;
+        r->shadow_rx = st->shadow_rx;
+        r->shadow_ry = st->shadow_ry;
+    } else {
+        SpritePose pose;
+        pose_at(&pose, b, clip != NULL ? ACTION_REST : action, clip != NULL ? 0 : frame);
+        skeleton_raster(r, a, &pose, b->base != SPRITE_BASE_FAR,
+                        b->base == SPRITE_BASE_DETAIL);
+        if (clip == NULL) {
+            return;
+        }
     }
-    SkeletonRaster *r = c->raster;
     float scale = art_scale_for(b->species, r->x1 - r->x0, r->y1 - r->y0);
     if (!(scale > 0.0f)) {
-        return;  /* nothing standing to measure: the skeleton's picture stays */
+        /* Nothing standing to measure: the skeleton's picture stays. Its
+         * measures are not kept, so the skeleton is drawn every time, as the
+         * picture it is. */
+        return;
+    }
+    if (st != NULL && st->key != body_key) {
+        *st = (SpriteStanding){body_key, r->w, r->h, r->ox, r->oy,
+                               r->x0, r->y0, r->x1, r->y1, r->shadow_rx, r->shadow_ry};
     }
     scale = capped_scale(b, scale);
     /* The middle pixel of the standing body, and its lowest row. */

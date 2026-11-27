@@ -78,13 +78,16 @@ void sprite_palette_flash(SpritePalette *out, const SpritePalette *in, float fla
 /* Small-grid pictures kept. Each is cut to its inked box first, which is 296
  * bytes on average on a crowded world (2026-11-07) against 3,584 for the whole
  * grid: SPRITE_ENTRIES of them go in slots of SPRITE_TRIMMED_BYTES, and the few
- * bigger ones in SPRITE_ENTRIES / 6 whole-grid slots. 27.2 MB at most, taken
+ * bigger ones in SPRITE_ENTRIES / 6 whole-grid slots. 54.5 MB at most, taken
  * only as pictures fill it. Doubled from 12,288 on 2026-11-21: the air half's
  * busier world (birds drawn from the skeleton, 24 poses each) asked for more
  * pictures than that held, so pictures were thrown out and drawn again soon
  * after; doubled, Far zoom at 1080p took about 6% less time a frame, for 7 MB
- * more at the peak of a 600-frame run (95 to 102 MB). */
-#define SPRITE_ENTRIES 24576
+ * more at the peak of a 600-frame run (95 to 102 MB). Doubled again on
+ * 2026-11-26, to 49,152: the livelier world (fish, about 13% more animals)
+ * outgrew it the same way; about 4% less time a frame at Far, 1080p, for
+ * 12 MB more at the peak of the same run (105 to 117 MB). */
+#define SPRITE_ENTRIES 49152
 #define SPRITE_TRIMMED_BYTES 512
 #define SPRITE_DETAIL_ENTRIES 512  /* large-grid pictures */
 
@@ -112,10 +115,27 @@ typedef struct {
     int capacity, buckets, used, slot_bytes;
 } SpriteStore;
 
+/* What a body with drawn frames (art.h) takes from its skeleton standing:
+ * the grid, the ground point, the standing body's inked box and its shadow.
+ * The skeleton under the art is always posed standing, so these are the same
+ * for every action and pose of the body, and are kept apart from its
+ * pictures: each new picture of it then draws only its art frame. key is
+ * the body's (any action and pose: the same), UINT64_MAX while empty. */
+typedef struct {
+    uint64_t key;
+    int w, h, ox, oy, x0, y0, x1, y1;
+    float shadow_rx, shadow_ry;
+} SpriteStanding;
+
+/* How many bodies' standing measures are kept: a power of two, each body in
+ * the one place its key picks, a newer body taking an older one's place. */
+#define SPRITE_STANDING_ENTRIES 4096
+
 typedef struct {
     /* trimmed: small-grid pictures of up to SPRITE_TRIMMED_BYTES once cut;
      * small: the bigger ones; large: the detailed grid's (the panel, the lab). */
     SpriteStore trimmed, small, large;
+    SpriteStanding *standing;  /* SPRITE_STANDING_ENTRIES of them */
     SkeletonRaster *raster;  /* the scratch every picture is drawn in: 22 KB */
     long builds;  /* pictures drawn so far: the tests and slow_pictures read it */
     bool art;     /* true: species with drawn frames (art.h) use them; on from init */
