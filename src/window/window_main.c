@@ -2268,6 +2268,21 @@ static void pretend_keys(App *a)
     }
 }
 
+/* The running world's ticks for this frame: a frame's worth is added to
+ * what is owed, and run as far as the frame has room (run_due_ticks). */
+static void run_frame_ticks(App *a)
+{
+    if (a->paused || sim_is_over(&a->sim)) {
+        return;
+    }
+    a->ticks_due += APP_SPEEDS[a->speed];
+    run_due_ticks(a);
+    if (sim_is_over(&a->sim)) {
+        a->ticks_due = 0;  /* nothing is on its way any more */
+        a->redraw = true;  /* the frame that shows the screen */
+    }
+}
+
 /* One frame. void * because platform_run knows nothing about App. */
 static void app_frame(void *arg)
 {
@@ -2279,13 +2294,16 @@ static void app_frame(void *arg)
     frame_log_begin(&a->frame_log, platform_now_us());
     uint64_t tick_before = a->sim.tick;
     bool threaded_prelude = false;
+    bool ticks_after = false;
     playlog_frame(&a->playlog, platform_now_ms(), a->sandbox.on);
     Event e;
     while (platform_poll(&e)) {
         handle_event(a, &e);
     }
     pretend_keys(a);
-    /* Before any ticks: a quit means the world stays as it was shown. */
+    /* Before any ticks of this frame: a quit leaves the world as it stands.
+     * (In the open window that is one frame's ticks on from the picture last
+     * shown, since those ran after it: at most a tick or so.) */
     if (!a->running) {
         platform_stop();
         return;
@@ -2329,13 +2347,12 @@ static void app_frame(void *arg)
                                             : APP_PRELUDE_FRAME_MS);
         a->ticks_due = 0;
         a->redraw = true;
-    } else if (!a->paused && !sim_is_over(&a->sim)) {
-        a->ticks_due += APP_SPEEDS[a->speed];
-        run_due_ticks(a);
-        if (sim_is_over(&a->sim)) {
-            a->ticks_due = 0;  /* nothing is on its way any more */
-            a->redraw = true;  /* the frame that shows the screen */
-        }
+    } else if (a->opt->frames > 0) {
+        /* A --frames run ticks here, before drawing, as it always has: its
+         * pictures and screenshots are pinned by the tests. */
+        run_frame_ticks(a);
+    } else {
+        ticks_after = true; /* the open window: after its picture (below) */
     }
     frame_log_part(&a->frame_log, FRAME_PART_WORLD, platform_now_us());
     /* The world behind the one on screen keeps level with it: the ticks the
@@ -2420,6 +2437,18 @@ static void app_frame(void *arg)
         }
     }
 
+    /* The open window's ticks come after its picture is shown: a tick
+     * changes what many animals do, so the frame after it draws many new
+     * pictures (about 20 ms on a big world), and a tick of its own took
+     * about 10 ms more (measured 2026-11-26), together more than a frame's
+     * 33 ms on a slower computer. Run here, a tick shares its frame with
+     * that frame's drawing, and the new pictures fall in the next. What is
+     * shown is the same, one frame later. Only for the plain running world:
+     * the prelude and a skip keep their places above. */
+    if (ticks_after) {
+        run_frame_ticks(a);
+        frame_log_part(&a->frame_log, FRAME_PART_WORLD, platform_now_us());
+    }
     /* The cast: the ticks of one frame, at most a speed's worth or a
      * prelude's 28 ms of them, far below INT_MAX. A prelude on its own
      * thread runs none here, though the copy of its world taken this frame
