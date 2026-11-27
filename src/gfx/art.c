@@ -148,16 +148,53 @@ static bool takes_outline(uint8_t ink)
            (ink >= INK_MANE0 && ink < INK_MANE0 + 5);
 }
 
-/* The grid pixel's sample (sx, sy) of `samples` each way, taken to frame f's
- * art pixel: the anchor pixel's middle sits on the grid anchor's. */
-static uint8_t sample_ink(const ArtFrame *f, int gx, int gy, int sx, int sy, int samples,
-                          float scale, float anchor_x, float anchor_y)
+/* Where each sample of a row (or a column) of grid pixels lands in a frame:
+ * for grid pixel g of lo..hi-1 and sample s of `samples` across it, the art
+ * pixel at[(g - lo) * samples + s], the anchor pixel's middle sitting on the
+ * grid anchor's. Worked out once a picture, one axis at a time, so the
+ * samples of every grid pixel are only looked up: x depends on the column
+ * and y on the row, never on both. The sums are written exactly as before
+ * they were split by axis, so each sample lands on the same art pixel. */
+typedef struct {
+    int lo, hi;
+    int at[SKELETON_DETAIL_W * ART_SAMPLES_MAX];  /* the largest grid's width */
+} SampleAxis;
+
+static void sample_axis(SampleAxis *out, int lo, int hi, int samples, float scale,
+                        float anchor_grid, int anchor_art)
 {
-    float px = (float)gx + ((float)sx + 0.5f) / (float)samples;
-    float py = (float)gy + ((float)sy + 0.5f) / (float)samples;
-    float ax = (float)f->ax + 0.5f + (px - anchor_x - 0.5f) / scale;
-    float ay = (float)f->ay + 0.5f + (py - anchor_y - 0.5f) / scale;
-    return art_ink(f, (int)floorf(ax), (int)floorf(ay));
+    out->lo = lo;
+    out->hi = hi;
+    for (int g = lo; g < hi; g++) {
+        for (int s = 0; s < samples; s++) {
+            float p = (float)g + ((float)s + 0.5f) / (float)samples;
+            float a = (float)anchor_art + 0.5f + (p - anchor_grid - 0.5f) / scale;
+            out->at[(g - lo) * samples + s] = (int)floorf(a);
+        }
+    }
+}
+
+/* How many of grid pixel (gx, gy)'s samples land on each ink of frame f
+ * (count, INK_COUNT long, filled here), and how many on any ink. */
+static int count_samples(const ArtFrame *f, const SampleAxis *xs, const SampleAxis *ys,
+                         int gx, int gy, int samples, int *count)
+{
+    for (int k = 0; k < INK_COUNT; k++) {
+        count[k] = 0;
+    }
+    int inked = 0;
+    const int *ax = &xs->at[(gx - xs->lo) * samples];
+    const int *ay = &ys->at[(gy - ys->lo) * samples];
+    for (int sy = 0; sy < samples; sy++) {
+        for (int sx = 0; sx < samples; sx++) {
+            uint8_t ink = art_ink(f, ax[sx], ay[sy]);
+            if (ink != INK_NONE && ink < INK_COUNT) {
+                count[ink]++;
+                inked++;
+            }
+        }
+    }
+    return inked;
 }
 
 /* The grid columns lo..hi-1 where a frame `size` art pixels long, its anchor
@@ -203,20 +240,13 @@ static void draw_layer(SkeletonRaster *r, const ArtFrame *f, uint8_t part, bool 
     int gx0, gx1, gy0, gy1;
     frame_span(f->w, f->ax, scale, anchor_x, r->w, &gx0, &gx1);
     frame_span(f->h, f->ay, scale, anchor_y, r->h, &gy0, &gy1);
+    SampleAxis xs, ys;
+    sample_axis(&xs, gx0, gx1, samples, scale, anchor_x, f->ax);
+    sample_axis(&ys, gy0, gy1, samples, scale, anchor_y, f->ay);
     for (int gy = gy0; gy < gy1; gy++) {
         for (int gx = gx0; gx < gx1; gx++) {
-            int count[INK_COUNT] = {0};
-            int inked = 0;
-            for (int sy = 0; sy < samples; sy++) {
-                for (int sx = 0; sx < samples; sx++) {
-                    uint8_t ink = sample_ink(f, gx, gy, sx, sy, samples, scale,
-                                             anchor_x, anchor_y);
-                    if (ink != INK_NONE && ink < INK_COUNT) {
-                        count[ink]++;
-                        inked++;
-                    }
-                }
-            }
+            int count[INK_COUNT];
+            int inked = count_samples(f, &xs, &ys, gx, gy, samples, count);
             if (inked == 0 || (!thin && 3 * inked < samples * samples)) {
                 continue;
             }
@@ -270,23 +300,18 @@ void art_raster(SkeletonRaster *r, const ArtClip *clip, const ArtClip *const *la
     int gx0, gx1, gy0, gy1;
     frame_span(f->w, f->ax, scale, anchor_x, r->w, &gx0, &gx1);
     frame_span(f->h, f->ay, scale, anchor_y, r->h, &gy0, &gy1);
+    /* Where every sample lands, worked out once for the whole frame (about
+     * 4 KB each, on the stack). */
+    SampleAxis xs, ys;
+    sample_axis(&xs, gx0, gx1, samples, scale, anchor_x, f->ax);
+    sample_axis(&ys, gy0, gy1, samples, scale, anchor_y, f->ay);
     for (int gy = gy0; gy < gy1; gy++) {
         for (int gx = gx0; gx < gx1; gx++) {
             /* How many samples landed on each ink. An array sized by the
              * enum's last value: a C array's length must be known when the
              * program is compiled, and INK_COUNT is. */
-            int count[INK_COUNT] = {0};
-            int inked = 0;
-            for (int sy = 0; sy < samples; sy++) {
-                for (int sx = 0; sx < samples; sx++) {
-                    uint8_t ink = sample_ink(f, gx, gy, sx, sy, samples, scale,
-                                             anchor_x, anchor_y);
-                    if (ink != INK_NONE && ink < INK_COUNT) {
-                        count[ink]++;
-                        inked++;
-                    }
-                }
-            }
+            int count[INK_COUNT];
+            int inked = count_samples(f, &xs, &ys, gx, gy, samples, count);
             /* Fewer than a third of the samples inked: left empty. A third,
              * not a half, so a leg one art pixel wide survives a shrink to a
              * third (half lost the legs of the smallest wolves). */
