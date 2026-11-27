@@ -104,8 +104,9 @@
  * the runner's, so it cannot stand in. For rules 5 (2026-11-23) read from
  * GitHub run 45168088536's log, gcc and clang alike (rules 4's was never
  * read: it was replaced before a run gave it). For rules 6 (2026-11-23) read
- * from GitHub run 45260227360's log, gcc and clang alike. */
-#define SEED_7_AFTER_500_CI 0x40f36572f36ef983ULL
+ * from GitHub run 45260227360's log, gcc and clang alike. For rules 7
+ * (2026-11-27) read from GitHub run 46059327916's log, gcc and clang alike. */
+#define SEED_7_AFTER_500_CI 0x99af42c55e63c0daULL
 
 /* One creature in a bare 16x16 world with the scripted brain, resting for a
  * tick, calling or not. Returns the energy it has left. */
