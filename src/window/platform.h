@@ -65,6 +65,10 @@ void platform_stop(void);
 /* Puts an EV_QUIT in the queue, exactly what the window's X button does. */
 void platform_post_quit(void);
 
+/* How many logical cores the computer has (a core running two threads counts
+ * twice), for the playlog's machine line; at least 1. */
+int platform_cpu_cores(void);
+
 /* Puts text on the system clipboard; false when that failed. In a browser
  * page the browser may ask the player first, and the answer comes later, so
  * true there means only "asked". */

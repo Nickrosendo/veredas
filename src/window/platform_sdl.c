@@ -195,6 +195,12 @@ uint64_t platform_now_us(void)
     return count / counter_hz * 1000000u + count % counter_hz * 1000000u / counter_hz;
 }
 
+int platform_cpu_cores(void)
+{
+    int n = SDL_GetCPUCount(); /* SDL says 1 when it cannot tell */
+    return n > 0 ? n : 1;
+}
+
 void platform_stop(void)
 {
     stop_requested = true;

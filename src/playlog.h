@@ -28,11 +28,37 @@ enum {
     PLAYLOG_VERBS
 };
 
+/* The zoom steps and levels, in the camera's order (camera.h, levels.h; the
+ * window checks at compile time that they agree). Repeated here so the
+ * playlog, like the rest of the engine's plain files, needs nothing from the
+ * drawing code. */
+enum { PLAYLOG_ZOOM_CLOSE, PLAYLOG_ZOOM_NORMAL, PLAYLOG_ZOOM_FAR, PLAYLOG_ZOOM_WORLD,
+       PLAYLOG_ZOOMS };
+enum { PLAYLOG_LEVEL_HIGH_SKY, PLAYLOG_LEVEL_SKY, PLAYLOG_LEVEL_SURFACE,
+       PLAYLOG_LEVEL_UNDERWATER, PLAYLOG_LEVEL_ABYSS, PLAYLOG_LEVELS };
+
+/* A frame later than this, in ms from the one before, reads as a stutter
+ * (the window's tick budget keeps under it, window_main.c FRAME_TARGET_US). */
+#define PLAYLOG_LATE_MS 40u
+
+/* What the window showed at a frame, as the playlog needs it. */
+typedef struct {
+    bool sandbox;   /* the mode */
+    int zoom;       /* a PLAYLOG_ZOOM_ value */
+    int level;      /* a PLAYLOG_LEVEL_ value */
+    bool following; /* the view is on a followed animal, whoever picked it */
+    /* The frame counts for the frame speed: after the prelude, not paused.
+     * The loading ring's frames and the cheap paused ones would hide or fake
+     * stutter. */
+    bool timed;
+} PlaylogView;
+
 typedef struct {
     bool started;
     uint64_t start_ms;   /* the first frame */
     uint64_t last_ms;    /* the frame before this one */
     bool sandbox;        /* the mode at the last frame */
+    PlaylogView view;    /* the whole view at the last frame */
     uint64_t ms_in[2];   /* time in Documentary [0] and Sandbox [1] */
     int64_t first_sandbox_ms; /* after the start; -1 while never */
     uint32_t keys[PLAYLOG_KEYS];
@@ -46,13 +72,39 @@ typedef struct {
      * start (-1 while never). */
     uint32_t verbs[PLAYLOG_VERBS];
     int64_t first_verb_ms[PLAYLOG_VERBS];
+    /* Format 3. Time at each zoom and level; when each level was first shown
+     * (-1 while never). */
+    uint64_t ms_zoom[PLAYLOG_ZOOMS];
+    uint64_t ms_level[PLAYLOG_LEVELS];
+    int64_t first_level_ms[PLAYLOG_LEVELS];
+    /* Follows the player started, the first one's moment (-1 while never),
+     * and the time the view spent on a followed animal. */
+    uint32_t follows;
+    int64_t first_follow_ms;
+    uint64_t ms_following;
+    /* The gaps between timed frames: how many, their sum, and how many were
+     * over PLAYLOG_LATE_MS. */
+    uint32_t timed_frames;
+    uint64_t timed_ms;
+    uint32_t late_frames;
+    /* The machine, as playlog_machine was last told (0 while never). */
+    int window_w, window_h;
+    int cpu_cores;
 } Playlog;
 
 /* Empty: nothing counted yet. */
 void playlog_init(Playlog *p);
-/* Called once a frame with the clock and the mode then: the time since the
- * last frame goes to the mode the window was in. */
-void playlog_frame(Playlog *p, uint64_t now_ms, bool sandbox);
+/* Called once a frame with the clock and what the window shows then: the time
+ * since the last frame goes to the mode, zoom, level and following the window
+ * had at the last frame, and to the frame speed if that frame was timed. A
+ * zoom or level outside the tables gets no time. */
+void playlog_frame(Playlog *p, uint64_t now_ms, const PlaylogView *view);
+/* The player started following an animal (a click on it, j, a notice, a
+ * panel line), at the clock's now_ms. Not for the camera's own picks. */
+void playlog_follow(Playlog *p, uint64_t now_ms);
+/* The window's size in pixels and the computer's logical core count, for the
+ * file's last lines. */
+void playlog_machine(Playlog *p, int window_w, int window_h, int cpu_cores);
 /* One key pressed (a KEY_ value or a character), one click on the world. */
 void playlog_key(Playlog *p, int key);
 void playlog_click(Playlog *p);

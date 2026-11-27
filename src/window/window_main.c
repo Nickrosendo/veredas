@@ -52,6 +52,20 @@
 #include "anim.h" /* FIGHT_ON */
 #include "pose.h" /* POSE_POUNCE_AT */
 
+/* The playlog numbers zooms and levels by itself (playlog.h), in the camera's
+ * order; a zoom step or level added to one side but not the other stops the
+ * build here, rather than putting time under the wrong name. */
+_Static_assert((int)PLAYLOG_ZOOMS == (int)CAMERA_ZOOMS &&
+                   (int)PLAYLOG_ZOOM_FAR == (int)CAMERA_FAR,
+               "the playlog's zoom steps are the camera's");
+/* The casts: two different unnamed enums compared straight away draw a
+ * warning (-Wenum-compare), since that is usually a mix-up; here it is the
+ * point, so each side is made a plain int first. */
+_Static_assert((int)PLAYLOG_LEVELS == (int)LEVEL_COUNT &&
+                   (int)PLAYLOG_LEVEL_SKY == (int)LEVEL_SKY &&
+                   (int)PLAYLOG_LEVEL_UNDERWATER == (int)LEVEL_UNDERWATER,
+               "the playlog's levels are levels.h's");
+
 #define FRAMES_PER_SECOND 30
 /* A --frames run's clock moves this many milliseconds a frame (a thirtieth of
  * a second, rounded down), so its pictures are the same every run. */
@@ -136,8 +150,10 @@ static const char WINDOW_USAGE[] =
     "  --code TEXT       open this world code (or a link holding one) and replay\n"
     "                    it up to where it was copied, instead of a new world\n"
     "  --playlog PATH    on leaving, write a record of the sitting there: time in\n"
-    "                    each mode and how often each key was used (for playtests;\n"
-    "                    nothing about the world, and nothing is sent anywhere)\n"
+    "                    each mode, zoom and level, following, how often each key\n"
+    "                    was used, and how smoothly the window ran, with its size\n"
+    "                    and the computer's core count (for playtests; nothing\n"
+    "                    about the world or who you are, nothing is sent anywhere)\n"
     "  --frame-log PATH  write each frame's times there, one line a frame: how\n"
     "                    long the ticks, the camera's look-ahead, drawing and\n"
     "                    showing took (for finding stutter)\n"
@@ -469,6 +485,16 @@ static void follow_notice(App *a, const Notice *x);
 /* Declared here, defined further down: the new-world functions use it. */
 static void say(App *a, const char *text, int frames);
 
+/* The player has just started following someone (a click, j, a notice, a
+ * panel line): one follow in the playlog. The camera's own picks call
+ * inspect_follow without this, so the playlog tells the two apart. */
+static void player_followed(App *a)
+{
+    if (a->inspect.following) {
+        playlog_follow(&a->playlog, platform_now_ms());
+    }
+}
+
 static void click(App *a, int x, int y)
 {
     playlog_click(&a->playlog);
@@ -484,6 +510,7 @@ static void click(App *a, int x, int y)
     float wx, wy;
     camera_to_world(&a->camera, sx, sy, &wx, &wy);
     scene_click(&a->inspect, &a->sim, wx, wy);
+    player_followed(a); /* a click on nobody follows nobody: not counted */
     if ((a->hints & HINT_FOLLOW) == 0 && inspect_creature(&a->inspect, &a->sim) != NULL) {
         a->hints |= HINT_FOLLOW;
 #ifdef VEREDAS_DEMO
@@ -517,6 +544,7 @@ static void follow_from_panel(App *a, int key)
     }
     if (slot >= 0) {
         inspect_follow(&a->inspect, &a->sim, slot);
+        player_followed(a);
     } else {
         say(a, "nobody to follow", NOTICE_FRAMES);
     }
@@ -873,6 +901,7 @@ static void follow_notice(App *a, const Notice *x)
         a->levels.cut_next = true; /* on another level: a cut, with a fade */
         a->levels.cut_level = -1;
         inspect_follow(&a->inspect, &a->sim, slot);
+        player_followed(a);
         a->notices_open = false;
     } else {
         say(a, x == NULL ? "no notice there"
@@ -891,6 +920,7 @@ static void jump(App *a)
             a->levels.cut_next = true;
             a->levels.cut_level = -1;
             inspect_follow(&a->inspect, &a->sim, slot);
+            player_followed(a);
         } else {
             say(a, "that creature is dead", NOTICE_FRAMES);
         }
@@ -2367,7 +2397,16 @@ static void app_frame(void *arg)
     a->ticks_spent_us = 0;
     frame_log_begin(&a->frame_log, platform_now_us());
     uint64_t tick_before = world_top(a).tick;
-    playlog_frame(&a->playlog, platform_now_ms(), a->sandbox.on);
+    /* What the window shows as this frame starts: the time since the last
+     * frame goes to what it showed then (playlog.h). */
+    PlaylogView view = {
+        .sandbox = a->sandbox.on,
+        .zoom = a->camera.zoom,
+        .level = a->camera.level,
+        .following = a->inspect.following,
+        .timed = !a->prelude.active && !a->paused,
+    };
+    playlog_frame(&a->playlog, platform_now_ms(), &view);
     Event e;
     while (platform_poll(&e)) {
         handle_event(a, &e);
@@ -2606,6 +2645,9 @@ static int app_leave(App *a)
         platform_error(err);
         result = EXIT_FAILED;
     }
+    /* The window's size as it ends: the canvas is the drawable area, pixel for
+     * pixel (the window is not opened for high-density screens). */
+    playlog_machine(&a->playlog, a->canvas.w, a->canvas.h, platform_cpu_cores());
     if (a->opt->playlog_path != NULL &&
         !playlog_write(&a->playlog, a->opt->playlog_path, VEREDAS_VERSION, err,
                        sizeof(err))) {
