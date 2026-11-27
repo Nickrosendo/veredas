@@ -7,7 +7,9 @@
 #   1. the same world: make test, make test-slow and make test-threads green
 #      (test_same_world, the seed-7 fingerprint and the scene pins are in
 #      them), and tick_report's checksums the same as 93db157's on the grown
-#      seed-4 world, tick for tick;
+#      seed-4 world, tick for tick. make test-slow runs only with --slow: its
+#      slow_sim steps a full-size world 60,000 ticks under the memory checkers,
+#      about two hours on a cloud machine; without it bar 1 says INCOMPLETE;
 #   2. a cheaper tick: tick_report on that world, 300 ticks, median, at least
 #      20 % faster than 93db157 built on this machine;
 #   3. growing a new world: seed 4, 8 ancestor years, 60 s of the prelude
@@ -20,24 +22,27 @@
 #      surface and in the sky, public and paid builds (--frames 330 minus
 #      --frames 30, over 300, the median of three rounds).
 #
-# Usage: bash tests/smooth_check.sh [--skip-tests] [--keep DIR]
-#   --skip-tests  leave out bar 1's three test runs (the slowest part; bar 1
-#                 then says so and does not pass)
+# Usage: bash tests/smooth_check.sh [--slow] [--skip-tests] [--keep DIR]
+#   --slow        also run make test-slow (hours: see bar 1)
+#   --skip-tests  leave out bar 1's test runs (bar 1 then says so and does not
+#                 pass)
 #   --keep DIR    copy every frame log and timing there, for reading later
 # Environment:
 #   CONTENT  the content pack, for the paid build (default ../veredas-content);
 #            without it the paid cells of bar 5 are not run and bar 5 cannot pass
 #   SDL_VIDEODRIVER  left as it is: on a desktop the real window opens (what a
 #            player sees); "dummy" runs with no screen, as the cloud does
-# Takes about 15 minutes on a cloud machine: 5 of them the live runs of bars 3
-# and 4, which open a window for 60 + 120 + 120 seconds.
+# Takes about 25 minutes on a cloud machine without --slow: 5 of them the live
+# runs of bars 3 and 4, which open a window for 60 + 120 + 120 seconds.
 SKIP_TESTS=0
+SLOW=0
 KEEP=""
 while [ $# -gt 0 ]; do
     case $1 in
+    --slow) SLOW=1 ;;
     --skip-tests) SKIP_TESTS=1 ;;
     --keep) shift; KEEP=${1:-} ;;
-    *) echo "usage: bash tests/smooth_check.sh [--skip-tests] [--keep DIR]" >&2; exit 2 ;;
+    *) echo "usage: bash tests/smooth_check.sh [--slow] [--skip-tests] [--keep DIR]" >&2; exit 2 ;;
     esac
     shift
 done
@@ -90,9 +95,13 @@ T_TEST=skipped T_SLOW=skipped T_THREADS=skipped SAME_WORLD=""
 if [ $SKIP_TESTS -eq 0 ]; then
     say "make test"
     make test >"$TMP/test.log" 2>&1 && T_TEST=green || T_TEST=red
-    SAME_WORLD=$(grep '^seed 4 at 96x54' "$TMP/test.log" | head -1)
-    say "make test-slow"
-    make test-slow >"$TMP/slow.log" 2>&1 && T_SLOW=green || T_SLOW=red
+    SAME_WORLD=$(grep '^seed 4 at 96x54, ticks 601-900' "$TMP/test.log" | head -1)
+    if [ $SLOW -eq 1 ]; then
+        say "make test-slow"
+        make test-slow >"$TMP/slow.log" 2>&1 && T_SLOW=green || T_SLOW=red
+    else
+        T_SLOW="not run (--slow)"
+    fi
     say "make test-threads"
     make test-threads >"$TMP/threads.log" 2>&1 && T_THREADS=green || T_THREADS=red
     echo "test $T_TEST, test-slow $T_SLOW, test-threads $T_THREADS"
@@ -220,7 +229,13 @@ if [ -n "$KEEP" ]; then
     mkdir -p "$KEEP" && cp "$TMP"/*.log "$KEEP"/ 2>/dev/null
 fi
 
-pass() { if [ "$1" = 1 ]; then echo PASS; else echo FAIL; fi; }
+pass() {
+    case $1 in
+    1) echo PASS ;;
+    incomplete) echo INCOMPLETE ;;
+    *) echo FAIL ;;
+    esac
+}
 # at_least X MIN / at_most X MAX: 1 or 0, by awk (the shell has no decimals).
 at_least() { awk -v x="$1" -v m="$2" 'BEGIN { print (x + 0 >= m + 0) ? 1 : 0 }'; }
 at_most() { awk -v x="$1" -v m="$2" 'BEGIN { print (x != "" && x + 0 <= m + 0) ? 1 : 0 }'; }
@@ -232,6 +247,9 @@ else
     B1=$([ $T_TEST = green ] && [ $T_SLOW = green ] && [ $T_THREADS = green ] &&
         [ -n "$OLD_SUM" ] && [ "$OLD_SUM" = "$NEW_SUM" ] && echo 1 || echo 0)
     B1_TEXT="test $T_TEST, slow $T_SLOW, threads $T_THREADS"
+    if [ $T_TEST = green ] && [ $T_THREADS = green ] && [ $SLOW -eq 0 ]; then
+        B1=incomplete
+    fi
 fi
 if [ -n "$OLD_SUM" ]; then
     if [ "$OLD_SUM" = "$NEW_SUM" ]; then
