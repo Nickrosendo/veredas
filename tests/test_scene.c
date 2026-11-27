@@ -555,10 +555,15 @@ static void test_known_world_pixels(void)
          * moved, old and new compared side by side. Re-pinned for a flyer
          * that sees the cell below it (rules 6, 2026-11-23): another world,
          * the same drawing; 4 to 9 % of pixels moved, old and new compared
-         * side by side. */
+         * side by side. Re-pinned for the water's waves fitted to the world
+         * (2026-11-27): a whole number of them across its width and height,
+         * so the stripes meet where the world wraps; on this 64-cell world
+         * 0.07 becomes 0.0675 a pixel. Only water moved, its stripes' edges
+         * by a pixel or two (the World zoom not at all); old and new written
+         * out and compared side by side with the changed pixels marked. */
         static const uint64_t EXPECTED[CAMERA_ZOOMS] = {
-            0x9196f37e20ee3a79u, 0x7f9be097bbdd9f3fu,
-            0x9ab083a6eed62b37u, 0x0caceb27c07d23b5u,
+            0xb265b91ad675775du, 0x320b0e382c920ca5u,
+            0xdcb6a003c09ad8b0u, 0x0caceb27c07d23b5u,
         };
         if (pinned && hashes[level] != EXPECTED[level]) {
             printf("level %d: 0x%llxu\n", level,
@@ -1606,9 +1611,11 @@ static void test_underwater_pixels(void)
      * air that reaches ahead (rules 5, 2026-11-23): another world, so the
      * view centres on another place; compared side by side. Re-pinned for a
      * flyer that sees the cell below it (rules 6, 2026-11-23): another world
-     * and place again; compared side by side. */
+     * and place again; compared side by side. Re-pinned for the water's
+     * waves fitted to the world (2026-11-27): only the water's stripes moved;
+     * compared side by side with the changed pixels marked. */
     static const uint64_t EXPECTED[3] = {
-        0xfe95c1507cf52725u, 0x4f94a984db7fe701u, 0x797468a071313f90u,
+        0x12834e887ed4a424u, 0xbab376182a166a0eu, 0x88e87934b9bef9b5u,
     };
     for (int zoom = 0; zoom < 3; zoom++) {
         if (pinned && hashes[zoom] != EXPECTED[zoom]) {
@@ -1863,6 +1870,72 @@ static void test_names_never_overlap(void)
     canvas_free(&both);
     canvas_free(&alone_a);
     canvas_free(&alone_b);
+    sim_free(&s);
+}
+
+/* How much the picture changes from pixel column x to x + 1, summed over the
+ * colour channels and the rows from y0 to y1. */
+static long column_step(const Canvas *c, int x, int y0, int y1)
+{
+    long sum = 0;
+    for (int y = y0; y < y1; y++) {
+        uint32_t a = c->px[y * c->w + x], b = c->px[y * c->w + x + 1];
+        for (int shift = 0; shift < 24; shift += 8) {
+            int d = (int)((a >> shift) & 0xFF) - (int)((b >> shift) & 0xFF);
+            sum += d < 0 ? -d : d;
+        }
+    }
+    return sum;
+}
+
+/* Open water seen across the world's wrap, on every level: the water's
+ * stripes meet there (their waves fit the world a whole number of times), so
+ * the step from the world's last column to its first is like the step at any
+ * other cell's edge in the view. Before, the stripes jumped
+ * there: a line down the water (seen underwater and from the sky). */
+static void test_water_meets_across_the_wrap(void)
+{
+    Sim s;
+    make_empty_sim(&s, 64, 32);
+    for (int i = 0; i < 64 * 32; i++) {
+        s.world.terrain[i] = TERRAIN_WATER;
+    }
+    const int levels[3] = {LEVEL_SURFACE, LEVEL_UNDERWATER, LEVEL_SKY};
+    for (int k = 0; k < 3; k++) {
+        Scene sc;
+        CHECK(scene_init(&sc, &s));
+        scene_update(&sc, &s, 10, 0);
+        Camera cam;
+        camera_init(&cam, 64, 32, VIEW_W, VIEW_H);
+        cam.level = levels[k];
+        camera_centre_on(&cam, 0.0f, 16.0f);
+        Canvas c;
+        CHECK(canvas_init(&c, VIEW_W, VIEW_H));
+        scene_draw_world(&sc, &c, &cam, &s, 0.5f, 1000, 1000, 0, 0);
+        int wrap_x, wrap_y;
+        camera_to_screen(&cam, 0.0f, 16.0f, &wrap_x, &wrap_y);
+        int ppc = camera_ppc(&cam);
+        long at_wrap = column_step(&c, wrap_x - 1, 0, VIEW_H);
+        long most_elsewhere = 0;
+        for (int x = wrap_x - 1 - ppc; x > 0; x -= ppc) {
+            long step = column_step(&c, x, 0, VIEW_H);
+            most_elsewhere = step > most_elsewhere ? step : most_elsewhere;
+        }
+        for (int x = wrap_x - 1 + ppc; x + 1 < VIEW_W; x += ppc) {
+            long step = column_step(&c, x, 0, VIEW_H);
+            most_elsewhere = step > most_elsewhere ? step : most_elsewhere;
+        }
+        CHECK(most_elsewhere > 0);
+        /* Up to half as much again: an ordinary edge varies (on the surface
+         * the glints add their own), and a seam was 2.5 to 8 times the
+         * largest ordinary step (measured 2026-11-27: 14609 against 5095 on
+         * the surface, 10600 against 4189 underwater, 5386 against 645 from
+         * the sky; fitted, 5289 against 5175, 1052 against 4446, 324 against
+         * 793). */
+        CHECK(at_wrap * 2 <= most_elsewhere * 3);
+        canvas_free(&c);
+        scene_free(&sc);
+    }
     sim_free(&s);
 }
 
@@ -2837,9 +2910,11 @@ static void test_sky_pixels(void)
      * for the strike from the air that reaches ahead (rules 5, 2026-11-23):
      * another world, another place; old and new compared side by side.
      * Re-pinned for a flyer that sees the cell below it (rules 6,
-     * 2026-11-23): another world, another place; compared side by side. */
+     * 2026-11-23): another world, another place; compared side by side.
+     * Re-pinned for the water's waves fitted to the world (2026-11-27): only
+     * the water below the haze moved; compared side by side. */
     static const uint64_t EXPECTED[3] = {
-        0x9cec1af308a01228u, 0x5bf1525559954769u, 0xf3f4828e535d7e49u,
+        0xddb76c7e69ea0310u, 0x9e5187005cb47920u, 0xf640ba4b36904c60u,
     };
     for (int zoom = 0; zoom < 3; zoom++) {
         if (pinned && hashes[zoom] != EXPECTED[zoom]) {
@@ -2947,6 +3022,7 @@ int main(void)
     test_drawing_large_leaves_fingerprint_equal();
     test_names_beside_giants();
     test_names_never_overlap();
+    test_water_meets_across_the_wrap();
     test_bare_in_autumn();
     test_withering_tree_turns_straw();
     test_trees_sort_with_bodies();
