@@ -530,6 +530,30 @@ static int first_pose_of_art_frame(const SpriteCache *c, const SpriteBody *b,
     return (k * n + clip->frames - 1) / clip->frames;
 }
 
+/*
+ * At Far a body is a few pixels across, and one pose differs from the next by
+ * a pixel or none, yet each pose of each body is a picture of its own: on the
+ * grown seed-4 world about 100,000 of them, four times what the cache holds,
+ * so over a long watch the cache kept throwing pictures out and drawing them
+ * again, some 200 a frame (the smooth window design, 2026-11-27). So at Far a
+ * skeleton-drawn body shows every SPRITE_FAR_POSE_STEP-th pose of a cycle,
+ * each held for that many: a walk of 24 poses shows 8, still twice the 4
+ * drawn frames an animal with art walks with. Poses with drawn frames are
+ * already shared (first_pose_of_art_frame), and the sleep's 6 are left whole.
+ * Only which picture is drawn changes, never the world.
+ */
+static int far_pose(const SpriteCache *c, const SpriteBody *b, int action, int frame)
+{
+    if (b->base != SPRITE_BASE_FAR || SPRITE_FRAMES[action] < SPRITE_FAR_MIN_FRAMES) {
+        return frame;
+    }
+    const ArtClip *clip = c->art ? art_clip(b->species, action, &b->traits) : NULL;
+    if (clip != NULL && clip->frames < SPRITE_FRAMES[action]) {
+        return frame;
+    }
+    return frame - frame % SPRITE_FAR_POSE_STEP;
+}
+
 SpritePicture sprite_picture(SpriteCache *c, const SpriteBody *b, int action, int frame)
 {
     action = action >= 0 && action < ACTION_COUNT ? action : ACTION_REST;
@@ -537,6 +561,7 @@ SpritePicture sprite_picture(SpriteCache *c, const SpriteBody *b, int action, in
     /* % keeps the sign of a negative number, so n is added before the second %. */
     frame = (frame % n + n) % n;
     frame = first_pose_of_art_frame(c, b, action, frame);
+    frame = far_pose(c, b, action, frame);
     uint64_t key = key_of(b, action, frame);
     /* A small picture may be in either small store, by its size. */
     SpriteStore *found = b->base == SPRITE_BASE_DETAIL ? &c->large : &c->trimmed;
