@@ -504,7 +504,39 @@ typedef struct {
     int ring_at; /* the cell's place in cell_ramps and cell_pixels */
     int ring_w;  /* how far apart two rows of those are */
     float time;  /* the water clock, in seconds */
+    /* The water's three waves, in steps of the sine table per 16th of a
+     * cell (water_waves): across, down, and the slow drift down. */
+    float wave_x, wave_y, drift_y;
 } GroundCell;
+
+/*
+ * A wave of about per_unit radians per 16th of a cell, made to fit a whole
+ * number of times into period 16ths (the world's width or height), in steps
+ * of the sine table. The world wraps round, so the cells at its last column
+ * stand beside those at its first: a wave that does not fit a whole number of
+ * times jumps there, a line across the water where the stripes do not meet
+ * (the tile seams seen underwater and from the sky, 2026-11-24). Rounded to
+ * the nearest whole number of waves, at least one, so the look stays the same:
+ * on the default 256 cells, 0.07 radians becomes 0.0706.
+ */
+static float whole_waves(float per_unit, int period)
+{
+    float turns = floorf(per_unit * (float)period / TWO_PI + 0.5f);
+    if (turns < 1.0f) {
+        turns = 1.0f;
+    }
+    return turns * (float)SCENE_SINE_STEPS / (float)period;
+}
+
+/* g's waves for the world w (whole_waves): the water's shade (v9:535),
+ * sin(ax 0.07 + ay 0.18 + sin(ay 0.05 + t 0.4) 2), each term fitted to the
+ * world's size in 16ths of a cell. */
+static void water_waves(GroundCell *g, const World *w)
+{
+    g->wave_x = whole_waves(0.07f, w->w * 16);
+    g->wave_y = whole_waves(0.18f, w->h * 16);
+    g->drift_y = whole_waves(0.05f, w->h * 16);
+}
 
 /* The nine cells a tile can show, found once per tile rather than per pixel.
  * Source k is the cell dx = k % 3 - 1, dy = k / 3 - 1 from the tile's own. */
@@ -557,7 +589,7 @@ static void draw_ground_tile(Scene *sc, Canvas *c, const GroundCell *g,
     int size = g->size, scale = g->scale, sx = g->sx, stride = c->w;
     uint32_t *px = c->px;
     int unit = 16 / size; /* the water's pattern is laid out in 16ths of a cell */
-    float wave_x = 0.07f * SINE_PER_RADIAN; /* steps per 16th of a cell across */
+    float wave_x = g->wave_x; /* steps per 16th of a cell across */
     int span = size * scale;
     /* The whole tile on the canvas: no pixel needs its own check. */
     bool inside = sx >= 0 && g->sy >= 0 && sx + span <= c->w && g->sy + span <= c->h;
@@ -565,11 +597,12 @@ static void draw_ground_tile(Scene *sc, Canvas *c, const GroundCell *g,
     uint32_t row_pixels[TILE_MAX];
     for (int ly = 0; ly < size; ly++) {
         /* The water's shade (v9:535), in pixels of a 16-pixel tile:
-         * sin(ax 0.07 + ay 0.18 + sin(ay 0.05 + t 0.4) 2) / 2 + 1/2 + noise.
-         * Everything but ax is the same along a row, so it is added up here. */
+         * sin(ax 0.07 + ay 0.18 + sin(ay 0.05 + t 0.4) 2) / 2 + 1/2 + noise,
+         * its waves fitted to the world (water_waves). Everything but ax is
+         * the same along a row, so it is added up here. */
         int ay = (g->y * size + ly) * unit;
-        float drift = sine_at(sc, ((float)ay * 0.05f + g->time * 0.4f) * SINE_PER_RADIAN);
-        float row = ((float)ay * 0.18f + drift * 2.0f) * SINE_PER_RADIAN;
+        float drift = sine_at(sc, (float)ay * g->drift_y + g->time * 0.4f * SINE_PER_RADIAN);
+        float row = (float)ay * g->wave_y + drift * 2.0f * SINE_PER_RADIAN;
         const uint16_t *inks = tile->ink + ly * size;
         for (int lx = 0; lx < size; lx++) {
             unsigned ink = inks[lx];
@@ -837,6 +870,7 @@ static bool draw_terrain(Scene *sc, Canvas *c, const Camera *cam, const Sim *s,
          * redrawn once a step, so a redraw for a tick shows the same water. */
         .time = (float)(water_ms / SCENE_DRIFT_MS * SCENE_DRIFT_MS) / 1000.0f,
     };
+    water_waves(&g, w);
     for (int r = 0; r < v.rows; r++) {
         g.y = (v.first_y + r) % w->h;
         g.sy = view_y + v.screen_y + r * ppc;
