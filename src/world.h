@@ -101,7 +101,38 @@ bool world_init(World *w, int width, int height);
 void world_clear(World *w);
 /* Frees every layer and sets the pointers to NULL; safe to call twice. */
 void world_free(World *w);
-int world_idx(const World *w, int x, int y); /* wraps both axes */
+/* v moved onto a ring of n cells, 0 .. n - 1: what ((v % n) + n) % n gives,
+ * for any v. In C, % keeps the sign of the left operand: -1 % 8 is -1, and
+ * adding n and taking % again maps it to 7. But % is a division, one of the
+ * slowest things a processor does (tens of cycles, against one for an
+ * addition), and nearly every v asked for is already on the ring or one lap
+ * off it, a neighbour's or a view's cell: those take a comparison and at most
+ * an addition. The answer is the same integer either way; only how it is found
+ * changes (the cheaper tick study, 2026-11-25). */
+static inline int world_wrap(int v, int n)
+{
+    if (v >= 0) {
+        if (v < n) {
+            return v;
+        }
+        /* v - n, not v < 2 * n: 2 * n could overflow an int. */
+        if (v - n < n) {
+            return v - n;
+        }
+    } else if (v >= -n) {
+        return v + n; /* -n is cell 0, as ((-n % n) + n) % n is */
+    }
+    return ((v % n) + n) % n;
+}
+
+/* The cell at x, y, both axes wrapped (world_wrap). static inline here rather
+ * than a function in world.c: it is called tens of millions of times a run
+ * from other files, and a call into another file cannot be inlined (the
+ * cheaper tick study, 2026-11-25). */
+static inline int world_idx(const World *w, int x, int y)
+{
+    return world_wrap(y, w->h) * w->w + world_wrap(x, w->w);
+}
 /* Whether a land body can stand on this ground at all: soil or shallow water. */
 bool world_walkable(const World *w, int cell);
 /* The same for either body: a sea body (sea true) stands on deep or shallow

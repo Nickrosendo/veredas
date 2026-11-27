@@ -249,6 +249,14 @@ speed:
 $(OUT)/speed_report$(EXE): tests/speed_report.c $(LIB_OBJ)
 	$(CC) $(CFLAGS) -MMD -MP $< $(LIB_OBJ) -o $@ $(LDLIBS)
 
+# The tick timer: how long one tick of a saved world takes, and one number for
+# the world after every tick, to compare two builds tick for tick.
+ticks:
+	$(MAKE) MODE=release $(RELEASE_OUT)/tick_report
+
+$(OUT)/tick_report$(EXE): tests/tick_report.c $(LIB_OBJ)
+	$(CC) $(CFLAGS) -MMD -MP $< $(LIB_OBJ) -o $@ $(LDLIBS)
+
 # The hunting verdict's camera tool: the Documentary camera's picks on a
 # headless world, by the window's rule.
 camera:
@@ -279,5 +287,5 @@ clean:
 # else; a bare .SECONDARY: keeps them, so objects survive between runs.
 .SECONDARY:
 
-.PHONY: all release balance speed camera window web test-window run-window-smoke test run-tests test-threads run-thread-tests test-slow run-slow-tests install uninstall \
+.PHONY: all release balance speed ticks camera window web test-window run-window-smoke test run-tests test-threads run-thread-tests test-slow run-slow-tests install uninstall \
 	clean

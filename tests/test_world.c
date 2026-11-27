@@ -1,5 +1,6 @@
 #include "test.h"
 
+#include <limits.h> /* INT_MAX */
 #include <math.h>   /* fabsf, fmaxf */
 #include <string.h> /* memcmp */
 
@@ -17,6 +18,24 @@ static void test_index_wraps(void)
     CHECK(world_idx(&w, 8, 4) == 0);
     CHECK(world_idx(&w, 3, -1) == 27);
     world_free(&w);
+}
+
+/* world_wrap finds by comparison what ((v % n) + n) % n finds by division (the
+ * cheaper tick study, 2026-11-25): the same integer for every v near the ring,
+ * where it takes its short ways, and far from it, where it divides as before. */
+static void test_wrap_matches_division(void)
+{
+    int differ = 0;
+    for (int n = 1; n <= 300; n++) {
+        for (int v = -5 * n - 3; v <= 5 * n + 3; v++) {
+            differ += world_wrap(v, n) != ((v % n) + n) % n;
+        }
+    }
+    CHECK(differ == 0);
+    /* A ring too long to double in an int: v - n < n, not v < 2 * n. */
+    CHECK(world_wrap(INT_MAX - 1, INT_MAX) == INT_MAX - 1);
+    CHECK(world_wrap(INT_MAX, INT_MAX / 2 + 1) == INT_MAX / 2);
+    CHECK(world_wrap(-(INT_MAX / 2), INT_MAX / 2) == 0);
 }
 
 static void test_bad_sizes_fail(void)
@@ -133,6 +152,7 @@ static void test_noise_tiles(void)
 int main(void)
 {
     test_index_wraps();
+    test_wrap_matches_division();
     test_bad_sizes_fail();
     test_layers_start_empty();
     test_same_seed_same_terrain();

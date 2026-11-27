@@ -156,13 +156,3 @@ bool world_ground_for(const World *w, int cell, bool sea, bool flyer)
     return world_walkable_for(w, cell, sea) ||
            (flyer && w->terrain[cell] == TERRAIN_ROCK);
 }
-
-int world_idx(const World *w, int x, int y)
-{
-    /* In C, % keeps the sign of the left operand: -1 % 8 is -1. Adding
-     * the width and taking % again maps -1 to w - 1. Correct for any
-     * x >= -w, enough for neighbours one or a few steps away. */
-    int wrapped_x = ((x % w->w) + w->w) % w->w;
-    int wrapped_y = ((y % w->h) + w->h) % w->h;
-    return wrapped_y * w->w + wrapped_x;
-}
