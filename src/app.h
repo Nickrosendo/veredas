@@ -15,7 +15,7 @@
 
 /* Raised with each version tag (git tag v0.3.0 and on): the playlog and
  * --version print it, so a tester's file names the build it came from. */
-#define VEREDAS_VERSION "0.3.0"
+#define VEREDAS_VERSION "0.4.0"
 
 /* What main returns to the shell: 0 for success, 1 when something failed
  * while running, 2 for a mistake on the command line (the convention of
