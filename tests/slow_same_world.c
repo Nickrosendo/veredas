@@ -10,8 +10,9 @@
 /* Seed 4 at 256 by 144, the window's size, grown 400 ticks (1,147 animals,
  * 277 flyers and 374 at sea when the compared ticks begin), then 300 ticks
  * compared (1,486 animals at the end): the number the code before the study
- * made (commit 5f8f6d3). */
-#define SEED_4_256X144 0xf78f709f079f3542ULL
+ * made (commit 5f8f6d3). Re-pinned for rules 7 (health grows with the body,
+ * 2026-11-27): another world, 1,106 animals growing to 1,466. */
+#define SEED_4_256X144 0x064bba195c50aff5ULL
 
 static void test_full_world_same_as_before(void)
 {

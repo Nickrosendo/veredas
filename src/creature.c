@@ -2403,7 +2403,14 @@ static void heal(Creature *c, const Settings *s)
 
 /* Turns the growth gene's share of any surplus energy into body. Surplus is
  * energy above growth_surplus * what mating needs, so a creature always keeps
- * enough to mate. growth_cost is at least a small number, by the table's check. */
+ * enough to mate. growth_cost is at least a small number, by the table's check.
+ * Its health grows with its body, keeping the same share of an unhurt body's
+ * (creature_max_health, which rises with size): new body is as sound as the
+ * rest. Before rules 7 health stayed put while the body grew, and healing
+ * (heal_rate a tick) could not keep up, so a grown animal untouched by any
+ * wound read as badly hurt to its own pain sense, to those who saw it, and on
+ * the card: giants held 31 % of their health on average, none above 95 %
+ * (seed 4, year 3, 2026-11-27). */
 static void grow(Creature *c, const Settings *s)
 {
     float surplus = c->energy - s->growth_surplus * creature_mate_needs(c, s);
@@ -2411,8 +2418,12 @@ static void grow(Creature *c, const Settings *s)
         return;
     }
     float spent = surplus * c->genome.g[GENE_GROWTH];
+    float max_before = creature_max_health(c, s);
     c->energy -= spent;
     c->grown += spent / s->growth_cost;
+    /* health_per_size is above 0 by the table's check and size_min too, so
+     * max_before is never 0. */
+    c->health *= creature_max_health(c, s) / max_before;
 }
 
 /* The share of its upkeep a creature pays this tick, by what it is doing. The

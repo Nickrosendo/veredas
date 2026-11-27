@@ -560,10 +560,13 @@ static void test_known_world_pixels(void)
          * so the stripes meet where the world wraps; on this 64-cell world
          * 0.07 becomes 0.0675 a pixel. Only water moved, its stripes' edges
          * by a pixel or two (the World zoom not at all); old and new written
-         * out and compared side by side with the changed pixels marked. */
+         * out and compared side by side with the changed pixels marked.
+         * Re-pinned for health that grows with the body (rules 7,
+         * 2026-11-27): another world, the same drawing, every zoom moved
+         * (0.5 to 3 % of pixels); old and new compared side by side. */
         static const uint64_t EXPECTED[CAMERA_ZOOMS] = {
-            0xb265b91ad675775du, 0x320b0e382c920ca5u,
-            0xdcb6a003c09ad8b0u, 0x0caceb27c07d23b5u,
+            0x6611d263b9c6a7deu, 0x012e4d3a2e84da3du,
+            0x8b05bac0ab50f52au, 0x7a69e0769f9aefb5u,
         };
         if (pinned && hashes[level] != EXPECTED[level]) {
             printf("level %d: 0x%llxu\n", level,
@@ -1613,9 +1616,11 @@ static void test_underwater_pixels(void)
      * flyer that sees the cell below it (rules 6, 2026-11-23): another world
      * and place again; compared side by side. Re-pinned for the water's
      * waves fitted to the world (2026-11-27): only the water's stripes moved;
-     * compared side by side with the changed pixels marked. */
+     * compared side by side with the changed pixels marked. Re-pinned for
+     * health that grows with the body (rules 7, 2026-11-27): another world,
+     * so the view centres on another place; compared side by side. */
     static const uint64_t EXPECTED[3] = {
-        0x12834e887ed4a424u, 0xbab376182a166a0eu, 0x88e87934b9bef9b5u,
+        0x33205ef53d935818u, 0xfcbbe57b2ff16246u, 0xc826b8c554655d28u,
     };
     for (int zoom = 0; zoom < 3; zoom++) {
         if (pinned && hashes[zoom] != EXPECTED[zoom]) {
@@ -2912,9 +2917,11 @@ static void test_sky_pixels(void)
      * Re-pinned for a flyer that sees the cell below it (rules 6,
      * 2026-11-23): another world, another place; compared side by side.
      * Re-pinned for the water's waves fitted to the world (2026-11-27): only
-     * the water below the haze moved; compared side by side. */
+     * the water below the haze moved; compared side by side. Re-pinned for
+     * health that grows with the body (rules 7, 2026-11-27): another world,
+     * another place; compared side by side. */
     static const uint64_t EXPECTED[3] = {
-        0xddb76c7e69ea0310u, 0x9e5187005cb47920u, 0xf640ba4b36904c60u,
+        0xbbfca86c6d5c67acu, 0xf7e2c80e2dfe897au, 0x66f9165d6675968bu,
     };
     for (int zoom = 0; zoom < 3; zoom++) {
         if (pinned && hashes[zoom] != EXPECTED[zoom]) {

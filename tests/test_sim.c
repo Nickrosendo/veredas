@@ -90,9 +90,10 @@
  * layer, fish bitten as meat, a dive's strike bonus and a flyer's farther
  * sight and smell up in the air; then a strike from the air that reaches the
  * cell ahead when nobody is right below (rules 5); then a flyer up whose view
- * ahead also sees the creature right below it (rules 6).
+ * ahead also sees the creature right below it (rules 6); then health that
+ * grows with the body, keeping its share as a creature grows (rules 7).
  */
-#define SEED_7_AFTER_500 0x8898b6ba0272fbb8ULL
+#define SEED_7_AFTER_500 0x35ddd2407661aa80ULL
 /* The same world on GitHub's Linux runner. Its maths library rounds the last
  * bit of some tanhf results differently from Debian 12 on Nicolas's machine
  * (found 2026-11-19: the runner image changed, and the old code's pin failed
@@ -176,7 +177,7 @@ static void test_same_seed_same_checksum(void)
      * value above changes how worlds unfold, so old world codes would replay
      * wrong: raise VEREDAS_RULES (sim.h) in the same commit, and this number with
      * it. Checked on every platform, since it is the rule, not the maths. */
-    CHECK(VEREDAS_RULES == 6);
+    CHECK(VEREDAS_RULES == 7);
     sim_free(&a);
     sim_free(&b);
 }

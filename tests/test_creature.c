@@ -3599,6 +3599,30 @@ static void test_growth_follows_gene(void)
                creature_size(&half, &s) - start));
 }
 
+/* Health grows with the body (rules 7): a creature that grows keeps the same
+ * share of an unhurt body's health, sound as sound and hurt as hurt. Healing
+ * is turned off so only growth moves it. */
+static void test_growth_keeps_health_share(void)
+{
+    Settings s = settings_default();
+    s.heal_rate = 0.0f;
+    Creature c = {.alive = true};
+    c.genome.g[GENE_GROWTH] = 1.0f;
+    for (int k = 0; k < 2; k++) {
+        float share = k == 0 ? 1.0f : 0.4f; /* unhurt, then hurt */
+        c.grown = 0.0f;
+        c.health = share * creature_max_health(&c, &s);
+        float size = creature_size(&c, &s);
+        for (int t = 0; t < 50; t++) {
+            c.age = 0;
+            c.energy = 1000.0f;
+            CHECK(creature_upkeep(&c, &s));
+        }
+        CHECK(creature_size(&c, &s) > 2.0f * size); /* it did grow, a lot */
+        CHECK(fabsf(c.health / creature_max_health(&c, &s) - share) < 1e-4f);
+    }
+}
+
 static void test_no_top_size(void)
 {
     Settings s = settings_default();
@@ -4626,6 +4650,7 @@ int main(void)
     test_damage_never_below_zero();
     test_growth_needs_surplus();
     test_growth_follows_gene();
+    test_growth_keeps_health_share();
     test_no_top_size();
     test_fed_giant_lives_four_years();
     test_big_bites_more();

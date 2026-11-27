@@ -50,11 +50,21 @@ static void test_branch_equal_then_apart(void)
     CHECK(sim_checksum(&b.other) == sim_checksum(&s));
     CHECK(sim_story_checksum(&b.other) == sim_story_checksum(&s));
 
-    /* A trait in the shown world only: from the next tick on they differ. */
+    /* A trait in the shown world only: from the next tick on they differ.
+     * Given to a creature that does not carry it already: genes pile up at
+     * their ends, so the first creature may have armour near 1 and the gift
+     * would change nothing (as test_compare.c's gift does too). */
     int slot = first_alive(&s);
-    CHECK(slot >= 0);
+    while (slot >= 0 && slot < s.pool.capacity &&
+           (!s.pool.items[slot].alive || s.pool.items[slot].genome.g[GENE_ARMOUR] > 0.9f)) {
+        slot++;
+    }
+    CHECK(slot >= 0 && slot < s.pool.capacity);
     CHECK(actions_give_trait(&s, s.pool.items[slot].id, GENE_ARMOUR, 1.0f));
-    step_both(&b, &s, 200);
+    /* Checked on the next tick, as said: much later the worlds may be the
+     * same again, if the creature dies before what it did spreads (under
+     * rules 7 this one dies 119 ticks on, and the two worlds meet again). */
+    step_both(&b, &s, 1);
     CHECK(b.other.tick == s.tick);
     CHECK(sim_checksum(&b.other) != sim_checksum(&s));
     branch_free(&b);

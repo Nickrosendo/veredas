@@ -26,7 +26,7 @@
 
 /* test_sim.c's SEED_7_AFTER_500: seed 7 at 64 by 32 after 500 steps, on the
  * machine the numbers below were pinned on. */
-#define SAME_WORLD_MATHS 0x8898b6ba0272fbb8ULL
+#define SAME_WORLD_MATHS 0x35ddd2407661aa80ULL
 
 /* Whether this machine's maths gives the worlds the pinned numbers came from. */
 static bool same_world_maths_as_pinned(void)
