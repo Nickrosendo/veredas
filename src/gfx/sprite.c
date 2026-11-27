@@ -69,20 +69,38 @@ static const float BASE_FACTOR[SPRITE_BASES] = {1.0f, 0.5f, 1.6f};
  * The species' K cap, worked out the first time it is asked for and kept for
  * the rest of the program. skeleton_k_cap costs about 10 ms a species (180 ms
  * for all 17), so doing it lazily spreads that over the first frames that
- * show each species, instead of making start-up wait for all of them. static
- * variables inside a function keep their values between calls, and start at
- * 0 and false. The answer never changes, so one copy for every cache is right;
- * like skeleton_k_cap itself, this is not for two threads at once.
+ * show each species, instead of making start-up wait for all of them; while
+ * a prelude runs on its own thread the window works them out ahead, one a
+ * frame (sprite_warm_caps). static variables outside a function are seen
+ * only in this file, and start at 0 and false. The answer never changes, so
+ * one copy for every cache is right; like skeleton_k_cap itself, this is not
+ * for two threads at once.
  */
+static float caps[SPECIES_COUNT];
+static bool known[SPECIES_COUNT];
+
 static float cap_of(int species)
 {
-    static float caps[SPECIES_COUNT];
-    static bool known[SPECIES_COUNT];
     if (!known[species]) {
         caps[species] = skeleton_k_cap(species);
         known[species] = true;
     }
     return caps[species];
+}
+
+bool sprite_warm_caps(int count)
+{
+    for (int species = 0; species < SPECIES_COUNT; species++) {
+        if (known[species]) {
+            continue;
+        }
+        if (count == 0) {
+            return true; /* this one is still to do */
+        }
+        (void)cap_of(species);
+        count--;
+    }
+    return false;
 }
 
 float sprite_k(const SpriteBody *b)

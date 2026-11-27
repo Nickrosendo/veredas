@@ -71,13 +71,13 @@ void app_prelude_replay(Prelude *p, const Sim *sim, uint64_t until)
     p->replay = true;
 }
 
-/* One tick of the prelude, ending it when it is over. */
-static void prelude_tick(Prelude *p, Sim *sim)
+bool app_prelude_tick(Prelude *p, Sim *sim)
 {
     sim_step(sim);
     if (sim->tick >= p->until || sim_is_over(sim)) {
         p->active = false;
     }
+    return p->active;
 }
 
 bool app_prelude_step(Prelude *p, Sim *sim, uint64_t (*now_ms)(void),
@@ -85,7 +85,7 @@ bool app_prelude_step(Prelude *p, Sim *sim, uint64_t (*now_ms)(void),
 {
     uint64_t start = now_ms();
     while (p->active) {
-        prelude_tick(p, sim);
+        app_prelude_tick(p, sim);
         /* Unsigned subtraction: right even if the clock wrapped. */
         if (now_ms() - start >= budget_ms) {
             break;
@@ -97,7 +97,7 @@ bool app_prelude_step(Prelude *p, Sim *sim, uint64_t (*now_ms)(void),
 void app_prelude_finish(Prelude *p, Sim *sim)
 {
     while (p->active) {
-        prelude_tick(p, sim);
+        app_prelude_tick(p, sim);
     }
 }
 
@@ -108,7 +108,13 @@ void app_prelude_stop(Prelude *p)
 
 void app_prelude_text(const Prelude *p, const Sim *sim, char *out, size_t size)
 {
-    int year = years_whole(sim->tick, sim->set.ticks_per_year) + 1;
+    app_prelude_text_at(p, sim->tick, sim->set.ticks_per_year, out, size);
+}
+
+void app_prelude_text_at(const Prelude *p, uint64_t tick, int ticks_per_year, char *out,
+                         size_t size)
+{
+    int year = years_whole(tick, ticks_per_year) + 1;
     snprintf(out, size, p->replay ? "replaying the world code: year %d of %d, "
                                     "any key to stop there"
                                   : "evolving ancestors: year %d of %d, "

@@ -80,6 +80,9 @@ int app_prelude_years(const Options *o, const Settings *s, bool interactive);
 void app_prelude_start(Prelude *p, const Sim *sim, int years);
 /* Starts replaying a world opened from a code, at tick 0, up to until. */
 void app_prelude_replay(Prelude *p, const Sim *sim, uint64_t until);
+/* One tick of the prelude, ending it when it is over (the world reached
+ * until, or died). Returns whether it is still on. */
+bool app_prelude_tick(Prelude *p, Sim *sim);
 /* Runs prelude ticks until budget_ms milliseconds by now_ms have passed, the
  * prelude is over or the world has died. Returns whether it is still on.
  * now_ms is a function, because each program reads its clock its own way. */
@@ -92,6 +95,11 @@ void app_prelude_finish(Prelude *p, Sim *sim);
 void app_prelude_stop(Prelude *p);
 /* "evolving ancestors: year 12 of 30, any key to stop" */
 void app_prelude_text(const Prelude *p, const Sim *sim, char *out, size_t size);
+/* The same line for a run that has got to tick, in years of ticks_per_year:
+ * for a prelude on its own thread (preludethread.h), whose world the window
+ * does not read. */
+void app_prelude_text_at(const Prelude *p, uint64_t tick, int ticks_per_year, char *out,
+                         size_t size);
 
 int app_game_over_lines(const Sim *sim, char lines[][APP_OVER_COLS]);
 

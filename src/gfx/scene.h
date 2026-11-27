@@ -246,6 +246,12 @@ bool scene_init(Scene *sc, const Sim *s);
 void scene_free(Scene *sc);
 /* After r: ids start again, so everything remembered is wrong. */
 void scene_reset(Scene *sc);
+/* Builds up to `most` of the ground tiles the camera's view needs and the
+ * cache does not hold yet, so the frame that first shows it builds fewer: the
+ * window calls it while a prelude runs on its own thread (a tile depends on
+ * the terrain alone, which the prelude does not change). Returns whether any
+ * may still be missing. */
+bool scene_warm_tiles(Scene *sc, const Camera *cam, const Sim *s, int most);
 /* Which step of the overlays' clock this time is in. While paused the water,
  * the grass and the trees are all that moves, and only once a step, so a frame
  * where this has not changed need not be drawn. */

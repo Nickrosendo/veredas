@@ -156,6 +156,10 @@ void sprite_cache_set_art(SpriteCache *c, bool on);
  * call, which may reuse its entry. action is an ACTION_ value; frame is cut to
  * the action's cycle; pose_at (pose.h) gives its pose. */
 SpritePicture sprite_picture(SpriteCache *c, const SpriteBody *b, int action, int frame);
+/* Works out up to count species' size caps (sprite_k needs them; about 10 ms
+ * each) not known yet, so a later frame need not. Returns whether any are
+ * still unknown. Like the caps themselves, for one thread only: the window's. */
+bool sprite_warm_caps(int count);
 /* Where up to count (at most 3) scars fall on the picture's body, as shares of
  * its extent: grid pixels written to out, how many returned (at most max). */
 int sprite_scar_pixels(const SpritePicture *p, int count, int16_t out[][2], int max);

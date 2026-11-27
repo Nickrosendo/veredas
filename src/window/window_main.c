@@ -39,6 +39,7 @@
 #include "compare.h"
 #include "keyhelp.h"
 #include "playlog.h"
+#include "preludethread.h"
 #include "worldcode.h"
 #include "save.h"
 #include "scene.h"
@@ -258,6 +259,12 @@ typedef struct {
      * many years each new world gets. */
     Prelude prelude;
     int prelude_years;
+    /* The prelude's ticks, on a thread of their own (preludethread.h) while
+     * the window is open: the world shown meanwhile is a copy the worker
+     * hands over about once a second, and the bar and the year line follow
+     * prelude_at, the worker's own tick, read every frame. */
+    PreludeThread prelude_thread;
+    uint64_t prelude_at;
     /* The mode, Documentary or Sandbox, and the Sandbox menus (sandbox.h).
      * The screen's, not the world's: never saved. */
     Sandbox sandbox;
@@ -464,10 +471,58 @@ static void forget_old_world(App *a)
     levels_follow_init(&a->levels);
 }
 
+/* Takes the world back from the prelude's thread, where it got to, so the
+ * main thread can change it: before any key is handled while the prelude
+ * runs, and before a new world. The prelude itself goes on being on (a->
+ * prelude.active) while years are left: a key decides whether it ends, and
+ * if it does not, the next frame starts a thread again from here. */
+static void hold_prelude(App *a)
+{
+    if (a->prelude_thread.started) {
+        preludethread_end(&a->prelude_thread, &a->sim, &a->prelude);
+    }
+}
+
+/* The prelude's ticks for this frame. With the window open (not a --frames
+ * run, which must come out the same every time) a thread runs them, started
+ * here on the first frame of a run: this frame only takes the copy the worker
+ * may have handed over, and its whole world once the run is over. Where no
+ * thread can be had (the browser build), as many ticks as fit in 28 ms of the
+ * frame's 33, as before. Returns whether the thread ran them. */
+static bool step_prelude(App *a)
+{
+    if (!a->prelude_thread.started && a->opt->frames == 0) {
+        (void)preludethread_start(&a->prelude_thread, &a->sim, &a->prelude,
+                                  platform_now_ms);
+    }
+    if (!a->prelude_thread.started) {
+        app_prelude_step(&a->prelude, &a->sim, platform_now_ms, APP_PRELUDE_FRAME_MS);
+        a->prelude_at = a->sim.tick;
+        return false;
+    }
+    bool finished;
+    a->prelude_at = preludethread_progress(&a->prelude_thread, &finished);
+    if (finished) {
+        preludethread_end(&a->prelude_thread, &a->sim, &a->prelude);
+        a->prelude_at = a->sim.tick;
+    } else {
+        (void)preludethread_take_copy(&a->prelude_thread, &a->sim);
+    }
+    /* While the worker ticks, this thread has most of the frame to itself:
+     * it does ahead some of the work of the world's first frame, a little a
+     * frame. A species' size cap (sprite.h) takes about 10 ms; a ground tile
+     * of the view about 0.1 ms, so 40 take about 4. */
+    if (!sprite_warm_caps(1)) {
+        (void)scene_warm_tiles(&a->scene, &a->camera, &a->sim, 40);
+    }
+    return true;
+}
+
 /* Builds a->sim again from seed with its own settings, and starts its
  * ancestors. */
 static void start_world(App *a, uint64_t seed)
 {
+    hold_prelude(a);
     if (!sim_reseed(&a->sim, seed)) {
         a->failed = true; /* the brain could not be reopened */
         a->running = false;
@@ -700,6 +755,7 @@ static bool open_code_text(App *a, const char *text, char *err, size_t len)
     if (!built) {
         return false;
     }
+    hold_prelude(a);
     forget_old_world(a);
     sim_free(&a->sim);
     /* A struct assignment copies every field, the pointers included: fresh's
@@ -906,6 +962,9 @@ static void handle_key(App *a, int key)
         a->redraw = true;
         return;
     }
+    /* Every key below may end the prelude, open the setup screen over it or
+     * quit: each needs the world itself, not the copy shown while it runs. */
+    hold_prelude(a);
 #ifndef VEREDAS_DEMO
     /* m while the ancestors evolve: Sandbox, and its setup screen, since a new
      * start is cheapest before anything has been watched. */
@@ -1916,7 +1975,7 @@ static void draw_prelude(App *a)
      * while the prelude is on, so there is no division by zero; a double,
      * since a tick count is a uint64_t. */
     double done = a->prelude.until > 0
-                      ? (double)a->sim.tick / (double)a->prelude.until
+                      ? (double)a->prelude_at / (double)a->prelude.until
                       : 0.0;
     done = done > 1.0 ? 1.0 : done;
     int bar_w = w / 3, bar_h = 6;
@@ -1927,7 +1986,8 @@ static void draw_prelude(App *a)
 
     /* "evolving ancestors: year 3 of 8, any key to stop", dimmed. */
     char year[120];
-    app_prelude_text(&a->prelude, &a->sim, year, sizeof(year));
+    app_prelude_text_at(&a->prelude, a->prelude_at, a->sim.set.ticks_per_year, year,
+                        sizeof(year));
     text_draw(&a->canvas, x + (w - text_width(year)) / 2, top + 4 * FONT_H, year,
               colour_faded(PALETTE_TEXT, 170));
 
@@ -2218,6 +2278,7 @@ static void app_frame(void *arg)
     a->ticks_spent_us = 0;
     frame_log_begin(&a->frame_log, platform_now_us());
     uint64_t tick_before = a->sim.tick;
+    bool threaded_prelude = false;
     playlog_frame(&a->playlog, platform_now_ms(), a->sandbox.on);
     Event e;
     while (platform_poll(&e)) {
@@ -2249,12 +2310,11 @@ static void app_frame(void *arg)
                  "the world waits for you to start it: Enter or Esc");
         a->notice_frames = 0;
     } else if (a->prelude.active) {
-        /* As many prelude ticks as fit in 28 ms of the frame's 33, so the
-         * window and the keys still keep up; pausing does not hold it. */
-        app_prelude_step(&a->prelude, &a->sim, platform_now_ms,
-                         APP_PRELUDE_FRAME_MS);
+        /* Pausing does not hold it. */
+        threaded_prelude = step_prelude(a);
         if (a->prelude.active) {
-            app_prelude_text(&a->prelude, &a->sim, a->notice, sizeof(a->notice));
+            app_prelude_text_at(&a->prelude, a->prelude_at, a->sim.set.ticks_per_year,
+                                a->notice, sizeof(a->notice));
             a->notice_frames = 0; /* set again every frame */
         } else {
             a->notice[0] = '\0';
@@ -2361,8 +2421,10 @@ static void app_frame(void *arg)
     }
 
     /* The cast: the ticks of one frame, at most a speed's worth or a
-     * prelude's 28 ms of them, far below INT_MAX. */
-    facts.ticks = (int)(a->sim.tick - tick_before);
+     * prelude's 28 ms of them, far below INT_MAX. A prelude on its own
+     * thread runs none here, though the copy of its world taken this frame
+     * may be many ticks on. */
+    facts.ticks = threaded_prelude ? 0 : (int)(a->sim.tick - tick_before);
     frame_log_part(&a->frame_log, FRAME_PART_OTHER, platform_now_us());
     frame_log_end(&a->frame_log, platform_now_us(), &facts);
 
@@ -2664,6 +2726,9 @@ int main(int argc, char **argv)
 
     platform_run(app_frame, &app, opt.frames > 0 ? 0 : FRAMES_PER_SECOND);
 
+    /* A window closed while the prelude runs: the world where it got to is
+     * the one saved on leaving. */
+    hold_prelude(&app);
     int result = app_leave(&app);
     frame_log_close(&app.frame_log);
     platform_close();

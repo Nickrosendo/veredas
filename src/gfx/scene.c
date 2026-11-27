@@ -780,6 +780,31 @@ static bool refresh_keys(Scene *sc, const World *w)
     return true;
 }
 
+bool scene_warm_tiles(Scene *sc, const Camera *cam, const Sim *s, int most)
+{
+    const World *w = &s->world;
+    int size = camera_sprite_size(cam);
+    if (size == 0 || !refresh_keys(sc, w)) {
+        return false; /* flat colours need no tiles */
+    }
+    CameraCells v;
+    camera_cells(cam, &v);
+    long builds_before = sc->tiles.builds;
+    /* The same cells draw_terrain visits; tiles_cache_get builds a missing
+     * tile, and a kept one is only marked as used. */
+    for (int r = 0; r < v.rows; r++) {
+        int y = (v.first_y + r) % w->h;
+        for (int k = 0; k < v.cols; k++) {
+            int x = (v.first_x + k) % w->w;
+            if (sc->tiles.builds - builds_before >= most) {
+                return true;
+            }
+            (void)tiles_cache_get(&sc->tiles, sc->keys[y * w->w + x], size);
+        }
+    }
+    return false;
+}
+
 /* Every cell the camera sees, as flat colours: the furthest zoom. */
 static void draw_flat_cells(Canvas *c, const Camera *cam, const Sim *s,
                             const CameraCells *v, int view_x, int view_y)
