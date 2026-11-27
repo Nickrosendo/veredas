@@ -317,12 +317,6 @@ uint32_t tiles_key(const World *w, int x, int y)
     return key;
 }
 
-/* The class of one of the key's nine cells, dx and dy each -1..1. */
-static int key_class(uint32_t key, int dx, int dy)
-{
-    return tiles_key_class(key, (dy + 1) * 3 + (dx + 1));
-}
-
 int tiles_key_class(uint32_t key, int source)
 {
     return (int)((key >> (3 + 2 * source)) & 3u);
@@ -373,11 +367,51 @@ static void resolve(int size, int px, int py, int *dx, int *dy)
     *dy = clamp1(ty + floor_div(ly + jy, size));
 }
 
+/*
+ * resolve's answers, worked out once for each tile size and kept: which of
+ * the nine cells a point shows depends on the point and the size alone, never
+ * on the key, yet building one tile asks it about 19 times a pixel (its
+ * neighbours' edges and banks look a few pixels round). A table of every
+ * point a tile of 16 or 8 pixels asks about, RESOLVE_MARGIN pixels round it
+ * (a bank looks 5 up, the most of any), holds the source (dy + 1) * 3 +
+ * (dx + 1), the same numbers resolve gives. Filled the first time a size is
+ * built; like the tile cache, only the window's thread builds tiles.
+ */
+#define RESOLVE_MARGIN 8
+#define RESOLVE_SPAN (TILE_MAX + 2 * RESOLVE_MARGIN)
+static uint8_t resolved[2][RESOLVE_SPAN][RESOLVE_SPAN]; /* [0]: size 16, [1]: 8 */
+static bool resolved_ready[2];
+
+/* The source of point (px, py) of a tile of this size: from the table when it
+ * covers the point, else from resolve itself. */
+static int source_at(int size, int px, int py)
+{
+    int t = size == 16 ? 0 : (size == 8 ? 1 : -1);
+    bool inside = px >= -RESOLVE_MARGIN && px < size + RESOLVE_MARGIN &&
+                  py >= -RESOLVE_MARGIN && py < size + RESOLVE_MARGIN;
+    if (t < 0 || !inside) {
+        int dx, dy;
+        resolve(size, px, py, &dx, &dy);
+        return (dy + 1) * 3 + (dx + 1);
+    }
+    if (!resolved_ready[t]) {
+        for (int y = -RESOLVE_MARGIN; y < size + RESOLVE_MARGIN; y++) {
+            for (int x = -RESOLVE_MARGIN; x < size + RESOLVE_MARGIN; x++) {
+                int dx, dy;
+                resolve(size, x, y, &dx, &dy);
+                /* The cast: a source is 0..8. */
+                resolved[t][y + RESOLVE_MARGIN][x + RESOLVE_MARGIN] =
+                    (uint8_t)((dy + 1) * 3 + (dx + 1));
+            }
+        }
+        resolved_ready[t] = true;
+    }
+    return resolved[t][py + RESOLVE_MARGIN][px + RESOLVE_MARGIN];
+}
+
 static int class_at(uint32_t key, int size, int px, int py)
 {
-    int dx, dy;
-    resolve(size, px, py, &dx, &dy);
-    return key_class(key, dx, dy);
+    return tiles_key_class(key, source_at(size, px, py));
 }
 
 /* The edge of a water pixel: a bank under land just above, then its shadow.
@@ -470,15 +504,14 @@ static unsigned water_alt(uint32_t key, int size, int lx, int ly, int cls)
                 if (!on_ring) {
                     continue;
                 }
-                int dx, dy;
-                resolve(size, lx + ox, ly + oy, &dx, &dy);
-                if (key_class(key, dx, dy) != other) {
+                int source = source_at(size, lx + ox, ly + oy);
+                if (tiles_key_class(key, source) != other) {
                     continue;
                 }
                 /* Chance (reach + 1 - d) / (2 (reach + 1)): 3/8, 2/8, 1/8 at 16. */
                 int threshold = BAYER[ly & 3][lx & 3];
                 bool borrow = threshold * 2 * (reach + 1) < 16 * (reach + 1 - d);
-                return borrow ? (unsigned)((dy + 1) * 3 + (dx + 1)) + 1u : 0u;
+                return borrow ? (unsigned)source + 1u : 0u;
             }
         }
     }
@@ -491,10 +524,8 @@ void tiles_build_auto(uint16_t *code, uint32_t key, int size)
     bool both_waters = has_both_waters(key);
     for (int ly = 0; ly < size; ly++) {
         for (int lx = 0; lx < size; lx++) {
-            int dx, dy;
-            resolve(size, lx, ly, &dx, &dy);
-            int cls = key_class(key, dx, dy);
-            unsigned source = (unsigned)((dy + 1) * 3 + (dx + 1));
+            unsigned source = (unsigned)source_at(size, lx, ly);
+            int cls = tiles_key_class(key, (int)source);
             unsigned shade = 0, edge, foam = 0, alt = 0;
             if (class_is_wet(cls)) {
                 /* Water's shade moves with time, so scene works it out. */
