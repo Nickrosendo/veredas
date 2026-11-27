@@ -83,6 +83,27 @@ void panel_draw(const Sim *s, int col, int row0, int rows);
 /* How many of a creature's newest events the panel's log shows. */
 #define PANEL_LOG_LINES 5
 
+/*
+ * Everything panel_draw reads from the world, gathered in one struct that
+ * holds no pointer into it. panel_draw is panel_facts then panel_draw_facts.
+ * Split so that a thread that owns the world (the ancestors' years,
+ * preludethread.h) can gather the facts after each tick, and the window's
+ * thread can draw them while the world itself is being stepped. panel_facts
+ * only reads the world (and the stats scratch buffer it owns), and keeps
+ * nothing between calls: it is safe on any thread that owns s.
+ */
+typedef struct {
+    Stats now; /* sim_stats_now: the world as it is, its histories included */
+    ColourGroup groups[PANEL_GROUP_LINES];
+    int n_groups;
+    int ticks_per_year;
+    int64_t births_refused;
+    char tactics[PANEL_LINE_BYTES]; /* tactics_list's line */
+} PanelFacts;
+
+void panel_facts(const Sim *s, PanelFacts *out);
+void panel_draw_facts(const PanelFacts *f, int col, int row0, int rows);
+
 /* Inspect mode's panel as text: when a creature is under the cursor, first its
  * life (name, title, family, age, health, kills and its newest events, newest
  * first), then the cell, then the creature's body and genes. Writes at most max

@@ -28,6 +28,7 @@
 #include "lifepage.h"
 #include "lookahead.h"
 #include "lookthread.h"
+#include "preludethread.h"
 #include "menus.h"
 #include "notices.h"
 #include "options.h"
@@ -191,6 +192,33 @@ static const char WINDOW_KEYS[] =
     "       Every button (the bar along the bottom, the boxes along the top,\n"
     "       the menus and the card) presses a key, which its hover label names.\n";
 
+/* What the title line, the weather's fade and the frame's bookkeeping read
+ * of the world: a handful of numbers, taken from a->sim while it is this
+ * thread's, or from the glance while the ancestors' thread has it. */
+typedef struct {
+    uint64_t tick;
+    int ticks_per_year;
+    int animals;
+    bool over; /* sim_is_over */
+    Weather weather;
+} WorldTop;
+
+/*
+ * Everything the prelude's screen shows of the world while the world is on
+ * the ancestors' thread (preludethread.h): filled there by glance_fill after
+ * each tick, copied here under its lock. Plain values and no pointers into
+ * the world, so nothing read from it can change while it is drawn. About
+ * 1.5 KB, copied once a frame.
+ */
+typedef struct {
+    WorldTop top;
+    PanelFacts panel;
+    /* The largest family and its strip (family_largest, family_strip). */
+    uint32_t lineage;
+    int strip_n;
+    FamilySample strip[FAMILY_STRIP];
+} Glance;
+
 /* Everything a frame needs, passed through platform_run as a void *. */
 typedef struct {
     Sim sim;
@@ -258,6 +286,11 @@ typedef struct {
      * many years each new world gets. */
     Prelude prelude;
     int prelude_years;
+    /* The ancestors' ticks on a thread of their own (preludethread.h). While
+     * prelude_thread.away, a->sim and a->families are that thread's, and
+     * the screen draws from glance, the last one it published. */
+    PreludeThread prelude_thread;
+    Glance glance;
     /* The mode, Documentary or Sandbox, and the Sandbox menus (sandbox.h).
      * The screen's, not the world's: never saved. */
     Sandbox sandbox;
@@ -319,6 +352,60 @@ typedef struct {
     LevelFollow levels;
 } App;
 
+static WorldTop top_of(const Sim *s)
+{
+    return (WorldTop){.tick = s->tick,
+                      .ticks_per_year = s->set.ticks_per_year,
+                      .animals = s->pool.count,
+                      .over = sim_is_over(s),
+                      .weather = s->weather};
+}
+
+/*
+ * The glance (Glance, above): run by the ancestors' thread after each tick,
+ * while the world is its alone, and once on this thread when the world is
+ * given. ctx is a->families, whose look every FAMILY_PASS_TICKS runs here
+ * too, so the family strip goes on growing through the ancestors' years as
+ * it did when they ran on this thread. The function pointer type,
+ * PreludeGlanceFn, is why ctx and out come as void *.
+ */
+static void glance_fill(void *ctx, const Sim *s, void *out)
+{
+    Families *f = ctx;
+    Glance *g = out;
+    family_update(f, s);
+    g->top = top_of(s);
+    panel_facts(s, &g->panel);
+    g->lineage = family_largest(f, s);
+    g->strip_n = family_strip(f, g->lineage, g->strip);
+}
+
+/* Whether the world is on the ancestors' thread now. Only this thread
+ * changes away, so it reads it without the lock. */
+static bool world_away(const App *a)
+{
+    return a->prelude_thread.away;
+}
+
+/* The world's top numbers, from wherever they may be read this frame. */
+static WorldTop world_top(const App *a)
+{
+    return world_away(a) ? a->glance.top : top_of(&a->sim);
+}
+
+/* The world back from the ancestors' thread, before anything that reads or
+ * changes it: a key, a click, a quit. Waits for the tick under way, at most
+ * one. The prelude stays on unless that tick was its last; the next frame
+ * gives the world back to the thread if nothing then needs it here. */
+static void take_world(App *a)
+{
+    if (!world_away(a)) {
+        return;
+    }
+    preludethread_take(&a->prelude_thread);
+    app_prelude_settle(&a->prelude, &a->sim);
+}
+
 static void apply_window_size(App *a, int w, int h)
 {
     /* If memory runs out the old canvas stays, and is simply stretched. */
@@ -363,6 +450,7 @@ static bool water_under(const App *a, int sx, int sy)
  * comes up (levels.h); otherwise it zooms. */
 static void zoom_or_dive(App *a, int steps, int sx, int sy)
 {
+    take_world(a); /* water_under reads the map */
     if (levels_dive(&a->camera, steps, water_under(a, sx, sy))) {
         levels_dived(&a->levels, a->inspect.following);
         return;
@@ -384,6 +472,7 @@ static void say(App *a, const char *text, int frames);
 static void click(App *a, int x, int y)
 {
     playlog_click(&a->playlog);
+    take_world(a); /* what is under the click is in the world */
     /* The pages and menus over the map are buttons now (ui.h): a click on
      * one never gets here, so whatever is under this point is the world. */
     int sx = x - a->layout.view_x;
@@ -906,6 +995,10 @@ static void handle_key(App *a, int key)
         a->redraw = true;
         return;
     }
+    /* Every other key may read or change the world, so it comes back from
+     * the ancestors' thread first: this waits for the tick under way. A key
+     * that ends the prelude (below) then ends it where that tick left it. */
+    take_world(a);
 #ifndef VEREDAS_DEMO
     /* m while the ancestors evolve: Sandbox, and its setup screen, since a new
      * start is cheapest before anything has been watched. */
@@ -1142,6 +1235,9 @@ static void press_button(App *a, int key)
         return;
     }
     a->world_menu_open = false;
+    /* Every other button reads or changes the world (following someone from
+     * the panel), or is a key, which handle_key would take it back for. */
+    take_world(a);
     switch (key) {
     case UI_KEY_FOLLOW_TOP_HUNTER:
     case UI_KEY_FOLLOW_OLDEST:
@@ -1242,15 +1338,17 @@ static void draw_title(App *a, const Creature *followed)
      * frame's stack, which the browser keeps small. Filled anew every frame. */
     static TopState st;
     memset(&st, 0, sizeof(st));
-    int tpy = a->sim.set.ticks_per_year;
+    /* From the world, or from the glance while the ancestors' thread has it. */
+    WorldTop w = world_top(a);
+    int tpy = w.ticks_per_year;
     st.sandbox = a->sandbox.on;
     st.paused = a->paused;
-    st.game_over = sim_is_over(&a->sim);
+    st.game_over = w.over;
     st.split = a->branches.split;
     st.branch = a->branches.shown == 0 ? 'A' : 'B';
-    st.year = years_whole(a->sim.tick, tpy);
-    st.season = years_season_of(a->sim.tick, tpy);
-    st.animals = a->sim.pool.count;
+    st.year = years_whole(w.tick, tpy);
+    st.season = years_season_of(w.tick, tpy);
+    st.animals = w.animals;
     st.speed = APP_SPEEDS[a->speed];
     /* Said only when the world falls clearly short of the speed asked, and
      * while it is running: a tenth under is the clock's own wobble. Never in
@@ -1261,13 +1359,12 @@ static void draw_title(App *a, const Creature *followed)
         a->ticks_rate * 10 < st.speed * 9) {
         st.real_speed = a->ticks_rate;
     }
-    if (weather_active(&a->sim.weather, a->sim.tick)) {
-        st.weather_kind = a->sim.weather.kind;
+    if (weather_active(&w.weather, w.tick)) {
+        st.weather_kind = w.weather.kind;
         /* An event lasts a season (actions.c). The cast: ticks_per_year is a
          * positive int, the length a tick count. */
-        st.weather_left = weather_left(&a->sim.weather, a->sim.tick,
-                                       (uint64_t)tpy / 4u);
-        weather_label(&a->sim.weather, a->sim.tick, tpy, st.weather_label,
+        st.weather_left = weather_left(&w.weather, w.tick, (uint64_t)tpy / 4u);
+        weather_label(&w.weather, w.tick, tpy, st.weather_label,
                       sizeof(st.weather_label));
     }
     if (followed != NULL) {
@@ -1326,18 +1423,18 @@ static void draw_enlarged(App *a, uint32_t lineage, const FamilySample *newest)
 
 /* The family's bodies over time, with a caption above them. A family outside the
  * recorded ones has no strip, and the caption says so. */
-static void draw_strip(App *a, uint32_t lineage, int samples)
+static void draw_strip(App *a, uint32_t lineage, const FamilySample *samples, int n)
 {
     const Layout *l = &a->layout;
     int y = l->family_y + (SCENE_ENLARGED_ROWS * FONT_H);
     cells_canvas_set(&a->canvas, l->panel_x, y);
     char caption[32];
     /* The longest id, 10 digits, would still only lose the end of the words. */
-    snprintf(caption, sizeof(caption), samples == 0 ? " #%u: no record" : " family #%u",
+    snprintf(caption, sizeof(caption), n == 0 ? " #%u: no record" : " family #%u",
              (unsigned)lineage);
     render_text(0, 0, lineage != FAMILY_NONE ? caption : "", PANEL_COLS);
-    scene_draw_strip(&a->scene, &a->canvas, &a->families, lineage, l->panel_x,
-                     y + FONT_H, SCENE_PANEL_W);
+    scene_draw_strip_samples(&a->scene, &a->canvas, samples, n, lineage, l->panel_x,
+                             y + FONT_H, SCENE_PANEL_W);
 }
 
 /* The bottom of the world panel: the largest family and its newest body.
@@ -1347,12 +1444,22 @@ static void draw_family(App *a)
     if (!a->layout.show_enlarged) {
         return;
     }
-    uint32_t lineage = family_largest(&a->families, &a->sim);
-    FamilySample samples[FAMILY_STRIP];
-    int n = family_strip(&a->families, lineage, samples);
+    /* While the ancestors' thread has the families too, their last glance. */
+    uint32_t lineage;
+    FamilySample own[FAMILY_STRIP];
+    const FamilySample *samples = own;
+    int n;
+    if (world_away(a)) {
+        lineage = a->glance.lineage;
+        samples = a->glance.strip;
+        n = a->glance.strip_n;
+    } else {
+        lineage = family_largest(&a->families, &a->sim);
+        n = family_strip(&a->families, lineage, own);
+    }
     draw_enlarged(a, lineage, n > 0 ? &samples[n - 1] : NULL);
     if (a->layout.show_strip) {
-        draw_strip(a, lineage, n);
+        draw_strip(a, lineage, samples, n);
     }
 }
 
@@ -1397,7 +1504,11 @@ static void draw_panel(App *a, const Creature *followed)
         return;
     }
     cells_canvas_set(&a->canvas, l->panel_x, l->panel_y);
-    panel_draw(&a->sim, 0, 0, l->panel_rows);
+    if (world_away(a)) {
+        panel_draw_facts(&a->glance.panel, 0, 0, l->panel_rows);
+    } else {
+        panel_draw(&a->sim, 0, 0, l->panel_rows);
+    }
     panel_hits(a);
     draw_family(a);
 }
@@ -1915,8 +2026,9 @@ static void draw_prelude(App *a)
     /* The share of the run done, in 0..1. until is above the start tick
      * while the prelude is on, so there is no division by zero; a double,
      * since a tick count is a uint64_t. */
+    WorldTop now = world_top(a);
     double done = a->prelude.until > 0
-                      ? (double)a->sim.tick / (double)a->prelude.until
+                      ? (double)now.tick / (double)a->prelude.until
                       : 0.0;
     done = done > 1.0 ? 1.0 : done;
     int bar_w = w / 3, bar_h = 6;
@@ -1927,7 +2039,7 @@ static void draw_prelude(App *a)
 
     /* "evolving ancestors: year 3 of 8, any key to stop", dimmed. */
     char year[120];
-    app_prelude_text(&a->prelude, &a->sim, year, sizeof(year));
+    app_prelude_line(&a->prelude, now.tick, now.ticks_per_year, year, sizeof(year));
     text_draw(&a->canvas, x + (w - text_width(year)) / 2, top + 4 * FONT_H, year,
               colour_faded(PALETTE_TEXT, 170));
 
@@ -1940,7 +2052,9 @@ static void draw_frame(App *a, float fraction)
     /* Every frame records its buttons afresh; ui_end makes them the ones a
      * click is tested against, so a click lands on what was last shown. */
     ui_begin(&a->ui);
-    const Creature *followed = update_following(a, fraction);
+    /* Nobody is followed while the world is on the ancestors' thread: it is
+     * given only then (prelude_frame). */
+    const Creature *followed = world_away(a) ? NULL : update_following(a, fraction);
     /* The view goes to the followed animal's level (levels.h), now that the
      * camera is on it. */
     levels_follow(&a->levels, &a->camera, followed != NULL,
@@ -2017,13 +2131,14 @@ static void draw_frame(App *a, float fraction)
 /* The weather's fade and clock, by the wall-clock time since the last frame. */
 static void advance_weather_fx(App *a, uint64_t elapsed)
 {
-    bool active = weather_active(&a->sim.weather, a->sim.tick);
+    WorldTop w = world_top(a);
+    bool active = weather_active(&w.weather, w.tick);
     if (active) {
-        a->weather_fx_kind = a->sim.weather.kind;
+        a->weather_fx_kind = w.weather.kind;
     }
     float was = a->weather_fx;
     weather_fx_fade(&a->weather_fx, active, elapsed);
-    bool still = a->paused || sim_is_over(&a->sim);
+    bool still = a->paused || w.over;
     a->weather_fx_ms += still ? elapsed / 2 : elapsed;
     /* A paused window draws only when something changed: a fade under way
      * is a change, so it is seen to its end. Floats compared with != on
@@ -2041,7 +2156,7 @@ static void advance_clocks(App *a)
      * weather are too, so the same run draws the same picture every time. */
     uint64_t now = a->opt->frames > 0 ? a->last_ms + FIXED_FRAME_MS
                                       : platform_now_ms();
-    if (!a->paused && !sim_is_over(&a->sim)) {
+    if (!a->paused && !world_top(a).over) {
         a->body_ms += now - a->last_ms;
     }
     advance_weather_fx(a, now - a->last_ms);
@@ -2061,7 +2176,7 @@ static void advance_clocks(App *a)
 static bool frame_needs_drawing(App *a)
 {
     /* A dead world is as still as a paused one, so it costs as little. */
-    bool still = a->paused || sim_is_over(&a->sim);
+    bool still = a->paused || world_top(a).over;
     /* Running, every frame is drawn anyway; the step only matters when still.
      * Switching between the two clocks can cost one extra frame, no more. */
     int ambient = still ? scene_paused_frame(a->last_ms)
@@ -2208,6 +2323,40 @@ static void pretend_keys(App *a)
     }
 }
 
+/*
+ * A frame of the ancestors' years (or of a code's replay). With the worker
+ * (preludethread.h) the world is given to it, and this frame only copies the
+ * glance it last published: it never waits for a tick, so the screen turns
+ * at 30 frames a second however long a tick takes. Once the worker has
+ * finished, the world comes back here, without waiting. Without a worker
+ * (the browser build), or while somebody is followed (their card reads the
+ * world every frame), the ticks run here as before: as many as fit in 28 ms
+ * of the frame's 33, so the window and the keys still keep up.
+ */
+static void prelude_frame(App *a)
+{
+    if (!world_away(a) && !a->inspect.following) {
+        (void)preludethread_give(&a->prelude_thread, &a->sim, a->prelude.until);
+    }
+    if (world_away(a)) {
+        if (preludethread_glance(&a->prelude_thread, &a->glance)) {
+            take_world(a); /* finished, so nothing to wait for */
+        }
+    } else {
+        app_prelude_step(&a->prelude, &a->sim, platform_now_ms,
+                         APP_PRELUDE_FRAME_MS);
+    }
+    if (a->prelude.active) {
+        WorldTop w = world_top(a);
+        app_prelude_line(&a->prelude, w.tick, w.ticks_per_year, a->notice,
+                         sizeof(a->notice));
+        a->notice_frames = 0; /* set again every frame */
+    } else {
+        a->notice[0] = '\0';
+    }
+    a->redraw = true;
+}
+
 /* One frame. void * because platform_run knows nothing about App. */
 static void app_frame(void *arg)
 {
@@ -2217,7 +2366,7 @@ static void app_frame(void *arg)
     a->frame_start_us = platform_now_us();
     a->ticks_spent_us = 0;
     frame_log_begin(&a->frame_log, platform_now_us());
-    uint64_t tick_before = a->sim.tick;
+    uint64_t tick_before = world_top(a).tick;
     playlog_frame(&a->playlog, platform_now_ms(), a->sandbox.on);
     Event e;
     while (platform_poll(&e)) {
@@ -2249,17 +2398,8 @@ static void app_frame(void *arg)
                  "the world waits for you to start it: Enter or Esc");
         a->notice_frames = 0;
     } else if (a->prelude.active) {
-        /* As many prelude ticks as fit in 28 ms of the frame's 33, so the
-         * window and the keys still keep up; pausing does not hold it. */
-        app_prelude_step(&a->prelude, &a->sim, platform_now_ms,
-                         APP_PRELUDE_FRAME_MS);
-        if (a->prelude.active) {
-            app_prelude_text(&a->prelude, &a->sim, a->notice, sizeof(a->notice));
-            a->notice_frames = 0; /* set again every frame */
-        } else {
-            a->notice[0] = '\0';
-        }
-        a->redraw = true;
+        /* Pausing does not hold it. */
+        prelude_frame(a);
     } else if (sandbox_skipping(&a->sandbox)) {
         /* A skip runs like the prelude, a slice a frame, paused or not. */
         /* Split, the other branch gets half the frame (below), so both
@@ -2280,7 +2420,7 @@ static void app_frame(void *arg)
     frame_log_part(&a->frame_log, FRAME_PART_WORLD, platform_now_us());
     /* The world behind the one on screen keeps level with it: the ticks the
      * shown world ran this frame, or as many as half a frame allows. */
-    if (!branch_caught_up(&a->branches, &a->sim)) {
+    if (!world_away(a) && !branch_caught_up(&a->branches, &a->sim)) {
         branch_catch_up(&a->branches, &a->sim, platform_now_ms,
                         APP_PRELUDE_FRAME_MS / 2);
     }
@@ -2317,7 +2457,11 @@ static void app_frame(void *arg)
     if (a->idle_frames < LOOK_IDLE_FRAMES) {
         a->idle_frames++;
     }
-    family_update(&a->families, &a->sim);
+    /* While the world is away, the ancestors' thread looks at the families
+     * itself, after each tick (glance_fill). */
+    if (!world_away(a)) {
+        family_update(&a->families, &a->sim);
+    }
     update_notices(a);
     char weather_line[200];
     if (!a->prelude.active &&
@@ -2336,7 +2480,12 @@ static void app_frame(void *arg)
         frame_log_part(&a->frame_log, FRAME_PART_OTHER, platform_now_us());
         long tiles_before = a->scene.tiles.builds;
         long sprites_before = a->scene.sprites.builds;
-        scene_update(&a->scene, &a->sim, APP_SPEEDS[a->speed], body_before);
+        /* The bodies' motion, not drawn on the prelude's screen: not while
+         * the world is away. The first update after it sees many ticks at
+         * once, and the bodies jump to their places (anim.h). */
+        if (!world_away(a)) {
+            scene_update(&a->scene, &a->sim, APP_SPEEDS[a->speed], body_before);
+        }
         draw_frame(a, tick_fraction(a));
         frame_log_part(&a->frame_log, FRAME_PART_DRAW, platform_now_us());
         facts.tile_builds = a->scene.tiles.builds - tiles_before;
@@ -2362,7 +2511,7 @@ static void app_frame(void *arg)
 
     /* The cast: the ticks of one frame, at most a speed's worth or a
      * prelude's 28 ms of them, far below INT_MAX. */
-    facts.ticks = (int)(a->sim.tick - tick_before);
+    facts.ticks = (int)(world_top(a).tick - tick_before);
     frame_log_part(&a->frame_log, FRAME_PART_OTHER, platform_now_us());
     frame_log_end(&a->frame_log, platform_now_us(), &facts);
 
@@ -2580,6 +2729,14 @@ int main(int argc, char **argv)
     if (opt.frames == 0) {
         (void)lookthread_start(&app.look);
     }
+    /* The ancestors' ticks on a thread of their own too, and for the same
+     * runs: --frames runs the prelude whole before the first frame (below),
+     * and the browser build has no threads, so give always says no there. */
+    preludethread_init(&app.prelude_thread, glance_fill, &app.families,
+                       sizeof(Glance));
+    if (opt.frames == 0) {
+        (void)preludethread_start(&app.prelude_thread);
+    }
     /* With --frames (tests and screenshots) the prelude runs whole before the
      * first frame, and only when --ancestors asks for it: a picture must come
      * out the same every time, which a prelude cut by a clock would not. */
@@ -2664,6 +2821,9 @@ int main(int argc, char **argv)
 
     platform_run(app_frame, &app, opt.frames > 0 ? 0 : FRAMES_PER_SECOND);
 
+    /* A quit during the ancestors' years: the world comes back before it is
+     * saved or fingerprinted, where the worker's last tick left it. */
+    take_world(&app);
     int result = app_leave(&app);
     frame_log_close(&app.frame_log);
     platform_close();
@@ -2673,6 +2833,7 @@ int main(int argc, char **argv)
     sandbox_free(&app.sandbox);
     branch_free(&app.branches);
     lookthread_stop(&app.look);
+    preludethread_stop(&app.prelude_thread);
     sim_free(&app.sim);
     return result;
 }

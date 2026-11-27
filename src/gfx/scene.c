@@ -2984,6 +2984,12 @@ void scene_draw_strip(Scene *sc, Canvas *c, const Families *f, uint32_t lineage,
 {
     FamilySample samples[FAMILY_STRIP];
     int n = family_strip(f, lineage, samples);
+    scene_draw_strip_samples(sc, c, samples, n, lineage, x, y, w);
+}
+
+void scene_draw_strip_samples(Scene *sc, Canvas *c, const FamilySample *samples,
+                              int n, uint32_t lineage, int x, int y, int w)
+{
     int columns = w / SCENE_STRIP_CELL_W;
     if (columns > SCENE_STRIP_COLUMNS) {
         columns = SCENE_STRIP_COLUMNS;

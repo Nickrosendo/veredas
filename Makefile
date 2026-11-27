@@ -215,7 +215,7 @@ run-tests: $(TEST_BIN) $(WTEST_BIN)
 
 # The threaded tests again under the thread checker, which is slower and
 # cannot run with the memory checkers, so it has a build of its own.
-THREAD_TESTS = $(OUT)/tests/test_lookthread$(EXE)
+THREAD_TESTS = $(OUT)/tests/test_lookthread$(EXE) $(OUT)/tests/test_preludethread$(EXE)
 
 test-threads:
 	$(MAKE) MODE=tsan run-thread-tests
