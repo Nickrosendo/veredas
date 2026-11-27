@@ -1808,6 +1808,64 @@ static void test_names_beside_giants(void)
     sim_free(&s);
 }
 
+/* The names drawn on a magenta canvas, into c (made here, freed by the
+ * caller), and how many pixels they changed. */
+static int names_on(Sim *s, Camera *cam, const Creature *followed, Canvas *c)
+{
+    Scene sc;
+    CHECK(scene_init(&sc, s));
+    scene_update(&sc, s, 10, 0);
+    CHECK(canvas_init(c, cam->view_w, cam->view_h));
+    uint32_t magenta = canvas_rgb(255, 0, 255);
+    canvas_fill(c, magenta);
+    scene_draw_names(&sc, c, cam, s, followed, 0.0f, 0, 0);
+    int changed = 0;
+    for (int i = 0; i < c->w * c->h; i++) {
+        changed += c->px[i] != magenta;
+    }
+    scene_free(&sc);
+    return changed;
+}
+
+/* Two giants side by side, whose names under them would run into each
+ * other: both names show and none covers the other (each name is a solid box,
+ * so the two together change exactly as many pixels as each alone), and the
+ * followed one keeps its place under its body, as when it is alone. */
+static void test_names_never_overlap(void)
+{
+    Sim s;
+    make_empty_sim(&s, 64, 64);
+    int a = place_body(&s, 32, 32, 6.0f);
+    int b = place_body(&s, 33, 32, 6.0f);
+    Camera cam;
+    camera_init(&cam, 64, 64, VIEW_W, VIEW_H);
+    camera_centre_on(&cam, 32.5f, 32.5f);
+    Canvas both, alone_a, alone_b;
+    s.pool.items[a].tally.flags |= TALLY_GIANT;
+    int count_a = names_on(&s, &cam, NULL, &alone_a);
+    s.pool.items[a].tally.flags = 0;
+    s.pool.items[b].tally.flags |= TALLY_GIANT;
+    int count_b = names_on(&s, &cam, NULL, &alone_b);
+    s.pool.items[a].tally.flags |= TALLY_GIANT;
+    int count_both = names_on(&s, &cam, NULL, &both);
+    CHECK(count_a > 0 && count_b > 0);
+    CHECK(count_both == count_a + count_b);
+    canvas_free(&both);
+    /* Followed, b's name is where it is alone, whoever stands beside it. */
+    count_both = names_on(&s, &cam, &s.pool.items[b], &both);
+    CHECK(count_both == count_a + count_b);
+    uint32_t magenta = canvas_rgb(255, 0, 255);
+    int moved = 0;
+    for (int i = 0; i < both.w * both.h; i++) {
+        moved += alone_b.px[i] != magenta && both.px[i] != alone_b.px[i];
+    }
+    CHECK(moved == 0);
+    canvas_free(&both);
+    canvas_free(&alone_a);
+    canvas_free(&alone_b);
+    sim_free(&s);
+}
+
 /* ---- Trees, overlays and drawing back to front ---- */
 
 /* A world of bare soil with one plant of this density at (32, 32), at this
@@ -2888,6 +2946,7 @@ int main(void)
     test_scars_follow_recent_hits();
     test_drawing_large_leaves_fingerprint_equal();
     test_names_beside_giants();
+    test_names_never_overlap();
     test_bare_in_autumn();
     test_withering_tree_turns_straw();
     test_trees_sort_with_bodies();

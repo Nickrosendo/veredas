@@ -2753,33 +2753,70 @@ void scene_draw_cursor(Scene *sc, Canvas *c, const Camera *cam,
     canvas_rect(c, right, bottom - len + 1, 1, len, white);
 }
 
-/* One name under the body in this slot, or nothing if it would leave the view. */
-static void draw_name(Scene *sc, Canvas *c, const Camera *cam,
-                      const Sim *s, int slot, float tick_fraction, int view_x,
-                      int view_y)
+/* A name placed on the view: its box, in view pixels, and the name. */
+typedef struct {
+    int x, y, w;
+    char name[16];
+} NameBox;
+
+/* The most names one frame places; past it the rest are left out. A crowded
+ * Normal view holds a few dozen at most. */
+enum { NAMES_MAX = 256 };
+
+/* Whether box a, grown by a pixel all round, meets box b: names keep a pixel
+ * of ground between them, so two never read as one. */
+static bool names_meet(const NameBox *a, const NameBox *b)
+{
+    return a->x - 1 < b->x + b->w && b->x < a->x + a->w + 1 &&
+           a->y - 1 < b->y + TEXT_H && b->y < a->y + TEXT_H + 1;
+}
+
+/* Finds a place for the name of the body in this slot that leaves the view
+ * and the names already placed clear: under the body, as always when there
+ * is room, else above it, else a row lower under it. False, and nothing
+ * placed, when none is free: a name left out reads better than two names
+ * over each other ("ThubaisRousougin"). */
+static bool place_name(Scene *sc, const Camera *cam, const Sim *s, int slot,
+                       float tick_fraction, const NameBox *placed, int n_placed,
+                       NameBox *out)
 {
     if (slot >= sc->anim.capacity || !sc->anim.slots[slot].seen) {
-        return;
+        return false;
     }
     const Creature *cr = &s->pool.items[slot];
     AnimPose p;
     anim_pose(&sc->anim, s, slot, tick_fraction, 0, &p);
     int sx, sy;
     camera_to_screen(cam, p.x, p.y, &sx, &sy);
-    char name[16];
-    name_from_id(cr->id, name, sizeof(name));
+    name_from_id(cr->id, out->name, sizeof(out->name));
     /* A pixel of the background on each side, so the name reads over grass. */
-    int w = text_width(name) + 2;
-    /* Centred under the picture, a pixel below its lowest ink. */
+    out->w = text_width(out->name) + 2;
+    /* Centred on the picture, a pixel clear of its ink. */
     int left, top, right, bottom;
     drawn_box(sc, cam, s, slot, &p, sx, sy, &left, &top, &right, &bottom);
-    int x = (left + right) / 2 - w / 2;
-    int y = bottom + 1;
-    if (x < 0 || y < 0 || x + w > cam->view_w || y + TEXT_H > cam->view_h) {
-        return;
+    out->x = (left + right) / 2 - out->w / 2;
+    int tries[3] = {bottom + 1, top - TEXT_H - 1, bottom + 1 + TEXT_H + 1};
+    for (int t = 0; t < 3; t++) {
+        out->y = tries[t];
+        if (out->x < 0 || out->y < 0 || out->x + out->w > cam->view_w ||
+            out->y + TEXT_H > cam->view_h) {
+            continue;
+        }
+        bool clear = true;
+        for (int i = 0; i < n_placed && clear; i++) {
+            clear = !names_meet(out, &placed[i]);
+        }
+        if (clear) {
+            return true;
+        }
     }
-    canvas_rect(c, view_x + x, view_y + y, w, TEXT_H, to_pixel(BACKGROUND));
-    text_draw(c, view_x + x + 1, view_y + y, name, to_pixel(WHITE));
+    return false;
+}
+
+static void draw_name(Canvas *c, const NameBox *b, int view_x, int view_y)
+{
+    canvas_rect(c, view_x + b->x, view_y + b->y, b->w, TEXT_H, to_pixel(BACKGROUND));
+    text_draw(c, view_x + b->x + 1, view_y + b->y, b->name, to_pixel(WHITE));
 }
 
 void scene_draw_names(Scene *sc, Canvas *c, const Camera *cam,
@@ -2789,10 +2826,22 @@ void scene_draw_names(Scene *sc, Canvas *c, const Camera *cam,
     if (camera_sprite_size(cam) != 16) {
         return; /* Far and World: bodies of 8 pixels or less, names would bury them */
     }
+    /* static: 6 KB, kept off the small web stack. Filled anew each call. */
+    static NameBox placed[NAMES_MAX];
+    int n_placed = 0;
     int followed_slot = followed != NULL ? (int)(followed - s->pool.items) : -1;
+    /* The followed creature first, so its name always has the place under
+     * it; the giants after, in slot order, which stays the same from frame
+     * to frame, so of two crowding names the same one keeps its place
+     * rather than the two taking turns. */
+    if (followed_slot >= 0 &&
+        place_name(sc, cam, s, followed_slot, tick_fraction, placed, n_placed,
+                   &placed[n_placed])) {
+        n_placed++;
+    }
     int n = s->pool.capacity < sc->anim.capacity ? s->pool.capacity
                                                  : sc->anim.capacity;
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < n && n_placed < NAMES_MAX; i++) {
         const Creature *cr = &s->pool.items[i];
         /* & tests one bit of the flags; && would only ask whether both sides
          * are non-zero. */
@@ -2803,13 +2852,16 @@ void scene_draw_names(Scene *sc, Canvas *c, const Camera *cam,
         bool other_level = (cam->level == LEVEL_UNDERWATER && home != LEVEL_UNDERWATER) ||
                            (cam->level == LEVEL_SKY && home != LEVEL_SKY);
         if (cr->alive && i != followed_slot && (cr->tally.flags & TALLY_GIANT) &&
-            !other_level) {
-            draw_name(sc, c, cam, s, i, tick_fraction, view_x, view_y);
+            !other_level &&
+            place_name(sc, cam, s, i, tick_fraction, placed, n_placed,
+                       &placed[n_placed])) {
+            n_placed++;
         }
     }
-    /* Last, so the followed creature's name is never covered by another. */
-    if (followed_slot >= 0) {
-        draw_name(sc, c, cam, s, followed_slot, tick_fraction, view_x, view_y);
+    /* Drawn back to front, the followed creature's last, though no two
+     * overlap. */
+    for (int i = n_placed - 1; i >= 0; i--) {
+        draw_name(c, &placed[i], view_x, view_y);
     }
 }
 

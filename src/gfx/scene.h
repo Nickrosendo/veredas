@@ -300,9 +300,12 @@ void scene_draw_cursor(Scene *sc, Canvas *c, const Camera *cam,
 /*
  * Names beside notable creatures: every living giant (one that has reached
  * giant_size, as its life story records) and the followed creature, under its
- * body, at the two closest zooms only, where a name fits beside a body. A name
- * that would reach past the view is left out rather than cut. followed may be
- * NULL.
+ * body, at the two closest zooms only, where a name fits beside a body. Names
+ * never overlap: one that would meet a name already placed goes above its
+ * body, or a row lower, and is left out if neither is free; the followed
+ * creature's is placed first, so it always has its place under the body. A
+ * name that would reach past the view is left out rather than cut. followed
+ * may be NULL.
  */
 void scene_draw_names(Scene *sc, Canvas *c, const Camera *cam,
                       const Sim *s, const Creature *followed,
