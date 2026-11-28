@@ -340,6 +340,10 @@ typedef struct {
     /* Kinships already worked out, or NULL to work each one out afresh
      * (pool_kinship). Owned by the pool; neither saved nor hashed. */
     struct KinCache *kin_cache;
+    /* The views' fan of lines (creature.c), worked out once for the pool
+     * instead of once per creature, or NULL to work it out per creature.
+     * Owned by the pool; neither saved nor hashed. */
+    struct FanCache *fan_cache;
 } Pool;
 
 /* Allocates capacity empty slots. False for a capacity below 1 or when
@@ -366,6 +370,11 @@ bool pool_cache_kinship(Pool *p);
 /* Forgets every remembered kinship: for when ids may name other creatures than
  * before (a pool cleared, a world loaded over it). */
 void pool_forget_kinship(Pool *p);
+/* From now on, work out the views' fan of lines once for the whole pool, not
+ * once per creature that looks: the same offsets either way, so nothing a
+ * creature sees changes. False when out of memory; each creature then works
+ * its own out, as before. */
+bool pool_cache_views(Pool *p);
 /* genome_kinship of the two creatures' genomes, the same number exactly, from
  * the cache when this pair was compared before. A creature's genome is fixed
  * from its birth to its death and an id is never given twice in a run, so a

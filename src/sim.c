@@ -216,7 +216,7 @@ bool sim_alloc(Sim *s, const Settings *set, int w, int h)
     s->set = *set; /* copies the whole struct, brain_name's characters too */
     if (!world_init(&s->world, w, h) ||
         !pool_init(&s->pool, set->pool_capacity) ||
-        !pool_cache_kinship(&s->pool)) {
+        !pool_cache_kinship(&s->pool) || !pool_cache_views(&s->pool)) {
         sim_free(s);
         return false;
     }
