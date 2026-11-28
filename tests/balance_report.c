@@ -113,6 +113,8 @@ typedef struct {
     /* The air's measures as they stood at sea_from, for the AIR line. */
     uint32_t air_plant_at_from, air_meat_at_from, air_landings_at_from;
     /* The hunting measures as they stood at sea_from, for the HUNT line. */
+    uint32_t dive_swings_at_from, dive_aimed_at_from, dive_hits_at_from;
+    double dive_share_at_from;
     uint32_t land_wounds_at_from, dive_land_at_from, dives_at_from, sea_meat_at_from,
         sea_fish_at_from, air_fish_at_from;
 } Report;
@@ -1129,6 +1131,10 @@ static void run(Sim *s, long ticks, Shadow *shadow, Report *rep, Verdict *v)
             rep->land_wounds_at_from = s->pool.land_wound_deaths;
             rep->dive_land_at_from = s->pool.dive_kills_land;
             rep->dives_at_from = s->pool.dive_kills;
+            rep->dive_swings_at_from = s->pool.dive_swings;
+            rep->dive_aimed_at_from = s->pool.dive_aimed_land;
+            rep->dive_hits_at_from = s->pool.dive_hits_land;
+            rep->dive_share_at_from = s->pool.dive_hit_share_sum;
             rep->sea_meat_at_from = s->pool.sea_meals_meat;
             rep->sea_fish_at_from = s->pool.sea_meals_fish;
             rep->air_fish_at_from = s->pool.air_meals_fish;
@@ -1252,6 +1258,16 @@ static void print_hunt(const Sim *s, const Report *rep)
            s->pool.air_meals_meat - rep->air_meat_at_from,
            s->pool.air_meals_plant - rep->air_plant_at_from,
            s->pool.air_meals_fish - rep->air_fish_at_from, sea_hunters);
+    /* What limits those dive kills: every attack from the air, those aimed at
+     * a walker, those that landed, and the walkers' average share of an
+     * unhurt body's health before a landed one. */
+    uint32_t hits = s->pool.dive_hits_land - rep->dive_hits_at_from;
+    double share = s->pool.dive_hit_share_sum - rep->dive_share_at_from;
+    printf("DIVE swings %u aimed_land %u hits_land %u kills_land %u "
+           "health_before %.0f%%\n",
+           s->pool.dive_swings - rep->dive_swings_at_from,
+           s->pool.dive_aimed_land - rep->dive_aimed_at_from, hits, dive_land,
+           hits > 0 ? 100.0 * share / hits : 0.0);
 }
 
 /* The tactics seen since --tactics' tick: one TACTICS line naming them, then

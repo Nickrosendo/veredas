@@ -1426,16 +1426,23 @@ static int act_attack(const World *w, Pool *p, int idx, const Settings *s,
     Creature *c = &p->items[idx];
     c->energy -= s->attack_cost;
     int slot = creature_attack_target(w, p, idx, s);
+    p->dive_swings += c->up > 0; /* measures for the hunting verdict, read by no rule */
     if (slot < 0) {
         return -1;
     }
     Creature *target = &p->items[slot];
+    bool dive_at_walker = c->up > 0 && creature_habitat(target) == HABITAT_LAND;
+    p->dive_aimed_land += dive_at_walker;
     float a = creature_size(c, s);
     int others = creature_others_recently(target, c->id, p->now, s->gang_window);
     float chance = attack_odds(a, creature_size(target, s), s->attack_steepness,
                                others, s->gang_bonus);
     if (rng_unit(r) < chance && !dodged(target, s, r)) {
         float before = target->health;
+        if (dive_at_walker) {
+            p->dive_hits_land++;
+            p->dive_hit_share_sum += before / creature_max_health(target, s);
+        }
         target->health -= hit_damage(c, target, a, s);
         target->hurt_tick += before - target->health;
         record_hit(p, c, target, before, s); /* reads the ring before the hit */

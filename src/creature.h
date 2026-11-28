@@ -293,6 +293,12 @@ typedef struct {
      * walkers dead of wounds. */
     uint32_t sea_meals_meat, sea_meals_fish, air_meals_fish;
     uint32_t dive_kills, dive_kills_land, land_wound_deaths;
+    /* What limits dive kills of walkers (balance_report's DIVE line), read by
+     * no rule, neither saved nor hashed: attacks a flyer made while up, those
+     * aimed at a walker, those that landed, and the walkers' shares of an
+     * unhurt body's health before each landed one, summed. */
+    uint32_t dive_swings, dive_aimed_land, dive_hits_land;
+    double dive_hit_share_sum;
     /* The newest hunts, for the notices: a ring, the newest at
      * hunts[(hunts_total - 1) % HUNTS_KEPT]. Read by no rule, neither saved
      * nor hashed; a loaded world starts it empty. */

@@ -439,7 +439,9 @@ static void test_dive_hits_harder(void)
     CHECK(landed);
 }
 
-/* A kill struck from the air is counted, and as a walker's. */
+/* A kill struck from the air is counted, and as a walker's; so is the strike
+ * itself, aimed at a walker, landed or not, with the share of health the
+ * walker had before a landed one. */
 static void test_dive_kill_counted(void)
 {
     Settings s = settings_default();
@@ -454,10 +456,16 @@ static void test_dive_kill_counted(void)
         int f;
         int prey = dive_scene(&p, &w, &r, &s, &f);
         p.items[prey].health = 0.001f;
+        float share = 0.001f / creature_max_health(&p.items[prey], &s);
         creature_act(&w, &p, f, act(ACT_BITE), &s, &r);
+        CHECK(p.dive_swings == 1 && p.dive_aimed_land == 1);
         if (p.items[prey].health <= 0.0f) {
             killed = true;
             CHECK(p.dive_kills == 1 && p.dive_kills_land == 1);
+            CHECK(p.dive_hits_land == 1);
+            CHECK(fabs(p.dive_hit_share_sum - share) < 1e-9);
+        } else {
+            CHECK(p.dive_hits_land == 0 && p.dive_hit_share_sum == 0.0);
         }
         pool_free(&p);
         world_free(&w);
