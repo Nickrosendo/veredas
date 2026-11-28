@@ -684,11 +684,27 @@ static int wrap_near(int v, int n)
  * time a view reaches that step; steps past FAN_STEPS, only for a very long
  * sight, are rounded as they come. */
 #define FAN_STEPS 48
+/*
+ * One step of the fan, as the cells it reaches: lines whose offsets are the
+ * same at this step reach the same cell, and since the offsets never fall as
+ * j rises, those lines are neighbours. So a step is a few runs: each run's
+ * offset, and which lines it holds, one bit per line (bit j for line j; at most
+ * VIEW_LINES_MAX = 15 lines, so 16 bits are enough). Near the looker the 7
+ * lines make 1 to 3 runs; far out, one run per line.
+ */
+typedef struct {
+    int runs;
+    int16_t offset[VIEW_LINES_MAX];
+    uint16_t lines[VIEW_LINES_MAX];
+    uint8_t run_of[VIEW_LINES_MAX]; /* the run line j is in */
+} FanStep;
+
 typedef struct {
     int lines;
     float slope[VIEW_LINES_MAX];
-    int filled; /* rows 1 .. filled of offset are worked out */
-    int16_t offset[FAN_STEPS + 1][VIEW_LINES_MAX];
+    int filled; /* steps 1 .. filled of step are worked out */
+    FanStep step[FAN_STEPS + 1];
+    FanStep far; /* a step past FAN_STEPS, worked out each time it is asked for */
 } Fan;
 
 static void fan_start(Fan *f, int lines)
@@ -714,23 +730,66 @@ static int round_half_away(float v)
     return t + (rest >= 0.5f) - (rest <= -0.5f);
 }
 
-/* Line j's offset at step d: round(slope_j * d), halves away from zero. */
-static int fan_offset(Fan *f, int d, int j)
+/* Fills out with step d's runs: line j's offset is round(slope_j * d), halves
+ * away from zero (lroundf past FAN_STEPS, where nothing has checked
+ * round_half_away; at most 0.75 * FAN_STEPS cells within it, an int16_t, and
+ * well inside round_half_away's million). Rounding half away from zero is the
+ * same on both sides, so the fan is symmetric. */
+static void fan_fill(const Fan *f, int d, FanStep *out)
+{
+    /* Without an if for "same cell as the line before?": which way it goes
+     * changes from step to step and creature to creature, so the processor
+     * would guess it wrong often (the cheaper sense_view study, 2026-11-28).
+     * A new run is counted by adding a comparison, 1 or 0, and the line's
+     * bit goes into whichever run is the last one now. */
+    for (int j = 0; j < f->lines; j++) {
+        out->lines[j] = 0; /* so a run's first line starts from nothing */
+    }
+    int runs = 0;
+    int last = 0;
+    for (int j = 0; j < f->lines; j++) {
+        float v = f->slope[j] * (float)d;
+        int offset = d > FAN_STEPS ? (int)lroundf(v) : round_half_away(v);
+        int fresh = j == 0 || offset != last; /* 1: a new run starts here */
+        runs += fresh;
+        int r = runs - 1;
+        out->lines[r] = (uint16_t)(out->lines[r] | (1u << j));
+        out->offset[r] = (int16_t)offset;
+        out->run_of[j] = (uint8_t)r;
+        last = offset;
+    }
+    out->runs = runs;
+}
+
+/* Step d of the fan, worked out the first time a view reaches it. */
+static const FanStep *fan_step(Fan *f, int d)
 {
     if (d > FAN_STEPS) {
-        return (int)lroundf(f->slope[j] * (float)d);
+        fan_fill(f, d, &f->far);
+        return &f->far;
     }
     while (f->filled < d) {
-        int row = f->filled + 1;
-        for (int k = 0; k < f->lines; k++) {
-            /* Rounding half away from zero is the same on both sides, so the
-             * fan is symmetric. At most 0.75 * FAN_STEPS cells: an int16_t,
-             * and well inside round_half_away's million. */
-            f->offset[row][k] = (int16_t)round_half_away(f->slope[k] * (float)row);
-        }
-        f->filled = row;
+        f->filled++;
+        fan_fill(f, f->filled, &f->step[f->filled]);
     }
-    return f->offset[d][j];
+    return &f->step[d];
+}
+
+/* The number of the lowest bit set in v, which must not be 0: line j for the
+ * lowest open line. gcc and clang have it as one instruction; elsewhere, a
+ * loop. */
+static int lowest_bit(unsigned v)
+{
+#if defined(__GNUC__)
+    return __builtin_ctz(v);
+#else
+    int n = 0;
+    while ((v & 1u) == 0) {
+        v >>= 1;
+        n++;
+    }
+    return n;
+#endif
 }
 
 /* The creature a view sees most clearly, while the view is walked. */
@@ -798,14 +857,9 @@ static void sense_view(const World *w, const Pool *p, const Creature *c,
     /* ceilf rounds up: the last step at which clarity can still be above 0. */
     int reach = (int)ceilf(VIEW_REACH * sight);
     uint8_t side = turned(heading, 1); /* the step to its right */
-    int lines = fan->lines;
-    /* A variable-length array would work here too, but its size would be set
-     * only when the program runs, and nothing would stop a huge one from
-     * overflowing the stack: a fixed top is safer. */
-    bool open[VIEW_LINES_MAX];
-    for (int j = 0; j < lines; j++) {
-        open[j] = true;
-    }
+    /* The lines still open, one bit each (FanStep). 1u << lines - 1 sets the
+     * lowest lines bits: 7 lines, 0x7F. */
+    unsigned open = (1u << fan->lines) - 1u;
     /* The farthest a line goes from the looker along either axis is reach
      * cells (ahead) or 0.75 reach rounded (to the side). On a map at least that
      * wide either way, wrap_near is enough; on a smaller one world_idx does it. */
@@ -836,23 +890,23 @@ static void sense_view(const World *w, const Pool *p, const Creature *c,
         }
     }
     for (int d = 1; d <= reach; d++) {
-        bool any_open = false;
-        int last_offset = 0;
-        bool last_valid = false; /* whether last_offset is a line's, this step */
-        for (int j = 0; j < lines; j++) {
-            if (!open[j]) {
-                continue;
-            }
-            int offset = fan_offset(fan, d, j);
-            bool repeat = last_valid && offset == last_offset;
-            last_offset = offset;
-            last_valid = true;
+        const FanStep *step = fan_step(fan, d);
+        /* Run by run: each cell once, for all the open lines that reach it,
+         * in order of offset, as the lines are in order of slope. Only the
+         * runs with a line still open: the lowest open line not yet looked
+         * at names its run, and the whole run is then crossed off. */
+        unsigned left = open;
+        while (left != 0) {
+            int r = step->run_of[lowest_bit(left)];
+            unsigned here = open & step->lines[r];
+            left &= ~step->lines[r];
+            int offset = step->offset[r];
             int x = c->x + d * STEP_X[heading] + offset * STEP_X[side];
             int y = c->y + d * STEP_Y[heading] + offset * STEP_Y[side];
             int cell = small_map ? world_idx(w, x, y)
                                  : wrap_near(y, w->h) * w->w + wrap_near(x, w->w);
             if (w->terrain[cell] == TERRAIN_ROCK && !above) {
-                open[j] = false;
+                open &= ~here; /* rock stops every line through it */
                 continue;
             }
             int other = w->occupant[cell];
@@ -864,12 +918,7 @@ static void sense_view(const World *w, const Pool *p, const Creature *c,
                 bird = -1;
             }
             if (other >= 0 && !above) {
-                open[j] = false; /* the creature blocks what is behind it */
-            } else {
-                any_open = true;
-            }
-            if (repeat) {
-                continue; /* counted already, by the line before */
+                open &= ~here; /* the creature blocks what is behind it */
             }
             /* A sea body sees plankton as the leaf food it is to it: at least
              * one bite step of it on a deep cell. */
@@ -900,7 +949,7 @@ static void sense_view(const World *w, const Pool *p, const Creature *c,
                 }
             }
         }
-        if (!any_open) {
+        if (open == 0) {
             break; /* every line has stopped */
         }
     }
@@ -1196,15 +1245,16 @@ static void sense_all(const World *w, const Pool *p, int idx,
     /* The directions of the three views, in VIEW_ order. */
     const uint8_t view_heading[VIEW_COUNT] = {
         c->heading, turned(c->heading, 3), turned(c->heading, 1)};
-    /* One fan for the three views (Fan, above): no row worked out yet. */
-    Fan fan;
-    fan_start(&fan, s->view_lines);
+    /* One fan for the three views (Fan, above): no step worked out yet. */
+    Fan own;
+    Fan *fan = &own;
+    fan_start(fan, s->view_lines);
     for (int view = 0; view < VIEW_COUNT; view++) {
         /* A pointer into the middle of the array: the view's first slot.
          * sense_view writes out[0] .. out[VIEW_VALUES - 1] from there. */
         float *slots = &out->v[SENSE_VIEWS + view * VIEW_VALUES];
         /* Only the view ahead, the way a strike goes, looks down as well. */
-        sense_view(w, p, c, view_heading[view], view == VIEW_AHEAD, s, &fan,
+        sense_view(w, p, c, view_heading[view], view == VIEW_AHEAD, s, fan,
                    slots);
     }
 }
