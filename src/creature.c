@@ -868,11 +868,12 @@ static void describe_seen(const World *w, const Pool *p, const Creature *c,
  * nothing) and at a creature, which it sees. On a small map a line can come
  * round the wrap to the looker's own cell: the looker is not seen there and
  * hides nothing. Near the looker several lines
- * pass through the same cell; a cell is counted once, for the first line still
- * open that reaches it at that step. The lines are walked in order of slope, so
- * their sideways offsets never fall as j rises, and a repeat can only be the
- * same offset as the line before. With looks_down, a flyer up also sees the
- * creature on the ground of its own cell, at step 0.
+ * pass through the same cell; a cell is counted once, if any line still open
+ * reaches it at that step. The lines' sideways offsets never fall as j rises,
+ * so the lines through one cell are neighbours, a run (FanStep), and each step
+ * is walked run by run in order of offset, which is the order of the lines.
+ * With looks_down, a flyer up also sees the creature on the ground of its own
+ * cell, at step 0.
  */
 static void sense_view(const World *w, const Pool *p, const Creature *c,
                        uint8_t heading, bool looks_down, const Settings *s,
