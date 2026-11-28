@@ -8,6 +8,7 @@
 #include "rng.h"
 #include "settings.h"
 #include "world.h"
+#include "years.h" /* SEASON_ */
 
 /* One step: reads w->veg, writes w->veg_next, then swaps the two. Draws
  * from r three times per soil cell, in row order and in every season, so the
@@ -23,7 +24,14 @@ bool plant_is_growing(const Plant *p, int season);
 /* Whether a leaf plant stands without leaves: in autumn and winter. A bare
  * plant offers nothing to bite but is still alive. Fruit trees are never bare:
  * their hanging fruit stays and can be eaten. */
-bool plant_is_bare(const Plant *p, int season);
+static inline bool plant_is_bare(const Plant *p, int season)
+{
+    /* static inline (see world.h's plant_offers_fruit): each view asks this
+     * for every leaf plant it reaches, and a call into flora.c cannot be
+     * inlined from another file. */
+    return !plant_offers_fruit(p) &&
+           (season == SEASON_AUTUMN || season == SEASON_WINTER);
+}
 
 /* Whether this plant shades the cells around it: a leaf plant that has grown to
  * tree_shade_size. A fruit tree never does, and size stays 0 on one anyway. */
