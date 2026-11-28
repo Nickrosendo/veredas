@@ -93,6 +93,7 @@ void pool_free(Pool *p)
 {
     free(p->items);
     free(p->kin_cache); /* free(NULL) does nothing */
+    free(p->fan_cache);
     *p = (Pool){0};
 }
 
@@ -775,6 +776,44 @@ static const FanStep *fan_step(Fan *f, int d)
     return &f->step[d];
 }
 
+/* The pool's fan (Pool.fan_cache): one Fan, every step to FAN_STEPS worked
+ * out, for the number of lines it was made for. */
+struct FanCache {
+    Fan fan;
+};
+
+bool pool_cache_views(Pool *p)
+{
+    if (p->fan_cache == NULL) {
+        /* calloc: fan.lines 0, which no setting allows, so the first look
+         * makes it (the_fan). */
+        p->fan_cache = calloc(1, sizeof(*p->fan_cache));
+    }
+    return p->fan_cache != NULL;
+}
+
+/*
+ * The fan for a creature's three views. With the pool's cache, that one,
+ * made again only when view_lines differs from what it was made for (every
+ * step at once, so later looks only read it; a step past FAN_STEPS is still
+ * worked out each time, in its own slot). p is const, but the cache behind
+ * the pointer is not, like the kinship cache: it never changes an answer.
+ * Without one, own, filled as the views reach each step.
+ */
+static Fan *the_fan(const Pool *p, int lines, Fan *own)
+{
+    struct FanCache *cache = p->fan_cache;
+    if (cache == NULL) {
+        fan_start(own, lines);
+        return own;
+    }
+    if (cache->fan.lines != lines) {
+        fan_start(&cache->fan, lines);
+        (void)fan_step(&cache->fan, FAN_STEPS);
+    }
+    return &cache->fan;
+}
+
 /* The number of the lowest bit set in v, which must not be 0: line j for the
  * lowest open line. gcc and clang have it as one instruction; elsewhere, a
  * loop. */
@@ -1245,10 +1284,9 @@ static void sense_all(const World *w, const Pool *p, int idx,
     /* The directions of the three views, in VIEW_ order. */
     const uint8_t view_heading[VIEW_COUNT] = {
         c->heading, turned(c->heading, 3), turned(c->heading, 1)};
-    /* One fan for the three views (Fan, above): no step worked out yet. */
+    /* One fan for the three views (Fan, above): the pool's, or own. */
     Fan own;
-    Fan *fan = &own;
-    fan_start(fan, s->view_lines);
+    Fan *fan = the_fan(p, s->view_lines, &own);
     for (int view = 0; view < VIEW_COUNT; view++) {
         /* A pointer into the middle of the array: the view's first slot.
          * sense_view writes out[0] .. out[VIEW_VALUES - 1] from there. */
