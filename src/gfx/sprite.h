@@ -52,6 +52,14 @@ bool sprite_body_equal(const SpriteBody *a, const SpriteBody *b);
 /* How many frames each action's cycle is cut into, in ACTION_ order. */
 extern const int SPRITE_FRAMES[ACTION_COUNT];  /* 24, 24, 16, 30, 39, 54, 6 */
 
+/* At Far, a skeleton-drawn cycle of at least SPRITE_FAR_MIN_FRAMES poses shows
+ * every SPRITE_FAR_POSE_STEP-th of them, each held for that many frames, so
+ * the cache holds what a long watch asks for (sprite.c, far_pose). */
+#ifndef SPRITE_FAR_POSE_STEP
+#define SPRITE_FAR_POSE_STEP 3
+#endif
+#define SPRITE_FAR_MIN_FRAMES 12
+
 /* One picture, facing right, as the cache keeps it. Grid pixel (x, y) is
  * ink[y * w + x]; (ox, oy) is the ground point under the body, the pixel drawn
  * at the creature's foot. Only x0..x1 - 1 by y0..y1 - 1 holds ink. The cache
