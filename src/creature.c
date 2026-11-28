@@ -939,7 +939,7 @@ static void sense_view(const World *w, const Pool *p, const Creature *c,
         while (left != 0) {
             int r = step->run_of[lowest_bit(left)];
             unsigned here = open & step->lines[r];
-            left &= ~step->lines[r];
+            left &= ~(unsigned)step->lines[r]; /* the uint16_t widened first */
             int offset = step->offset[r];
             int x = c->x + d * STEP_X[heading] + offset * STEP_X[side];
             int y = c->y + d * STEP_Y[heading] + offset * STEP_Y[side];
