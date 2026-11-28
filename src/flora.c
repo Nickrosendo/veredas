@@ -149,12 +149,6 @@ bool plant_is_growing(const Plant *p, int season)
     return season != SEASON_AUTUMN || !plant_offers_fruit(p);
 }
 
-bool plant_is_bare(const Plant *p, int season)
-{
-    return !plant_offers_fruit(p) &&
-           (season == SEASON_AUTUMN || season == SEASON_WINTER);
-}
-
 bool plant_gives_shade(const Plant *p, const Settings *s)
 {
     return !plant_offers_fruit(p) && p->size >= s->tree_shade_size;
