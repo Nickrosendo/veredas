@@ -79,7 +79,9 @@ median() {
 
 # ---------------------------------------------------------------------------
 say "building the release programs"
-make -s MODE=release build/release/veredas build/release/tick_report window || exit 1
+# CONTENT= on make's line: a CONTENT set in the environment would otherwise
+# send these public builds to build/release-content (the Makefile's ifdef).
+make -s MODE=release CONTENT= build/release/veredas build/release/tick_report window || exit 1
 HAVE_PAID=0
 if [ -d "$CONTENT/src" ]; then
     make -s MODE=release CONTENT="$CONTENT" window && HAVE_PAID=1
@@ -94,16 +96,16 @@ build/release/veredas --once --seed 4 --size 256x144 --ancestors 8 --ticks 0 \
 T_TEST=skipped T_SLOW=skipped T_THREADS=skipped SAME_WORLD=""
 if [ $SKIP_TESTS -eq 0 ]; then
     say "make test"
-    make test >"$TMP/test.log" 2>&1 && T_TEST=green || T_TEST=red
+    make CONTENT= test >"$TMP/test.log" 2>&1 && T_TEST=green || T_TEST=red
     SAME_WORLD=$(grep '^seed 4 at 96x54, ticks 601-900' "$TMP/test.log" | head -1)
     if [ $SLOW -eq 1 ]; then
         say "make test-slow"
-        make test-slow >"$TMP/slow.log" 2>&1 && T_SLOW=green || T_SLOW=red
+        make CONTENT= test-slow >"$TMP/slow.log" 2>&1 && T_SLOW=green || T_SLOW=red
     else
         T_SLOW="not run (--slow)"
     fi
     say "make test-threads"
-    make test-threads >"$TMP/threads.log" 2>&1 && T_THREADS=green || T_THREADS=red
+    make CONTENT= test-threads >"$TMP/threads.log" 2>&1 && T_THREADS=green || T_THREADS=red
     echo "test $T_TEST, test-slow $T_SLOW, test-threads $T_THREADS"
 fi
 
@@ -115,7 +117,7 @@ say "a tick, $BEFORE against this build (3 rounds each, taking turns)"
 OLD_TICKS=""
 if git worktree add --detach "$TMP/before" "$BEFORE" >/dev/null 2>&1; then
     cp tests/tick_report.c "$TMP/before/tests/"
-    if (cd "$TMP/before" && make -s MODE=release build/release/veredas >/dev/null 2>&1 &&
+    if (cd "$TMP/before" && make -s MODE=release CONTENT= build/release/veredas >/dev/null 2>&1 &&
         objs=$(ls build/release/*.o | grep -v '/main\.o$') &&
         ${CC:-gcc} -std=c11 -D_POSIX_C_SOURCE=200809L -Isrc -Isrc/gfx -pthread -O2 \
             tests/tick_report.c $objs -o build/release/tick_report -lm); then
