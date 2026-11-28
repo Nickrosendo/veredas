@@ -9,6 +9,7 @@
 #include "climate.h" /* climate_region, climate_region_hue */
 #include "flora.h"
 #include "plankton.h" /* carrion_add, CARRION_MIN, plant_gives_shade */
+#include "rounding.h" /* round_half_away */
 #include "tactics.h" /* tactics_note_hit */
 #include "years.h" /* SEASON_SUMMER */
 
@@ -715,20 +716,6 @@ static void fan_start(Fan *f, int lines)
         f->slope[j] = lines == 1 ? 0.0f : -0.75f + 1.5f * (float)j / (float)(lines - 1);
     }
     f->filled = 0;
-}
-
-/* v rounded to the nearest whole number, halves away from zero, for |v| below
- * a million: the same int as lroundf, checked for every one of the 2.46
- * billion floats in that range (the cheaper tick study, 2026-11-25), without
- * the call. (int)v cuts the fraction off, towards zero; v - (float)t is then
- * exactly the fraction, since taking a float's whole part off only clears
- * bits; a comparison is an int, 1 or 0, so the last line adds or takes one
- * without a branch. */
-static int round_half_away(float v)
-{
-    int t = (int)v;
-    float rest = v - (float)t;
-    return t + (rest >= 0.5f) - (rest <= -0.5f);
 }
 
 /* Fills out with step d's runs: line j's offset is round(slope_j * d), halves

@@ -14,6 +14,7 @@
 #include "app.h"
 #include "panel.h"
 #include "preludethread.h"
+#include "same_world.h"
 #include "settings.h"
 #include "sim.h"
 
@@ -189,10 +190,58 @@ static void test_give_says_no(void)
     sim_free(&s);
 }
 
+/* The window's own case (the smooth window design, 2026-11-27, section 5.2):
+ * the default year (600 ticks), seed 4 at 96 by 54, one ancestor year on the
+ * thread, then 300 ticks on the main thread as run_due_ticks would run them.
+ * Every one of those ticks' fingerprints, folded, is the number the world
+ * makes with no thread at all (same_world_fold), and, where the maths library
+ * is the pinned one, test_same_world's number from before the cheaper tick:
+ * a prelude on the thread hands back the very world the main thread grows. */
+static void test_window_prelude_same_as_none(void)
+{
+    Settings set = settings_default();
+    Sim s;
+    CHECK(sim_init(&s, &set, 4, 96, 54));
+    Prelude p;
+    app_prelude_start(&p, &s, 1);
+    CHECK(p.until == 600);
+    int calls = 0;
+    PreludeThread t;
+    preludethread_init(&t, fill, &calls, sizeof(Glance));
+    CHECK(preludethread_start(&t));
+    CHECK(preludethread_give(&t, &s, p.until));
+    Glance g;
+    while (!preludethread_glance(&t, &g)) {
+        pause_a_moment();
+    }
+    preludethread_take(&t);
+    app_prelude_settle(&p, &s);
+    CHECK(!p.active);
+    CHECK(s.tick == 600);
+    uint64_t fold = 0;
+    for (int i = 0; i < 300; i++) {
+        sim_step(&s);
+        fold = fold * 1099511628211ULL ^ sim_checksum(&s);
+        fold = fold * 1099511628211ULL ^ sim_story_checksum(&s);
+    }
+    int before = 0, after = 0;
+    uint64_t none = same_world_fold(4, 96, 54, 600, 300, &before, &after);
+    CHECK(after == s.pool.count);
+    CHECK(fold == none);
+    printf("seed 4 at 96x54, a year on the thread, ticks 601-900: 0x%016llx\n",
+           (unsigned long long)fold);
+    if (same_world_maths_as_pinned()) {
+        CHECK(fold == 0x6c3bbd514c97dc51ULL); /* test_same_world's SEED_4_96X54 */
+    }
+    preludethread_stop(&t);
+    sim_free(&s);
+}
+
 int main(void)
 {
     test_same_world_as_finish();
     test_taken_back_part_way();
     test_give_says_no();
+    test_window_prelude_same_as_none();
     TEST_SUMMARY();
 }
